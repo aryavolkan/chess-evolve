@@ -9,7 +9,7 @@ func _run_tests() -> void:
 		var b := BoardStateScript.new()
 		b.setup_initial()
 		var count := 0
-		for sq in 64:
+		for sq in range(64):
 			if b.board[sq] != 0: count += 1
 		assert_eq(count, 32)
 	)

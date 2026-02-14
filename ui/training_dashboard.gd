@@ -2,7 +2,9 @@ extends Control
 
 ## Training dashboard showing stats and controls.
 
-const SPEED_OPTIONS := PackedInt32Array([1, 2, 4, 8])
+const TrainingManager = preload("res://ai/training_manager.gd")
+
+const SPEED_OPTIONS = [1, 2, 4, 8]
 
 var _gen_label: Label
 var _white_best_label: Label
@@ -20,9 +22,9 @@ var train_speed := 1  # Generations per frame
 
 var training_manager: TrainingManager = null:
 	set(value):
-		field = value
-		if field:
-			field.training_step_complete.connect(_on_training_step_complete)
+		training_manager = value
+		if training_manager:
+			training_manager.training_step_complete.connect(_on_training_step_complete)
 			if is_node_ready():
 				_update_stats()
 			else:
@@ -74,7 +76,7 @@ func _build_ui() -> void:
 
 	_speed_selector = OptionButton.new()
 	for idx in SPEED_OPTIONS.size():
-		var multiplier := SPEED_OPTIONS[idx]
+		var multiplier: int = SPEED_OPTIONS[idx]
 		_speed_selector.add_item("%dx" % multiplier, multiplier)
 	_speed_selector.select(0)
 	_speed_selector.item_selected.connect(_on_speed_selected)
@@ -97,7 +99,7 @@ func _on_start_pressed() -> void:
 
 
 func _on_speed_selected(index: int) -> void:
-	var multiplier := SPEED_OPTIONS[index]
+	var multiplier: int = SPEED_OPTIONS[index]
 	train_speed = multiplier
 	Engine.time_scale = float(multiplier)
 
@@ -108,15 +110,22 @@ func _on_training_step_complete(_generation: int, stats: Dictionary) -> void:
 
 func _process(_delta: float) -> void:
 	if is_training and training_manager:
-		for _i in range(train_speed):
-			training_manager.run_generation()
-		_update_stats()
+		# Run multiple game steps per frame based on speed
+		var games_to_run := train_speed * 2  # 2 games per speed multiplier
+		for _i in range(games_to_run):
+			var gen_complete := training_manager.run_one_game_step()
+			if gen_complete:
+				_update_stats()
+				break
+		# Update stats periodically even mid-generation
+		if training_manager.total_games_played % 5 == 0:
+			_update_stats()
 
 
 func _update_stats(stats: Dictionary = {}) -> void:
 	if not training_manager:
 		return
-	var latest := stats if not stats.is_empty() else training_manager.get_stats()
+	var latest: Dictionary = stats if not stats.is_empty() else training_manager.get_stats()
 	_gen_label.text = "Generation: %d" % latest.get("generation", 0)
 	_white_best_label.text = "White Best: %.2f" % latest.get("white_best", 0.0)
 	_white_avg_label.text = "White Avg: %.2f" % latest.get("white_avg", 0.0)

@@ -14,7 +14,7 @@ const MOVE_COUNT_BONUS := 0.01  # Reward for surviving longer
 const CHECKMATE_BONUS := 5.0
 
 
-static func evaluate(state: BoardState, color: int, move_count: int) -> float:
+static func evaluate(state, color: int, move_count: int) -> float:
 	## Compute fitness for a player after a game.
 	var fitness := 0.0
 
@@ -30,14 +30,14 @@ static func evaluate(state: BoardState, color: int, move_count: int) -> float:
 			fitness += LOSS_PENALTY
 
 	# Material advantage
-	var my_material := state.material_score(color)
-	var opp_material := state.material_score(1 - color)
+	var my_material: float = state.material_score(color)
+	var opp_material: float = state.material_score(1 - color)
 	fitness += (my_material - opp_material) * MATERIAL_WEIGHT
 
 	# Mobility (at end of game)
 	# Only count if game isn't over to avoid 0-move stalemate confusion
 	if not state.is_game_over:
-		var mobility := state.mobility_score(color)
+		var mobility: float = state.mobility_score(color)
 		fitness += mobility * MOBILITY_WEIGHT
 
 	# King safety

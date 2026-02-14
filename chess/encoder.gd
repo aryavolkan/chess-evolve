@@ -21,7 +21,7 @@ const MOVE_OUTPUT_SIZE := 128  # from_square(64) + to_square(64)
 const Piece = ChessConstants.Piece
 
 
-static func encode_board(state: BoardState) -> PackedFloat32Array:
+static func encode_board(state) -> PackedFloat32Array:
 	## Encode board into neural network input vector.
 	var inputs := PackedFloat32Array()
 	inputs.resize(INPUT_SIZE)
@@ -30,8 +30,8 @@ static func encode_board(state: BoardState) -> PackedFloat32Array:
 	var idx := 0
 	# 6 piece-type planes × 64 squares (signed: +1 white, -1 black)
 	for piece_type in range(1, 7):  # PAWN through KING
-		for sq in 64:
-			var p := state.board[sq]
+		for sq in range(64):
+			var p: int = state.board[sq]
 			if absi(p) == piece_type:
 				inputs[idx] = 1.0 if p > 0 else -1.0
 			idx += 1

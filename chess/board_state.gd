@@ -86,7 +86,7 @@ func abs_piece(sq: int) -> int:
 
 
 func clone() -> BoardState:
-	var copy := BoardState.new()
+	var copy: BoardState = get_script().new()
 	copy.board = board.duplicate()
 	copy.side_to_move = side_to_move
 	copy.castling_rights = castling_rights
@@ -110,7 +110,7 @@ func generate_legal_moves() -> Array[Vector2i]:
 
 func _generate_pseudo_legal_moves() -> Array[Vector2i]:
 	var moves: Array[Vector2i] = []
-	for sq in 64:
+	for sq in range(64):
 		if (side_to_move == 0 and board[sq] > 0) or (side_to_move == 1 and board[sq] < 0):
 			_add_piece_moves(sq, moves)
 	return moves
@@ -145,7 +145,7 @@ func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
 
 	# Captures
 	for df in [-1, 1]:
-		var nf := f + df
+		var nf: int = f + df
 		if nf < 0 or nf > 7: continue
 		var cap_sq := square(nf, r + dir)
 		if not is_valid_square(cap_sq): continue
@@ -161,8 +161,8 @@ func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
 	var offsets := [Vector2i(-2,-1), Vector2i(-2,1), Vector2i(-1,-2), Vector2i(-1,2),
 					Vector2i(1,-2), Vector2i(1,2), Vector2i(2,-1), Vector2i(2,1)]
 	for off in offsets:
-		var nf := f + off.x
-		var nr := r + off.y
+		var nf: int = f + off.x
+		var nr: int = r + off.y
 		if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
 		var target := square(nf, nr)
 		if not is_friendly(target):
@@ -190,8 +190,8 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 	for df in [-1, 0, 1]:
 		for dr in [-1, 0, 1]:
 			if df == 0 and dr == 0: continue
-			var nf := f + df
-			var nr := r + dr
+			var nf: int = f + df
+			var nr: int = r + dr
 			if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
 			var target := square(nf, nr)
 			if not is_friendly(target):
@@ -225,7 +225,7 @@ func _is_legal(move: Vector2i) -> bool:
 
 func _find_king(color: int) -> int:
 	var king_val := Piece.KING if color == 0 else -Piece.KING
-	for sq in 64:
+	for sq in range(64):
 		if board[sq] == king_val: return sq
 	return -1
 
@@ -240,14 +240,16 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 	var knight_offsets := [Vector2i(-2,-1), Vector2i(-2,1), Vector2i(-1,-2), Vector2i(-1,2),
 						   Vector2i(1,-2), Vector2i(1,2), Vector2i(2,-1), Vector2i(2,1)]
 	for off in knight_offsets:
-		var nf := f + off.x; var nr := r + off.y
+		var nf: int = f + off.x
+		var nr: int = r + off.y
 		if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 			if board[square(nf, nr)] == sign * Piece.KNIGHT: return true
 
 	# Pawn attacks
 	var pawn_dir := -1 if by_color == 0 else 1  # Pawns attack from behind
 	for df in [-1, 1]:
-		var nf := f + df; var nr := r + pawn_dir
+		var nf: int = f + df
+		var nr: int = r + pawn_dir
 		if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 			if board[square(nf, nr)] == sign * Piece.PAWN: return true
 
@@ -255,14 +257,16 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 	for df in [-1, 0, 1]:
 		for dr in [-1, 0, 1]:
 			if df == 0 and dr == 0: continue
-			var nf := f + df; var nr := r + dr
+			var nf: int = f + df
+			var nr: int = r + dr
 			if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 				if board[square(nf, nr)] == sign * Piece.KING: return true
 
 	# Slider attacks (bishop/queen diagonals, rook/queen straights)
 	var diag_dirs := [Vector2i(-1,-1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(1,1)]
 	for dir in diag_dirs:
-		var nf := f + dir.x; var nr := r + dir.y
+		var nf: int = f + dir.x
+		var nr: int = r + dir.y
 		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 			var p := board[square(nf, nr)]
 			if p != 0:
@@ -272,7 +276,8 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 
 	var straight_dirs := [Vector2i(0,-1), Vector2i(0,1), Vector2i(-1,0), Vector2i(1,0)]
 	for dir in straight_dirs:
-		var nf := f + dir.x; var nr := r + dir.y
+		var nf: int = f + dir.x
+		var nr: int = r + dir.y
 		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 			var p := board[square(nf, nr)]
 			if p != 0:
@@ -365,7 +370,7 @@ func material_score(color: int) -> float:
 	## Sum material value for given color.
 	var total := 0.0
 	var sign := 1 if color == 0 else -1
-	for sq in 64:
+	for sq in range(64):
 		if (color == 0 and board[sq] > 0) or (color == 1 and board[sq] < 0):
 			total += ChessConstants.PIECE_VALUES.get(absi(board[sq]), 0.0)
 	return total
@@ -390,7 +395,8 @@ func king_safety_score(color: int) -> float:
 	var sign := 1 if color == 0 else -1
 	for df in [-1, 0, 1]:
 		for dr in [-1, 0, 1]:
-			var nf := kf + df; var nr := kr + dr
+			var nf: int = kf + df
+			var nr: int = kr + dr
 			if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 				var p := board[square(nf, nr)]
 				if p == sign * Piece.PAWN:
@@ -402,12 +408,12 @@ func to_string_board() -> String:
 	var s := ""
 	for r in range(7, -1, -1):
 		s += str(r + 1) + " "
-		for f in 8:
+		for f in range(8):
 			var p := board[square(f, r)]
 			if p == 0:
 				s += ". "
 			else:
-				var sym := ChessConstants.PIECE_SYMBOLS.get(absi(p), "?")
+				var sym: String = ChessConstants.PIECE_SYMBOLS.get(absi(p), "?")
 				s += sym.to_lower() + " " if p < 0 else sym + " "
 		s += "\n"
 	s += "  a b c d e f g h"

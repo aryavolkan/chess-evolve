@@ -1,5 +1,26 @@
+# Godot
 .godot/
-*.uid
-.DS_Store
+.import/
 *.import
+*.uid
+export.cfg
 export_presets.cfg
+
+# W&B
+wandb/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+
+# Temp files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test configs
+test_config.json

@@ -121,9 +121,9 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
 
 	# Fill rest with tournament selection + crossover/mutation
 	while new_pop.size() < population_size:
-		var parent_a := _tournament_select(pop, fitness)
+		var parent_a = _tournament_select(pop, fitness)
 		if randf() < crossover_rate:
-			var parent_b := _tournament_select(pop, fitness)
+			var parent_b = _tournament_select(pop, fitness)
 			var child = parent_a.crossover_with(parent_b)
 			child.mutate(mutation_rate, mutation_strength)
 			new_pop.append(child)

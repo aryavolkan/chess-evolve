@@ -111,9 +111,9 @@ func mutate(mutation_rate: float = 0.1, mutation_strength: float = 0.3) -> void:
 
 func crossover_with(other):
 	var child = get_script().new(input_size, hidden_size, output_size)
-	var wa := get_weights()
-	var wb := other.get_weights()
-	var wc := PackedFloat32Array()
+	var wa: PackedFloat32Array = get_weights()
+	var wb: PackedFloat32Array = other.get_weights()
+	var wc: PackedFloat32Array = PackedFloat32Array()
 	wc.resize(wa.size())
 	var p1 := randi() % wa.size()
 	var p2 := randi() % wa.size()

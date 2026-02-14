@@ -35,7 +35,7 @@ func _run_tests() -> void:
 		var clone = nn.clone()
 		clone.mutate(1.0, 1.0)  # Mutate everything
 		var w1 := nn.get_weights()
-		var w2 := clone.get_weights()
+		var w2: PackedFloat32Array = clone.get_weights()
 		var diffs := 0
 		for i in w1.size():
 			if w1[i] != w2[i]: diffs += 1
