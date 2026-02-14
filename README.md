@@ -104,7 +104,44 @@ Open in Godot Editor or:
 godot --path ~/Projects/chess-evolve
 ```
 
-Click "Start Training" to begin evolution. The 4 board viewers show showcase games from the best networks every 5 generations.
+### Using the Training Dashboard
+
+1. Click **Start Training** to begin evolution (button flips to **Pause/Resume**)
+2. Monitor the live counters: generation, per-color best + average fitness, and cumulative games played
+3. Use the speed selector (1×, 2×, 4×, 8×) to run multiple generations per frame — it also adjusts Godot's `time_scale`
+4. Every 5 generations the 4 board viewers show **showcase games** from the best networks
+5. Training runs continuously — press Pause to halt without resetting stats
+
+### Metrics + W&B Logging
+
+- Each generation writes `metrics.json` under `~/Library/Application Support/Godot/app_userdata/Chess Evolve/metrics.json`.
+- Fields tracked: generation, white/black best + average fitness, combined aggregates, population size, total games played, games per generation, and `updated_at`.
+- Use `scripts/wandb_bridge.py` to stream the JSON into Weights & Biases while training is running.
+
+Example snippet:
+```json
+{
+  "generation": 12,
+  "white_best": 15.3,
+  "black_best": 14.8,
+  "white_avg": 3.2,
+  "black_avg": 2.9,
+  "best_fitness": 15.3,
+  "avg_fitness": 3.05,
+  "population_size": 30,
+  "games_played": 720,
+  "games_per_generation": 60,
+  "updated_at": 1739498123
+}
+```
+
+Run the bridge alongside Godot:
+```bash
+pip install --upgrade wandb
+python scripts/wandb_bridge.py --project chess-evolve --run-name dev-test
+```
+
+Hit `Ctrl+C` to stop streaming or point `--metrics-path` to logs synced from another machine.
 
 ## Chess Logic
 

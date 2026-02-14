@@ -4,13 +4,17 @@ class_name TrainingManager
 ## Orchestrates coevolutionary training: runs games between white and black populations,
 ## evaluates fitness, and triggers evolution.
 
-signal training_step_complete(generation: int)
+signal training_step_complete(generation: int, stats: Dictionary)
 signal game_complete(white_idx: int, black_idx: int, result: int)
+
+const MetricsLogger = preload("res://ai/metrics_logger.gd")
 
 var evolution: ChessEvolution
 var games_per_individual: int = 3  # Each individual plays N games per generation
 var max_moves_per_game: int = 150
 var current_games: Array = []  # Array of active GameState dicts
+var total_games_played: int = 0
+var metrics_logger: MetricsLogger
 
 
 func _init(p_evolution: ChessEvolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
@@ -20,22 +24,29 @@ func _init(p_evolution: ChessEvolution = null, p_games_per: int = 3, p_max_moves
 		evolution = ChessEvolution.new()
 	games_per_individual = p_games_per
 	max_moves_per_game = p_max_moves
+	metrics_logger = MetricsLogger.new()
 
 
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
-	_run_all_games()
+	var games_this_gen := _run_all_games()
 	evolution.evolve()
-	training_step_complete.emit(evolution.generation)
+	total_games_played += games_this_gen
+	var stats := get_stats()
+	metrics_logger.write_metrics(stats)
+	training_step_complete.emit(evolution.generation, stats)
 
 
-func _run_all_games() -> void:
+func _run_all_games() -> int:
 	## Each white individual plays against `games_per_individual` random black opponents.
+	var games_played := 0
 	for w_idx in evolution.population_size:
 		for _g in games_per_individual:
 			var b_idx := randi() % evolution.population_size
 			var result := _play_game(w_idx, b_idx)
 			game_complete.emit(w_idx, b_idx, result.result)
+			games_played += 1
+	return games_played
 
 
 func _play_game(white_idx: int, black_idx: int) -> BoardState:
@@ -79,11 +90,19 @@ func _play_game(white_idx: int, black_idx: int) -> BoardState:
 
 
 func get_stats() -> Dictionary:
+	var white_best := evolution.best_white_fitness
+	var black_best := evolution.best_black_fitness
+	var white_avg := evolution.get_avg_fitness(0)
+	var black_avg := evolution.get_avg_fitness(1)
 	return {
 		"generation": evolution.generation,
-		"white_best": evolution.best_white_fitness,
-		"black_best": evolution.best_black_fitness,
-		"white_avg": evolution.get_avg_fitness(0),
-		"black_avg": evolution.get_avg_fitness(1),
+		"white_best": white_best,
+		"black_best": black_best,
+		"white_avg": white_avg,
+		"black_avg": black_avg,
+		"best_fitness": max(white_best, black_best),
+		"avg_fitness": (white_avg + black_avg) * 0.5,
 		"population_size": evolution.population_size,
+		"games_played": total_games_played,
+		"games_per_generation": evolution.population_size * games_per_individual,
 	}
