@@ -8,6 +8,7 @@ const Dashboard = preload("res://ui/training_dashboard.gd")
 const ChessEvolution = preload("res://ai/evolution.gd")
 const TrainingManager = preload("res://ai/training_manager.gd")
 const ChessEncoder = preload("res://chess/encoder.gd")
+const ReplayViewer = preload("res://ui/replay_viewer.gd")
 
 var training_manager: TrainingManager
 var dashboard: Control
@@ -24,6 +25,12 @@ const UPDATE_INTERVAL := 0.3  # Seconds between move updates (slows down visuali
 
 
 func _ready() -> void:
+	# Check for replay mode
+	var replay_file := _check_replay_arg()
+	if not replay_file.is_empty():
+		_run_replay_mode(replay_file)
+		return
+	
 	# Check for auto-train mode (headless training)
 	var auto_train := _check_auto_train_arg()
 	
@@ -203,6 +210,52 @@ func _check_auto_train_arg() -> bool:
 	## Check if --auto-train command-line argument is present
 	var args := OS.get_cmdline_user_args()
 	return "--auto-train" in args
+
+
+func _check_replay_arg() -> String:
+	## Check for --replay <filename> argument, return filename or empty string
+	var args := OS.get_cmdline_user_args()
+	for i in range(args.size()):
+		if args[i] == "--replay" and i + 1 < args.size():
+			return args[i + 1]
+	return ""
+
+
+func _run_replay_mode(filename: String) -> void:
+	## Launch replay viewer for the specified file
+	print("Starting replay mode: %s" % filename)
+	
+	# Make this control fill the viewport
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var viewer := ReplayViewer.new()
+	add_child(viewer)
+	viewer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	# Try to load the file
+	var success := false
+	
+	# Try as absolute path
+	if FileAccess.file_exists(filename):
+		success = viewer.load_replay_file(filename)
+	# Try user:// prefix
+	elif FileAccess.file_exists("user://" + filename):
+		success = viewer.load_replay_file("user://" + filename)
+	# Try user://replays/ prefix
+	elif FileAccess.file_exists("user://replays/" + filename):
+		success = viewer.load_replay_file("user://replays/" + filename)
+	
+	if not success:
+		push_error("Failed to load replay file: %s" % filename)
+		print("Could not find replay file. Searched:")
+		print("  - %s" % filename)
+		print("  - user://%s" % filename)
+		print("  - user://replays/%s" % filename)
+		get_tree().quit(1)
+		return
+	
+	print("Replay loaded successfully!")
+	viewer.replay_closed.connect(func(): get_tree().quit())
 
 
 func _load_config() -> Dictionary:

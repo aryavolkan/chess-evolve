@@ -12,6 +12,7 @@ const ChessEvolutionScript = preload("res://ai/evolution.gd")
 const BoardStateScript = preload("res://chess/board_state.gd")
 const ChessEncoderScript = preload("res://chess/encoder.gd")
 const ChessFitnessScript = preload("res://ai/fitness.gd")
+const GameRecorderScript = preload("res://ai/game_recorder.gd")
 
 var evolution
 var games_per_individual: int = 3  # Each individual plays N games per generation
@@ -28,6 +29,8 @@ var _current_game_idx: int = 0
 var _generation_in_progress: bool = false
 var last_game_state = null  # Store most recent game for visualization
 var last_game_history: Array = []  # Array of board states showing each move
+var game_recorder: GameRecorderScript = null  # Optional: records full games for replay
+var record_replays: bool = false  # Enable to save every game as a replay file
 
 
 func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
@@ -109,6 +112,16 @@ func _play_game(white_idx: int, black_idx: int):
 	var white_net = evolution.get_network(0, white_idx)
 	var black_net = evolution.get_network(1, black_idx)
 
+	# Set up game recorder if enabled
+	var recorder: GameRecorderScript = null
+	if record_replays:
+		recorder = GameRecorderScript.new()
+		recorder.start_recording({
+			"generation": evolution.generation,
+			"white_id": white_idx,
+			"black_id": black_idx,
+		})
+
 	var move_count := 0
 	while not state.is_game_over and move_count < max_moves_per_game:
 		var net = white_net if state.side_to_move == 0 else black_net
@@ -122,6 +135,10 @@ func _play_game(white_idx: int, black_idx: int):
 		var chosen: Vector2i = _encoder.call("decode_move", outputs, legal_moves)
 		state.make_move(chosen)
 		move_count += 1
+
+		# Record every move for replay
+		if recorder:
+			recorder.record_move(chosen, state)
 		
 		# Save every 5th move for visualization
 		if move_count % 5 == 0:
@@ -145,6 +162,12 @@ func _play_game(white_idx: int, black_idx: int):
 	# Add final state to history
 	game_history.append(state.clone())
 	
+	# Save replay file if recording
+	if recorder:
+		recorder.stop_recording(state.result)
+		recorder.save_to_file()
+		game_recorder = recorder
+
 	# Store for visualization
 	last_game_state = state
 	last_game_history = game_history
