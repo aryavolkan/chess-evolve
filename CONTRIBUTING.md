@@ -36,10 +36,18 @@ godot --headless --script test/test_runner.gd
 
 ## Pull Request Process
 
-Every pull request is validated by CI. Before opening a PR, run the same checks locally:
+Every pull request is validated by CI with separate quality gates for Python and GDScript.
+Before opening a PR, run the same checks locally:
 
 ```bash
 ./scripts/lint_and_test.sh
+```
+
+You can also run each language-specific check independently:
+
+```bash
+./scripts/lint_python.sh
+./scripts/lint_gdscript.sh
 ```
 
 PRs must pass all of the checks above before they can be merged.
