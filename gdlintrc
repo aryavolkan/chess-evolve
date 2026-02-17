@@ -1,0 +1,48 @@
+# gdlint configuration for Evolve
+# https://github.com/Scony/godot-gdscript-toolkit
+# Regenerate defaults: gdlint -d
+
+# Rules disabled for this codebase
+disable:
+  - class-definitions-order  # existing code uses pragmatic ordering
+  - no-else-return            # stylistic preference
+  - no-elif-return            # stylistic preference
+  - trailing-whitespace       # handled by editors; too noisy on existing code
+  - unused-argument           # common pattern for virtual method overrides in GDScript
+
+# Naming conventions
+class-name: "([A-Z][a-z0-9]*)+"
+class-variable-name: "_?[a-zA-Z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*"
+class-load-variable-name: "(([A-Z][a-z0-9]*)+|_?[a-zA-Z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*)"
+constant-name: "_?[a-zA-Z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*"
+enum-element-name: "[A-Z][A-Z0-9]*(_[A-Z0-9]+)*"
+enum-name: "([A-Z][a-z0-9]*)+"
+function-argument-name: "_?[a-z][a-z0-9]*(_[a-z0-9]+)*"
+function-name: "(_on_([A-Z][a-z0-9]*)+(_[a-z0-9]+)*|_?[a-z][a-z0-9]*(_[a-z0-9]+)*)"
+function-preload-variable-name: "(([A-Z][a-z0-9]*)+|_?[a-zA-Z][a-zA-Z0-9]*)"
+function-variable-name: "_?[a-zA-Z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*"
+load-constant-name: "(([A-Z][a-z0-9]*)+|_?[a-zA-Z][a-zA-Z0-9]*(_[a-zA-Z0-9]+)*)"
+loop-variable-name: "_?[a-z][a-z0-9]*(_[a-z0-9]+)*"
+signal-name: "[a-z][a-z0-9]*(_[a-z0-9]+)*"
+sub-class-name: "_?([A-Z][a-z0-9]*)+"
+
+# Limits (relaxed for a large game codebase)
+max-line-length: 200
+max-public-methods: 80
+max-file-lines: 3000
+function-arguments-number: 12
+max-returns: 12
+tab-characters: 1
+
+# Active checks — real bugs, not style
+mixed-tabs-and-spaces: null
+unnecessary-pass: null
+expression-not-assigned: null
+comparison-with-itself: null
+duplicated-load: null
+
+excluded_directories: !!set
+  .git: null
+  .godot: null
+  .venv: null
+  test: null

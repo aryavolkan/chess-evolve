@@ -70,12 +70,12 @@ def launch_godot(visible=False):
 
     # Build command
     cmd = [GODOT_PATH, "--path", PROJECT_PATH]
-    
+
     if not visible:
         cmd.extend(["--headless", "--rendering-driver", "dummy"])
-    
+
     cmd.extend(["--", "--auto-train"])
-    
+
     print(f"🚀 Launching Godot: {' '.join(cmd)}")
     process = subprocess.Popen(
         cmd,
@@ -84,7 +84,7 @@ def launch_godot(visible=False):
         text=True,
         bufsize=1
     )
-    
+
     return process
 
 
@@ -92,13 +92,13 @@ def wait_for_training_start(timeout=MAX_WAIT_FOR_START):
     """Wait for metrics.json to appear (training started)"""
     print(f"⏳ Waiting for training to start (timeout: {timeout}s)...")
     start = time.time()
-    
+
     while time.time() - start < timeout:
         if os.path.exists(METRICS_PATH):
             print("✓ Training started!")
             return True
         time.sleep(1)
-    
+
     print("❌ Training did not start in time")
     return False
 
@@ -108,18 +108,18 @@ def poll_metrics(run, max_generations):
     last_gen = -1
     stale_count = 0
     max_stale = 60  # 5 minutes of no progress
-    
+
     while last_gen < max_generations - 1:
         metrics = read_metrics()
-        
+
         if metrics and "generation" in metrics:
             gen = metrics["generation"]
-            
+
             if gen > last_gen:
                 # New generation!
                 last_gen = gen
                 stale_count = 0
-                
+
                 # Log to W&B
                 log_data = {
                     "generation": gen,
@@ -131,9 +131,9 @@ def poll_metrics(run, max_generations):
                     "avg_fitness": metrics.get("avg_fitness", 0),
                     "games_played": metrics.get("games_played", 0),
                 }
-                
+
                 wandb.log(log_data)
-                
+
                 print(f"Gen {gen}: W_best={log_data['white_best']:.1f}, "
                       f"W_avg={log_data['white_avg']:.1f}, "
                       f"B_best={log_data['black_best']:.1f}, "
@@ -143,9 +143,9 @@ def poll_metrics(run, max_generations):
                 if stale_count >= max_stale:
                     print("❌ Training appears stuck")
                     return False
-        
+
         time.sleep(POLL_INTERVAL)
-    
+
     print("✓ Training complete!")
     return True
 
@@ -158,10 +158,10 @@ def main():
     parser.add_argument("--project", default="chess-evolve-neuroevolution", help="W&B project")
     parser.add_argument("--entity", default="aryavolkan-personal", help="W&B entity")
     args = parser.parse_args()
-    
+
     # Merge config from W&B sweep (if running in one) or use defaults
     config = DEFAULT_CONFIG.copy()
-    
+
     # Initialize W&B
     run = wandb.init(
         project=args.project,
@@ -169,26 +169,26 @@ def main():
         config=config,
         tags=["chess-evolve", "coevolution"]
     )
-    
+
     # Write config for Godot
     write_config(wandb.config.as_dict())
-    
+
     # Launch Godot
     process = launch_godot(visible=args.visible)
-    
+
     try:
         # Wait for training to start
         if not wait_for_training_start():
             print("❌ Training failed to start")
             run.finish(exit_code=1)
             return 1
-        
+
         # Poll and log metrics
         success = poll_metrics(run, wandb.config.max_generations)
-        
+
         # Wait a bit for final metrics
         time.sleep(COMPLETION_WAIT)
-        
+
         # Final metrics
         final = read_metrics()
         if final:
@@ -197,21 +197,21 @@ def main():
             print(f"  White Best: {final.get('white_best', 0):.1f}")
             print(f"  Black Best: {final.get('black_best', 0):.1f}")
             print(f"  Total Games: {final.get('games_played', 0)}")
-        
+
         # Cleanup
         process.terminate()
         process.wait(timeout=5)
-        
+
         run.finish(exit_code=0 if success else 1)
         return 0 if success else 1
-        
+
     except KeyboardInterrupt:
         print("\n⚠️  Interrupted by user")
         process.terminate()
         process.wait(timeout=5)
         run.finish(exit_code=130)
         return 130
-    
+
     except Exception as e:
         print(f"❌ Error: {e}")
         process.terminate()

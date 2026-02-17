@@ -14,22 +14,22 @@ sweep_config = {
     'parameters': {
         # Population - start with moderate sizes
         'population_size': {'values': [20, 30, 40]},
-        
+
         # Network architecture (current default: 389 inputs, 32/128/3 hidden)
         # Vary middle hidden layer sizes
         'hidden_layer_1': {'values': [24, 32, 48]},
         'hidden_layer_2': {'values': [96, 128, 160]},
-        
+
         # Mutation parameters
         'mutation_rate': {'distribution': 'uniform', 'min': 0.1, 'max': 0.4},
         'mutation_strength': {'distribution': 'uniform', 'min': 0.05, 'max': 0.2},
-        
+
         # Fitness evaluation
         'games_per_eval': {'values': [2, 3, 5]},  # Games to evaluate each network
-        
+
         # Training duration
         'max_generations': {'value': 30},  # Keep it short for initial experiments
-        
+
         # Elite count (proportion of population)
         'elite_count': {'values': [3, 5, 8]},
     }
@@ -53,7 +53,7 @@ sweep_config_quick = {
 
 if __name__ == "__main__":
     import wandb
-    
+
     # Use the quick config for initial validation
     sweep_id = wandb.sweep(sweep_config_quick, project='chess-evolve')
     print(f'Created sweep: {sweep_id}')

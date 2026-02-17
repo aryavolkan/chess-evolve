@@ -1,0 +1,54 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python lint (ruff)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Python lint (ruff)
+        run: ruff check scripts/ train_wandb.py sweep_config.py
+
+      # GDScript lint (gdlint)
+      - name: Install gdtoolkit
+        run: pip install gdtoolkit
+
+      - name: GDScript lint (gdlint)
+        run: |
+          gdlint ai/*.gd chess/*.gd scenes/*.gd ui/*.gd benchmark_network.gd benchmark_network_sizes.gd
+
+  godot-tests:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.5"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+          chmod +x godot
+
+      - name: Import assets (headless)
+        run: ./godot --headless --editor --quit --path .
+
+      - name: Run tests
+        run: ./godot --headless --script test/test_runner.gd

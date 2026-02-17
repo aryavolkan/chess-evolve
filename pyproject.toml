@@ -1,20 +1,41 @@
 [tool.ruff]
 target-version = "py311"
-line-length = 100
-extend-exclude = [
-  "assets",
-]
+line-length = 120
+src = ["scripts"]
+extend-exclude = ["assets"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names, etc.)
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B904",   # raise ... from ... (not always applicable)
+    "SIM117", # merge with statements (readability preference)
+    "SIM105", # use contextlib.suppress (preference)
+    "SIM102", # nested if → and (readability preference)
+    "SIM103", # return negated condition (readability preference)
+    "SIM108", # ternary operator (readability preference)
+    "E741",   # ambiguous var name
+    "F841",   # unused local var (wandb run objects used via module API)
+    "E402",   # module import not at top (platform-conditional imports)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["T201"]  # allow print()
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 python_files = ["test_*.py"]
 addopts = "-q"
-
-[tool.gdtoolkit]
-line_length = 100
-exclude = [
-  "assets",
-]
