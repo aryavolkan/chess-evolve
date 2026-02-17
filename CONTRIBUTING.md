@@ -33,3 +33,14 @@ godot --headless --script test/test_runner.gd
 - **From+To output decoding** — simpler than 4096 (64×64) output; works with legal move filtering
 - **Independent white/black evolution** — allows asymmetric specialization
 - **Fitness averaging** over multiple games — reduces variance from random pairings
+
+## Pull Request Process
+
+Every pull request is validated by CI. Before opening a PR, run the same checks locally:
+
+```bash
+./scripts/lint_and_test.sh
+```
+
+PRs must pass all of the checks above before they can be merged.
+
