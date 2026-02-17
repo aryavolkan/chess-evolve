@@ -58,5 +58,5 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config_quick, project='chess-evolve')
     print(f'Created sweep: {sweep_id}')
     print(f'View at: https://wandb.ai/{wandb.api.default_entity}/chess-evolve/sweeps/{sweep_id}')
-    print(f'\nStart workers with:')
+    print('\nStart workers with:')
     print(f'  wandb agent {wandb.api.default_entity}/chess-evolve/{sweep_id}')
