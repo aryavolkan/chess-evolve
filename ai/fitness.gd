@@ -1,5 +1,5 @@
-extends RefCounted
 class_name ChessFitness
+extends RefCounted
 
 ## Evaluates fitness of a chess player based on game outcome and play quality.
 

@@ -1,5 +1,5 @@
-extends RefCounted
 class_name MetricsLogger
+extends RefCounted
 
 ## Writes generation-by-generation training metrics to `user://metrics.json`
 ## so that external tools (e.g. W&B bridge) can pick them up.

@@ -6,17 +6,6 @@ const TrainingManager = preload("res://ai/training_manager.gd")
 
 const SPEED_OPTIONS = [1, 2, 4, 8]
 
-var _gen_label: Label
-var _white_best_label: Label
-var _black_best_label: Label
-var _white_avg_label: Label
-var _black_avg_label: Label
-var _games_label: Label
-var _start_button: Button
-var _speed_selector: OptionButton
-var _stats_panel: VBoxContainer
-var _pending_stats_refresh := false
-
 var is_training := false
 var train_speed := 1  # Generations per frame
 
@@ -29,6 +18,17 @@ var training_manager: TrainingManager = null:
 				_update_stats()
 			else:
 				_pending_stats_refresh = true
+
+var _gen_label: Label
+var _white_best_label: Label
+var _black_best_label: Label
+var _white_avg_label: Label
+var _black_avg_label: Label
+var _games_label: Label
+var _start_button: Button
+var _speed_selector: OptionButton
+var _stats_panel: VBoxContainer
+var _pending_stats_refresh := false
 
 
 func _ready() -> void:

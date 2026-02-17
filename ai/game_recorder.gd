@@ -1,5 +1,5 @@
-extends RefCounted
 class_name GameRecorder
+extends RefCounted
 
 ## Records complete chess games and saves them as JSON replay files.
 ## Each replay includes full move history, metadata, and board snapshots
