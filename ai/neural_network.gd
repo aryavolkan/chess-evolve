@@ -17,7 +17,12 @@ var _hidden: PackedFloat32Array
 var _output: PackedFloat32Array
 
 
-func _init(p_input_size: int = 389, p_hidden_size: int = 64, p_output_size: int = 128, p_randomize: bool = true) -> void:
+func _init(
+		p_input_size: int = 389,
+		p_hidden_size: int = 64,
+		p_output_size: int = 128,
+		p_randomize: bool = true
+	) -> void:
 	input_size = p_input_size
 	hidden_size = p_hidden_size
 	output_size = p_output_size

@@ -6,7 +6,6 @@ Run this while Chess Evolve training is active (UI or headless). The script poll
 """
 import argparse
 import json
-import os
 import time
 from pathlib import Path
 
@@ -17,8 +16,16 @@ DEFAULT_ENTITY = None  # falls back to logged-in user
 DEFAULT_RUN_NAME = "local-training"
 DEFAULT_POLL_INTERVAL = 2.0
 
-# Godot stores user data per-project: ~/Library/Application Support/Godot/app_userdata/<ProjectName>
-DEFAULT_USER_DIR = Path.home() / "Library" / "Application Support" / "Godot" / "app_userdata" / "Chess Evolve"
+# Godot stores user data per-project:
+# ~/Library/Application Support/Godot/app_userdata/<ProjectName>
+DEFAULT_USER_DIR = (
+    Path.home()
+    / "Library"
+    / "Application Support"
+    / "Godot"
+    / "app_userdata"
+    / "Chess Evolve"
+)
 DEFAULT_METRICS_PATH = DEFAULT_USER_DIR / "metrics.json"
 
 
@@ -37,8 +44,15 @@ def main() -> int:
     parser.add_argument("--project", default=DEFAULT_PROJECT, help="W&B project name")
     parser.add_argument("--entity", default=DEFAULT_ENTITY, help="W&B entity (team/user)")
     parser.add_argument("--run-name", default=DEFAULT_RUN_NAME, help="Name for this run")
-    parser.add_argument("--metrics-path", default=str(DEFAULT_METRICS_PATH), help="Path to metrics.json")
-    parser.add_argument("--poll-interval", type=float, default=DEFAULT_POLL_INTERVAL, help="Seconds between polls")
+    parser.add_argument(
+        "--metrics-path", default=str(DEFAULT_METRICS_PATH), help="Path to metrics.json"
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="Seconds between polls",
+    )
     args = parser.parse_args()
 
     metrics_path = Path(args.metrics_path).expanduser()

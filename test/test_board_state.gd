@@ -1,7 +1,7 @@
 extends "res://test/test_base.gd"
 
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece
+const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
 
 func _run_tests() -> void:
@@ -90,7 +90,8 @@ func _run_tests() -> void:
 		b.make_move(Vector2i(52, 36))  # e7-e5
 		b.make_move(Vector2i(5, 26))   # Bf1-c4
 		b.make_move(Vector2i(57, 42))  # Nb8-c6
-		b.make_move(Vector2i(3, 39))   # Qd1-h5 (not quite scholar's mate but let's test checkmate detection)
+		# Qd1-h5 (not quite scholar's mate but enough for checkmate-state testing)
+		b.make_move(Vector2i(3, 39))
 		# This isn't exactly scholar's mate - let me do a simpler checkmate test
 	)
 

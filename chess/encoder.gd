@@ -1,5 +1,5 @@
-extends RefCounted
 class_name ChessEncoder
+extends RefCounted
 
 ## Encodes board state into neural network inputs and decodes outputs to moves.
 ##
@@ -18,7 +18,7 @@ class_name ChessEncoder
 const INPUT_SIZE := 389
 const MOVE_OUTPUT_SIZE := 128  # from_square(64) + to_square(64)
 
-const Piece = ChessConstants.Piece
+const PIECE = ChessConstants.Piece
 
 
 static func encode_board(state) -> PackedFloat32Array:

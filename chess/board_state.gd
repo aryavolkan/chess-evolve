@@ -1,11 +1,11 @@
-extends RefCounted
 class_name BoardState
+extends RefCounted
 
 ## Represents a chess board state with full game logic.
 ## Board is an 8x8 array: positive = white, negative = black.
 ## Values correspond to ChessConstants.Piece enum.
 
-const Piece = ChessConstants.Piece
+const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
 var board: Array[int] = []  # 64 squares, row-major (0=a1, 63=h8)
 var side_to_move: int = 0  # 0=white, 1=black
@@ -122,9 +122,24 @@ func _add_piece_moves(sq: int, moves: Array[Vector2i]) -> void:
 	match piece:
 		Piece.PAWN: _add_pawn_moves(sq, moves)
 		Piece.KNIGHT: _add_knight_moves(sq, moves)
-		Piece.BISHOP: _add_slider_moves(sq, moves, [Vector2i(-1,-1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(1,1)])
-		Piece.ROOK: _add_slider_moves(sq, moves, [Vector2i(0,-1), Vector2i(0,1), Vector2i(-1,0), Vector2i(1,0)])
-		Piece.QUEEN: _add_slider_moves(sq, moves, [Vector2i(-1,-1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(1,1), Vector2i(0,-1), Vector2i(0,1), Vector2i(-1,0), Vector2i(1,0)])
+		Piece.BISHOP: _add_slider_moves(
+				sq,
+				moves,
+				[Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]
+			)
+		Piece.ROOK: _add_slider_moves(
+				sq,
+				moves,
+				[Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+			)
+		Piece.QUEEN: _add_slider_moves(
+				sq,
+				moves,
+				[
+					Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
+					Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
+				]
+			)
 		Piece.KING: _add_king_moves(sq, moves)
 
 
@@ -159,8 +174,10 @@ func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
 func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
-	var offsets := [Vector2i(-2,-1), Vector2i(-2,1), Vector2i(-1,-2), Vector2i(-1,2),
-					Vector2i(1,-2), Vector2i(1,2), Vector2i(2,-1), Vector2i(2,1)]
+	var offsets := [
+		Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
+		Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
+	]
 	for off in offsets:
 		var nf: int = f + off.x
 		var nr: int = r + off.y
@@ -200,17 +217,39 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 
 	# Castling
 	if side_to_move == 0 and sq == 4:
-		if castling_rights & 0b0001 and board[5] == 0 and board[6] == 0 and board[7] == Piece.ROOK:
+		if (
+			castling_rights & 0b0001
+			and board[5] == 0
+			and board[6] == 0
+			and board[7] == Piece.ROOK
+		):
 			if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
 				moves.append(Vector2i(4, 6))
-		if castling_rights & 0b0010 and board[3] == 0 and board[2] == 0 and board[1] == 0 and board[0] == Piece.ROOK:
+		if (
+			castling_rights & 0b0010
+			and board[3] == 0
+			and board[2] == 0
+			and board[1] == 0
+			and board[0] == Piece.ROOK
+		):
 			if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
 				moves.append(Vector2i(4, 2))
 	elif side_to_move == 1 and sq == 60:
-		if castling_rights & 0b0100 and board[61] == 0 and board[62] == 0 and board[63] == -Piece.ROOK:
+		if (
+			castling_rights & 0b0100
+			and board[61] == 0
+			and board[62] == 0
+			and board[63] == -Piece.ROOK
+		):
 			if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
 				moves.append(Vector2i(60, 62))
-		if castling_rights & 0b1000 and board[59] == 0 and board[58] == 0 and board[57] == 0 and board[56] == -Piece.ROOK:
+		if (
+			castling_rights & 0b1000
+			and board[59] == 0
+			and board[58] == 0
+			and board[57] == 0
+			and board[56] == -Piece.ROOK
+		):
 			if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
 				moves.append(Vector2i(60, 58))
 
@@ -283,8 +322,10 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 	var r := rank_of(sq)
 
 	# Knight attacks
-	var knight_offsets := [Vector2i(-2,-1), Vector2i(-2,1), Vector2i(-1,-2), Vector2i(-1,2),
-						   Vector2i(1,-2), Vector2i(1,2), Vector2i(2,-1), Vector2i(2,1)]
+	var knight_offsets := [
+		Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
+		Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
+	]
 	for off in knight_offsets:
 		var nf: int = f + off.x
 		var nr: int = r + off.y
@@ -309,7 +350,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 				if board[square(nf, nr)] == sign * Piece.KING: return true
 
 	# Slider attacks (bishop/queen diagonals, rook/queen straights)
-	var diag_dirs := [Vector2i(-1,-1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(1,1)]
+	var diag_dirs := [Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]
 	for dir in diag_dirs:
 		var nf: int = f + dir.x
 		var nr: int = r + dir.y
@@ -320,7 +361,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 				break
 			nf += dir.x; nr += dir.y
 
-	var straight_dirs := [Vector2i(0,-1), Vector2i(0,1), Vector2i(-1,0), Vector2i(1,0)]
+	var straight_dirs := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
 	for dir in straight_dirs:
 		var nf: int = f + dir.x
 		var nr: int = r + dir.y

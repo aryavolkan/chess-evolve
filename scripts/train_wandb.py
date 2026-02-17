@@ -3,13 +3,13 @@
 Single W&B-tracked chess-evolve training run with live logging.
 Polls metrics.json for reliability (Godot buffers stdout).
 """
-import wandb
-import subprocess
 import json
 import os
-import time
+import subprocess
 import sys
-from pathlib import Path
+import time
+
+import wandb
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -55,7 +55,7 @@ def read_metrics():
     try:
         if not os.path.exists(METRICS_PATH):
             return None
-        with open(METRICS_PATH, 'r') as f:
+        with open(METRICS_PATH) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None

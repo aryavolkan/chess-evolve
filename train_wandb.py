@@ -3,14 +3,14 @@
 Chess-Evolve W&B-tracked training with hyperparameter sweeps.
 Polls Godot metrics and logs to Weights & Biases.
 """
-import wandb
-import subprocess
+import argparse
 import json
 import os
-import time
+import subprocess
 import sys
-import argparse
-from pathlib import Path
+import time
+
+import wandb
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -56,7 +56,7 @@ def read_metrics():
     try:
         if not os.path.exists(METRICS_PATH):
             return None
-        with open(METRICS_PATH, 'r') as f:
+        with open(METRICS_PATH) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
@@ -164,9 +164,15 @@ def run_training(config=None, visible=False):
         tags=["chess", "neuroevolution", "coevolution"]
     )
     
-    print(f"\n🎮 Starting Chess-Evolve training:")
-    print(f"   Pop: {config['population_size']}, Hidden: {config['hidden_size']}, Elite: {config['elite_count']}")
-    print(f"   Mutation: rate={config['mutation_rate']:.3f}, strength={config['mutation_strength']:.3f}")
+    print("\n🎮 Starting Chess-Evolve training:")
+    print(
+        f"   Pop: {config['population_size']}, Hidden: {config['hidden_size']}, "
+        f"Elite: {config['elite_count']}"
+    )
+    print(
+        f"   Mutation: rate={config['mutation_rate']:.3f}, "
+        f"strength={config['mutation_strength']:.3f}"
+    )
     print(f"   Crossover: {config['crossover_rate']:.3f}")
     print(f"   Games per individual: {config['games_per_individual']}")
     print(f"   Max generations: {config['max_generations']}\n")
@@ -233,7 +239,7 @@ if __name__ == "__main__":
     # Load custom config if provided
     custom_config = None
     if args.config and os.path.exists(args.config):
-        with open(args.config, 'r') as f:
+        with open(args.config) as f:
             custom_config = json.load(f)
         print(f"✓ Loaded config from {args.config}")
     

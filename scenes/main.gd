@@ -10,18 +10,18 @@ const TrainingManager = preload("res://ai/training_manager.gd")
 const ChessEncoder = preload("res://chess/encoder.gd")
 const ReplayViewer = preload("res://ui/replay_viewer.gd")
 
+const SHOWCASE_INTERVAL := 2.0  # Seconds between showcase game updates
+const UPDATE_INTERVAL := 0.3  # Seconds between move updates (slows down visualization)
 var training_manager: TrainingManager
 var dashboard: Control
 var board_viewers: Array[Control] = []
 var _showcase_timer := 0.0
-const SHOWCASE_INTERVAL := 2.0  # Seconds between showcase game updates
 
 var _is_wide_layout := true
 var _current_state: RefCounted = null
 var _pending_moves: Array = []  # Queue of individual moves to display
 var _game_display_idx := 0  # Which board to update next
 var _time_since_last_update := 0.0
-const UPDATE_INTERVAL := 0.3  # Seconds between move updates (slows down visualization)
 
 
 func _ready() -> void:
@@ -30,17 +30,17 @@ func _ready() -> void:
 	if not replay_file.is_empty():
 		_run_replay_mode(replay_file)
 		return
-	
+
 	# Check for auto-train mode (headless training)
 	var auto_train := _check_auto_train_arg()
-	
+
 	if auto_train:
 		_run_auto_train()
 		return
-	
+
 	# Make this control fill the viewport
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
+
 	# Initialize training with UI
 	var config := _load_config()
 	var evo := ChessEvolution.new(
@@ -60,7 +60,7 @@ func _ready() -> void:
 	dashboard = Dashboard.new()
 	dashboard.training_manager = training_manager
 	add_child(dashboard)
-	
+
 	_layout_ui()
 
 	# Show initial position on all boards
@@ -125,7 +125,11 @@ func _clear_board_viewers() -> void:
 	board_viewers.clear()
 
 
-func _layout_board_grid(start_pos: Vector2, available_width: float, available_height: float) -> void:
+func _layout_board_grid(
+		start_pos: Vector2,
+		available_width: float,
+		available_height: float
+	) -> void:
 	"""Layout a 2x2 grid of boards in the available space."""
 	var board_size: float = min(available_width / 2 - 15, available_height / 2 - 15)
 	board_size = max(board_size, 100)
@@ -151,7 +155,7 @@ func _layout_single_board(start_pos: Vector2, board_size: float) -> void:
 
 func _process(delta: float) -> void:
 	_time_since_last_update += delta
-	
+
 	# Show moves one at a time across all boards
 	if _time_since_last_update >= UPDATE_INTERVAL and not _pending_moves.is_empty():
 		_time_since_last_update = 0.0
@@ -224,17 +228,17 @@ func _check_replay_arg() -> String:
 func _run_replay_mode(filename: String) -> void:
 	## Launch replay viewer for the specified file
 	print("Starting replay mode: %s" % filename)
-	
+
 	# Make this control fill the viewport
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
+
 	var viewer := ReplayViewer.new()
 	add_child(viewer)
 	viewer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
+
 	# Try to load the file
 	var success := false
-	
+
 	# Try as absolute path
 	if FileAccess.file_exists(filename):
 		success = viewer.load_replay_file(filename)
@@ -244,7 +248,7 @@ func _run_replay_mode(filename: String) -> void:
 	# Try user://replays/ prefix
 	elif FileAccess.file_exists("user://replays/" + filename):
 		success = viewer.load_replay_file("user://replays/" + filename)
-	
+
 	if not success:
 		push_error("Failed to load replay file: %s" % filename)
 		print("Could not find replay file. Searched:")
@@ -253,7 +257,7 @@ func _run_replay_mode(filename: String) -> void:
 		print("  - user://replays/%s" % filename)
 		get_tree().quit(1)
 		return
-	
+
 	print("Replay loaded successfully!")
 	viewer.replay_closed.connect(func(): get_tree().quit())
 
@@ -262,7 +266,7 @@ func _load_config() -> Dictionary:
 	## Load training config from user:// or use defaults
 	var config_path := "user://sweep_config.json"
 	var config := {}
-	
+
 	if FileAccess.file_exists(config_path):
 		var file := FileAccess.open(config_path, FileAccess.READ)
 		if file:
@@ -272,14 +276,14 @@ func _load_config() -> Dictionary:
 				config = json.get_data()
 				print("Loaded config from %s" % config_path)
 			file.close()
-	
+
 	return config
 
 
 func _run_auto_train() -> void:
 	## Run headless training without UI (for sweep/overnight runs)
 	print("Starting auto-train mode...")
-	
+
 	var config := _load_config()
 	var evo := ChessEvolution.new(
 		config.get("population_size", 30),
@@ -288,26 +292,26 @@ func _run_auto_train() -> void:
 		config.get("output_size", 128),
 		config.get("elite_count", 3)
 	)
-	
+
 	# Set mutation params
 	if config.has("mutation_rate"):
 		evo.mutation_rate = config["mutation_rate"]
 	if config.has("mutation_strength"):
 		evo.mutation_strength = config["mutation_strength"]
-	
+
 	training_manager = TrainingManager.new(
 		evo,
 		config.get("games_per_individual", 2),
 		config.get("max_moves_per_game", 100)
 	)
-	
+
 	var max_generations := int(config.get("max_generations", 100))
-	
+
 	print("Config: pop=%d, hidden=%d, elite=%d, games_per=%d, max_gen=%d" % [
 		evo.population_size, evo.hidden_size, evo.elite_count,
 		training_manager.games_per_individual, max_generations
 	])
-	
+
 	# Run training loop
 	var total_games := 0
 	for gen in max_generations:
@@ -320,6 +324,6 @@ func _run_auto_train() -> void:
 				gen, stats["white_best"], stats["white_avg"],
 				stats["black_best"], stats["black_avg"]
 			])
-	
+
 	print("Auto-train complete!")
 	get_tree().quit()

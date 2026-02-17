@@ -4,10 +4,10 @@ extends Control
 ## Provides playback controls (play/pause, step, speed) and displays game metadata.
 ## Reuses BoardRenderer for board display.
 
+signal replay_closed
 const BoardRenderer = preload("res://ui/board_renderer.gd")
 const GameRecorderScript = preload("res://ai/game_recorder.gd")
 
-signal replay_closed
 
 var _board_renderer: Control = null
 var _states: Array = []  # Array of BoardState from replay
@@ -206,7 +206,10 @@ func _format_metadata() -> String:
 		lines.append("Black: #%d" % _metadata["black_id"])
 	if _metadata.has("result"):
 		var r: int = _metadata["result"]
-		var result_str := "Draw" if r == 2 else ("White wins" if r == 1 else ("Black wins" if r == -1 else "Unknown"))
+		var result_str := (
+			"Draw" if r == 2
+			else ("White wins" if r == 1 else ("Black wins" if r == -1 else "Unknown"))
+		)
 		lines.append("Result: %s" % result_str)
 	if _metadata.has("total_moves"):
 		lines.append("Total moves: %d" % _metadata["total_moves"])
