@@ -17,7 +17,7 @@ var _hidden: PackedFloat32Array
 var _output: PackedFloat32Array
 
 
-func _init(p_input_size: int = 389, p_hidden_size: int = 64, p_output_size: int = 128) -> void:
+func _init(p_input_size: int = 389, p_hidden_size: int = 64, p_output_size: int = 128, p_randomize: bool = true) -> void:
 	input_size = p_input_size
 	hidden_size = p_hidden_size
 	output_size = p_output_size
@@ -29,7 +29,8 @@ func _init(p_input_size: int = 389, p_hidden_size: int = 64, p_output_size: int 
 	_hidden.resize(hidden_size)
 	_output.resize(output_size)
 
-	randomize_weights()
+	if p_randomize:
+		randomize_weights()
 
 
 func randomize_weights() -> void:
@@ -89,28 +90,43 @@ func get_weight_count() -> int:
 
 
 func clone():
-	var copy = get_script().new(input_size, hidden_size, output_size)
-	copy.set_weights(get_weights())
+	## Direct array copy: avoids the ~33K-float intermediate allocation from
+	## get_weights()/set_weights(), and skips the wasted randomize_weights() in new().
+	var copy = get_script().new(input_size, hidden_size, output_size, false)
+	copy.weights_ih = weights_ih.duplicate()
+	copy.bias_h = bias_h.duplicate()
+	copy.weights_ho = weights_ho.duplicate()
+	copy.bias_o = bias_o.duplicate()
 	return copy
 
 
 func mutate(mutation_rate: float = 0.1, mutation_strength: float = 0.3) -> void:
-	for i in weights_ih.size():
-		if randf() < mutation_rate:
-			weights_ih[i] += randfn(0.0, mutation_strength)
-	for i in bias_h.size():
-		if randf() < mutation_rate:
-			bias_h[i] += randfn(0.0, mutation_strength)
-	for i in weights_ho.size():
-		if randf() < mutation_rate:
-			weights_ho[i] += randfn(0.0, mutation_strength)
-	for i in bias_o.size():
-		if randf() < mutation_rate:
-			bias_o[i] += randfn(0.0, mutation_strength)
+	_mutate_array(weights_ih, mutation_rate, mutation_strength)
+	_mutate_array(bias_h, mutation_rate, mutation_strength)
+	_mutate_array(weights_ho, mutation_rate, mutation_strength)
+	_mutate_array(bias_o, mutation_rate, mutation_strength)
+
+
+func _mutate_array(arr: PackedFloat32Array, mutation_rate: float, mutation_strength: float) -> void:
+	## Geometric-skip mutation: jumps directly to the next mutated index using the
+	## inverse CDF of the geometric distribution. O(k) randf() calls where k is the
+	## number of actual mutations, vs O(n) for the naive per-element approach.
+	## Produces an identical distribution to: if randf() < rate: arr[i] += randfn(...)
+	if mutation_rate <= 0.0 or arr.is_empty():
+		return
+	if mutation_rate >= 1.0:
+		for i in arr.size():
+			arr[i] += randfn(0.0, mutation_strength)
+		return
+	var log1mp := log(1.0 - mutation_rate)
+	var i := int(floor(log(maxf(randf(), 1e-15)) / log1mp))
+	while i < arr.size():
+		arr[i] += randfn(0.0, mutation_strength)
+		i += 1 + int(floor(log(maxf(randf(), 1e-15)) / log1mp))
 
 
 func crossover_with(other):
-	var child = get_script().new(input_size, hidden_size, output_size)
+	var child = get_script().new(input_size, hidden_size, output_size, false)
 	var wa: PackedFloat32Array = get_weights()
 	var wb: PackedFloat32Array = other.get_weights()
 	var wc: PackedFloat32Array = PackedFloat32Array()

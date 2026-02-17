@@ -20,8 +20,6 @@ var max_moves_per_game: int = 150
 var current_games: Array = []  # Array of active GameState dicts
 var total_games_played: int = 0
 var metrics_logger: MetricsLogger
-var _encoder = ChessEncoderScript.new()
-var _fitness = ChessFitnessScript.new()
 
 # For incremental training
 var _current_white_idx: int = 0
@@ -125,14 +123,14 @@ func _play_game(white_idx: int, black_idx: int):
 	var move_count := 0
 	while not state.is_game_over and move_count < max_moves_per_game:
 		var net = white_net if state.side_to_move == 0 else black_net
-		var inputs: PackedFloat32Array = _encoder.call("encode_board", state)
+		var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(state)
 		var outputs: PackedFloat32Array = net.forward(inputs)
 		var legal_moves := state.generate_legal_moves()
 
 		if legal_moves.is_empty():
 			break
 
-		var chosen: Vector2i = _encoder.call("decode_move", outputs, legal_moves)
+		var chosen: Vector2i = ChessEncoderScript.decode_move(outputs, legal_moves)
 		state.make_move(chosen)
 		move_count += 1
 
@@ -150,8 +148,8 @@ func _play_game(white_idx: int, black_idx: int):
 		state.result = 2
 
 	# Evaluate fitness for both players
-	var w_fitness: float = _fitness.call("evaluate", state, 0, move_count)
-	var b_fitness: float = _fitness.call("evaluate", state, 1, move_count)
+	var w_fitness: float = ChessFitnessScript.evaluate(state, 0, move_count)
+	var b_fitness: float = ChessFitnessScript.evaluate(state, 1, move_count)
 
 	# Accumulate fitness (averaged over games)
 	var w_prev: float = evolution.white_fitness[white_idx]

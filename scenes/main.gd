@@ -311,14 +311,11 @@ func _run_auto_train() -> void:
 	# Run training loop
 	var total_games := 0
 	for gen in max_generations:
-		training_manager.run_generation()
+		training_manager.run_generation()  # MetricsLogger inside run_generation() writes metrics.json.
 		total_games += evo.population_size * config.get("games_per_individual", 2)
-		
-		# Get stats and write metrics.json for W&B polling
-		var stats := training_manager.get_stats()
-		_write_metrics(gen, stats, total_games)
-		
+
 		if gen % 10 == 0:
+			var stats := training_manager.get_stats()
 			print("Gen %d: W_best=%.1f, W_avg=%.1f, B_best=%.1f, B_avg=%.1f" % [
 				gen, stats["white_best"], stats["white_avg"],
 				stats["black_best"], stats["black_avg"]
@@ -326,21 +323,3 @@ func _run_auto_train() -> void:
 	
 	print("Auto-train complete!")
 	get_tree().quit()
-
-
-func _write_metrics(gen: int, stats: Dictionary, total_games: int) -> void:
-	## Write metrics.json for W&B polling
-	var metrics := {
-		"generation": gen,
-		"white_best": stats.get("white_best", 0.0),
-		"white_avg": stats.get("white_avg", 0.0),
-		"black_best": stats.get("black_best", 0.0),
-		"black_avg": stats.get("black_avg", 0.0),
-		"games_played": total_games
-	}
-	
-	var metrics_path := "user://metrics.json"
-	var file := FileAccess.open(metrics_path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(metrics, "\t"))
-		file.close()

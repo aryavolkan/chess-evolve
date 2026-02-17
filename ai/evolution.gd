@@ -28,6 +28,8 @@ var best_white_fitness: float = 0.0
 var best_black_fitness: float = 0.0
 var all_time_best_white = null
 var all_time_best_black = null
+var all_time_best_white_fitness: float = -INF
+var all_time_best_black_fitness: float = -INF
 
 
 func _init(
@@ -91,19 +93,16 @@ func evolve() -> void:
 	best_white_fitness = white_fitness[w_best_idx]
 	best_black_fitness = black_fitness[b_best_idx]
 
-	if all_time_best_white == null or best_white_fitness > _fitness_of(all_time_best_white):
+	if all_time_best_white == null or best_white_fitness > all_time_best_white_fitness:
 		all_time_best_white = white_pop[w_best_idx].clone()
-	if all_time_best_black == null or best_black_fitness > _fitness_of(all_time_best_black):
+		all_time_best_white_fitness = best_white_fitness
+	if all_time_best_black == null or best_black_fitness > all_time_best_black_fitness:
 		all_time_best_black = black_pop[b_best_idx].clone()
+		all_time_best_black_fitness = best_black_fitness
 
 	generation += 1
 	_reset_fitness()
 	generation_complete.emit(generation, best_white_fitness, best_black_fitness)
-
-
-func _fitness_of(_net) -> float:
-	# Placeholder - we track fitness externally
-	return 0.0
 
 
 func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:

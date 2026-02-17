@@ -17,6 +17,9 @@ const PIECE_VALUES := {
 	Piece.KING: 0.0,  # King value not used for material counting
 }
 
+# Same values indexed by Piece enum (0-6) — O(1) array access vs dict lookup.
+const PIECE_VALUES_ARRAY := [0.0, 1.0, 3.0, 3.25, 5.0, 9.0, 0.0]
+
 # Piece symbols for display
 const PIECE_SYMBOLS := {
 	Piece.NONE: ".",

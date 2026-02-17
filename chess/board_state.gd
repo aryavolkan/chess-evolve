@@ -102,8 +102,9 @@ func generate_legal_moves() -> Array[Vector2i]:
 	## Returns array of Vector2i(from, to) for all legal moves.
 	var moves: Array[Vector2i] = []
 	var pseudo := _generate_pseudo_legal_moves()
+	var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
 	for m in pseudo:
-		if _is_legal(m):
+		if _is_legal(m, king_sq):
 			moves.append(m)
 	return moves
 
@@ -214,13 +215,58 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 				moves.append(Vector2i(60, 58))
 
 
-func _is_legal(move: Vector2i) -> bool:
-	## Check if a move leaves our king safe.
-	var test := clone()
-	test._apply_move_unchecked(move)
-	var king_sq := test._find_king(side_to_move)
-	if king_sq == -1: return false
-	return not test._is_square_attacked(king_sq, 1 - side_to_move)
+func _is_legal(move: Vector2i, king_sq: int) -> bool:
+	## Check legality via in-place make/unmake — avoids cloning the entire board.
+	## Equivalent to the original clone-based approach but allocates nothing.
+	var from := move.x
+	var to := move.y
+	var piece := board[from]
+	var abs_p := absi(piece)
+	var captured := board[to]
+
+	# Handle en passant capture.
+	var ep_sq := -1
+	var ep_captured := 0
+	if abs_p == Piece.PAWN and to == en_passant_square:
+		ep_sq = to + (-8 if side_to_move == 0 else 8)
+		ep_captured = board[ep_sq]
+		board[ep_sq] = 0
+
+	# Handle castling: temporarily move the rook.
+	var rook_from := -1
+	var rook_to_sq := -1
+	var rook_piece := 0
+	if abs_p == Piece.KING:
+		if to - from == 2:       # Kingside
+			rook_from = to + 1; rook_to_sq = to - 1
+		elif from - to == 2:     # Queenside
+			rook_from = to - 2; rook_to_sq = to + 1
+		if rook_from != -1:
+			rook_piece = board[rook_from]
+			board[rook_to_sq] = rook_piece
+			board[rook_from] = 0
+
+	# Apply piece move (with pawn promotion to queen for attack purposes).
+	board[to] = piece
+	board[from] = 0
+	if abs_p == Piece.PAWN:
+		if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
+			board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+
+	# The king is on `to` if it just moved, otherwise it stays at king_sq.
+	var actual_king_sq := to if abs_p == Piece.KING else king_sq
+	var legal := actual_king_sq != -1 and not _is_square_attacked(actual_king_sq, 1 - side_to_move)
+
+	# Undo all board changes.
+	board[from] = piece
+	board[to] = captured
+	if ep_sq != -1:
+		board[ep_sq] = ep_captured
+	if rook_from != -1:
+		board[rook_from] = rook_piece
+		board[rook_to_sq] = 0
+
+	return legal
 
 
 func _find_king(color: int) -> int:
@@ -347,17 +393,18 @@ func _apply_move_unchecked(move: Vector2i) -> void:
 
 
 func _check_game_over() -> void:
-	var moves := generate_legal_moves()
-	if moves.size() == 0:
+	# Check 50-move rule first — avoids the expensive generate_legal_moves() call.
+	if halfmove_clock >= 100:
 		is_game_over = true
-		var king_sq := _find_king(side_to_move)
-		if king_sq != -1 and _is_square_attacked(king_sq, 1 - side_to_move):
+		result = 2  # 50-move rule draw
+		return
+	var moves := generate_legal_moves()
+	if moves.is_empty():
+		is_game_over = true
+		if is_in_check():
 			result = 1 if side_to_move == 1 else -1  # Checkmate
 		else:
 			result = 2  # Stalemate
-	elif halfmove_clock >= 100:
-		is_game_over = true
-		result = 2  # 50-move rule
 
 
 func is_in_check() -> bool:
@@ -369,15 +416,15 @@ func is_in_check() -> bool:
 func material_score(color: int) -> float:
 	## Sum material value for given color.
 	var total := 0.0
-	var sign := 1 if color == 0 else -1
 	for sq in range(64):
-		if (color == 0 and board[sq] > 0) or (color == 1 and board[sq] < 0):
-			total += ChessConstants.PIECE_VALUES.get(absi(board[sq]), 0.0)
+		var p: int = board[sq]
+		if (color == 0 and p > 0) or (color == 1 and p < 0):
+			total += ChessConstants.PIECE_VALUES_ARRAY[absi(p)]
 	return total
 
 
 func mobility_score(color: int) -> int:
-	## Count number of legal moves for a color (approximation: uses pseudo-legal).
+	## Count number of legal moves for a color.
 	var saved_side := side_to_move
 	side_to_move = color
 	var moves := generate_legal_moves()
