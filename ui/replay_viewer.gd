@@ -4,10 +4,10 @@ extends Control
 ## Provides playback controls (play/pause, step, speed) and displays game metadata.
 ## Reuses BoardRenderer for board display.
 
+signal replay_closed
 const BoardRenderer = preload("res://ui/board_renderer.gd")
 const GameRecorderScript = preload("res://ai/game_recorder.gd")
 
-signal replay_closed
 
 var _board_renderer: Control = null
 var _states: Array = []  # Array of BoardState from replay

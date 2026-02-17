@@ -1,7 +1,7 @@
 extends "res://test/test_base.gd"
 
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece
+const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
 
 func _run_tests() -> void:

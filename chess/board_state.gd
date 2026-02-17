@@ -1,11 +1,11 @@
-extends RefCounted
 class_name BoardState
+extends RefCounted
 
 ## Represents a chess board state with full game logic.
 ## Board is an 8x8 array: positive = white, negative = black.
 ## Values correspond to ChessConstants.Piece enum.
 
-const Piece = ChessConstants.Piece
+const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
 var board: Array[int] = []  # 64 squares, row-major (0=a1, 63=h8)
 var side_to_move: int = 0  # 0=white, 1=black

@@ -1,5 +1,5 @@
-extends RefCounted
 class_name ChessEvolution
+extends RefCounted
 
 ## Manages a population of chess-playing neural networks with coevolution.
 ## Two populations: white and black, evolved against each other.

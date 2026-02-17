@@ -1,5 +1,5 @@
-extends RefCounted
 class_name TrainingManager
+extends RefCounted
 
 ## Orchestrates coevolutionary training: runs games between white and black populations,
 ## evaluates fitness, and triggers evolution.
@@ -20,16 +20,14 @@ var max_moves_per_game: int = 150
 var current_games: Array = []  # Array of active GameState dicts
 var total_games_played: int = 0
 var metrics_logger: MetricsLogger
-
-# For incremental training
-var _current_white_idx: int = 0
-var _current_game_idx: int = 0
-var _generation_in_progress: bool = false
 var last_game_state = null  # Store most recent game for visualization
 var last_game_history: Array = []  # Array of board states showing each move
 var game_recorder: GameRecorderScript = null  # Optional: records full games for replay
 var record_replays: bool = false  # Enable to save every game as a replay file
 
+var _current_white_idx: int = 0
+var _current_game_idx: int = 0
+var _generation_in_progress: bool = false
 
 func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
 	if p_evolution:
@@ -61,19 +59,19 @@ func run_one_game_step() -> bool:
 		# Reset fitness
 		evolution.white_fitness.fill(0.0)
 		evolution.black_fitness.fill(0.0)
-	
+
 	# Play one game
 	var b_idx: int = randi() % int(evolution.population_size)
 	var result = _play_game(_current_white_idx, b_idx)
 	game_complete.emit(_current_white_idx, b_idx, result.result)
 	total_games_played += 1
-	
+
 	# Advance to next game
 	_current_game_idx += 1
 	if _current_game_idx >= games_per_individual:
 		_current_game_idx = 0
 		_current_white_idx += 1
-	
+
 	# Check if generation complete
 	if _current_white_idx >= evolution.population_size:
 		evolution.evolve()
@@ -82,7 +80,7 @@ func run_one_game_step() -> bool:
 		training_step_complete.emit(evolution.generation, stats)
 		_generation_in_progress = false
 		return true
-	
+
 	return false
 
 
@@ -102,7 +100,7 @@ func _play_game(white_idx: int, black_idx: int):
 	## Play a single game between two networks, return final board state.
 	var state := BoardStateScript.new()
 	state.setup_initial()
-	
+
 	# Track game history for visualization (every 5th move to reduce memory)
 	var game_history: Array = []
 	game_history.append(state.clone())
@@ -137,7 +135,7 @@ func _play_game(white_idx: int, black_idx: int):
 		# Record every move for replay
 		if recorder:
 			recorder.record_move(chosen, state)
-		
+
 		# Save every 5th move for visualization
 		if move_count % 5 == 0:
 			game_history.append(state.clone())
@@ -159,7 +157,7 @@ func _play_game(white_idx: int, black_idx: int):
 
 	# Add final state to history
 	game_history.append(state.clone())
-	
+
 	# Save replay file if recording
 	if recorder:
 		recorder.stop_recording(state.result)
@@ -169,7 +167,7 @@ func _play_game(white_idx: int, black_idx: int):
 	# Store for visualization
 	last_game_state = state
 	last_game_history = game_history
-	
+
 	return state
 
 
