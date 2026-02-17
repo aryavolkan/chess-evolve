@@ -7,6 +7,22 @@ extends RefCounted
 
 const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
+# Precomputed tables — static so they're allocated once at class load, never per-call.
+static var _KNIGHT_OFFSETS: Array[Vector2i] = [
+	Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
+	Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
+]
+static var _DIAG_DIRS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)
+]
+static var _STRAIGHT_DIRS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
+]
+static var _ALL_DIRS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
+	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
+]
+
 var board: Array[int] = []  # 64 squares, row-major (0=a1, 63=h8)
 var side_to_move: int = 0  # 0=white, 1=black
 var castling_rights: int = 0b1111  # KQkq bits
@@ -15,6 +31,8 @@ var halfmove_clock: int = 0
 var fullmove_number: int = 1
 var is_game_over: bool = false
 var result: int = 0  # 0=ongoing, 1=white wins, -1=black wins, 2=draw
+var _white_king_sq: int = -1
+var _black_king_sq: int = -1
 
 
 func _init() -> void:
@@ -44,6 +62,8 @@ func setup_initial() -> void:
 	fullmove_number = 1
 	is_game_over = false
 	result = 0
+	_white_king_sq = 4
+	_black_king_sq = 60
 
 
 static func file_of(sq: int) -> int:
@@ -95,6 +115,8 @@ func clone() -> BoardState:
 	copy.fullmove_number = fullmove_number
 	copy.is_game_over = is_game_over
 	copy.result = result
+	copy._white_king_sq = _white_king_sq
+	copy._black_king_sq = _black_king_sq
 	return copy
 
 
@@ -122,24 +144,9 @@ func _add_piece_moves(sq: int, moves: Array[Vector2i]) -> void:
 	match piece:
 		Piece.PAWN: _add_pawn_moves(sq, moves)
 		Piece.KNIGHT: _add_knight_moves(sq, moves)
-		Piece.BISHOP: _add_slider_moves(
-				sq,
-				moves,
-				[Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]
-			)
-		Piece.ROOK: _add_slider_moves(
-				sq,
-				moves,
-				[Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
-			)
-		Piece.QUEEN: _add_slider_moves(
-				sq,
-				moves,
-				[
-					Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
-					Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
-				]
-			)
+		Piece.BISHOP: _add_slider_moves(sq, moves, _DIAG_DIRS)
+		Piece.ROOK: _add_slider_moves(sq, moves, _STRAIGHT_DIRS)
+		Piece.QUEEN: _add_slider_moves(sq, moves, _ALL_DIRS)
 		Piece.KING: _add_king_moves(sq, moves)
 
 
@@ -174,11 +181,7 @@ func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
 func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
-	var offsets := [
-		Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
-		Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
-	]
-	for off in offsets:
+	for off in _KNIGHT_OFFSETS:
 		var nf: int = f + off.x
 		var nr: int = r + off.y
 		if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
@@ -309,10 +312,7 @@ func _is_legal(move: Vector2i, king_sq: int) -> bool:
 
 
 func _find_king(color: int) -> int:
-	var king_val := Piece.KING if color == 0 else -Piece.KING
-	for sq in range(64):
-		if board[sq] == king_val: return sq
-	return -1
+	return _white_king_sq if color == 0 else _black_king_sq
 
 
 func _is_square_attacked(sq: int, by_color: int) -> bool:
@@ -322,11 +322,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 	var r := rank_of(sq)
 
 	# Knight attacks
-	var knight_offsets := [
-		Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
-		Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
-	]
-	for off in knight_offsets:
+	for off in _KNIGHT_OFFSETS:
 		var nf: int = f + off.x
 		var nr: int = r + off.y
 		if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
@@ -350,8 +346,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 				if board[square(nf, nr)] == sign * Piece.KING: return true
 
 	# Slider attacks (bishop/queen diagonals, rook/queen straights)
-	var diag_dirs := [Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)]
-	for dir in diag_dirs:
+	for dir in _DIAG_DIRS:
 		var nf: int = f + dir.x
 		var nr: int = r + dir.y
 		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
@@ -361,8 +356,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 				break
 			nf += dir.x; nr += dir.y
 
-	var straight_dirs := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
-	for dir in straight_dirs:
+	for dir in _STRAIGHT_DIRS:
 		var nf: int = f + dir.x
 		var nr: int = r + dir.y
 		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
@@ -426,6 +420,13 @@ func _apply_move_unchecked(move: Vector2i) -> void:
 	# Move piece
 	board[to] = piece
 	board[from] = 0
+
+	# Update king position cache
+	if abs_p == Piece.KING:
+		if side_to_move == 0:
+			_white_king_sq = to
+		else:
+			_black_king_sq = to
 
 	# Pawn promotion (auto-queen)
 	if abs_p == Piece.PAWN:
