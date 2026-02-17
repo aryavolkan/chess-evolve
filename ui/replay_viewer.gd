@@ -206,7 +206,10 @@ func _format_metadata() -> String:
 		lines.append("Black: #%d" % _metadata["black_id"])
 	if _metadata.has("result"):
 		var r: int = _metadata["result"]
-		var result_str := "Draw" if r == 2 else ("White wins" if r == 1 else ("Black wins" if r == -1 else "Unknown"))
+		var result_str := (
+			"Draw" if r == 2
+			else ("White wins" if r == 1 else ("Black wins" if r == -1 else "Unknown"))
+		)
 		lines.append("Result: %s" % result_str)
 	if _metadata.has("total_moves"):
 		lines.append("Total moves: %d" % _metadata["total_moves"])

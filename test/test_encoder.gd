@@ -38,7 +38,7 @@ func _run_tests() -> void:
 		assert_true(legal.has(move), "Decoded move should be legal")
 	)
 
-	_test("decode with empty moves returns -1,-1", func():
+	_test("decode with empty moves returns -1, -1", func():
 		var outputs := PackedFloat32Array()
 		outputs.resize(128)
 		var empty: Array[Vector2i] = []

@@ -68,7 +68,10 @@ func _draw() -> void:
 		for f in range(8):
 			var is_light := (f + r) % 2 == 1
 			var color := LIGHT_COLOR if is_light else DARK_COLOR
-			var rect := Rect2(board_origin + Vector2(f, 7 - r) * square_size, Vector2(square_size, square_size))
+			var rect := Rect2(
+				board_origin + Vector2(f, 7 - r) * square_size,
+				Vector2(square_size, square_size)
+			)
 			draw_rect(rect, color)
 
 	# Highlight last move
@@ -76,7 +79,10 @@ func _draw() -> void:
 		for sq in [last_move.x, last_move.y]:
 			var f: int = sq % 8
 			var r: int = sq / 8
-			var rect := Rect2(board_origin + Vector2(f, 7 - r) * square_size, Vector2(square_size, square_size))
+			var rect := Rect2(
+				board_origin + Vector2(f, 7 - r) * square_size,
+				Vector2(square_size, square_size)
+			)
 			draw_rect(rect, HIGHLIGHT_COLOR)
 
 	# Draw pieces
@@ -92,7 +98,10 @@ func _draw() -> void:
 			var f := sq % 8
 			var r := sq / 8
 			var top_left := board_origin + Vector2(f, 7 - r) * square_size
-			var rect := Rect2(top_left + Vector2(piece_offset, piece_offset), Vector2(piece_size, piece_size))
+			var rect := Rect2(
+				top_left + Vector2(piece_offset, piece_offset),
+				Vector2(piece_size, piece_size)
+			)
 			var texture: Texture2D = _piece_textures.get(piece, null)
 			if texture:
 				draw_texture_rect(texture, rect, false)
@@ -102,10 +111,33 @@ func _draw() -> void:
 	var coord_font_size: float = max(10.0, square_size * 0.25)
 	for f in range(8):
 		var label := char("a".unicode_at(0) + f)
-		draw_string(font, board_origin + Vector2(f * square_size + square_size * 0.4, board_rect.end.y + coord_margin * 0.4), label, HORIZONTAL_ALIGNMENT_LEFT, -1, coord_font_size)
+		draw_string(
+			font,
+			board_origin + Vector2(
+				f * square_size + square_size * 0.4,
+				board_rect.end.y + coord_margin * 0.4
+			),
+			label,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			coord_font_size
+		)
 	for r in range(8):
-		draw_string(font, board_origin + Vector2(-coord_margin * 0.8, (7 - r) * square_size + square_size * 0.6), str(r + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, coord_font_size)
+		draw_string(
+			font,
+			board_origin + Vector2(
+				-coord_margin * 0.8,
+				(7 - r) * square_size + square_size * 0.6
+			),
+			str(r + 1),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			coord_font_size
+		)
 
 
 func get_board_size() -> Vector2:
-	return Vector2(DEFAULT_SQUARE_SIZE, DEFAULT_SQUARE_SIZE) * 8.0 + Vector2.ONE * DEFAULT_BOARD_PADDING * 2.0
+	return (
+		Vector2(DEFAULT_SQUARE_SIZE, DEFAULT_SQUARE_SIZE) * 8.0
+		+ Vector2.ONE * DEFAULT_BOARD_PADDING * 2.0
+	)

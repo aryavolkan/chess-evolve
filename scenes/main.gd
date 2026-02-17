@@ -125,7 +125,11 @@ func _clear_board_viewers() -> void:
 	board_viewers.clear()
 
 
-func _layout_board_grid(start_pos: Vector2, available_width: float, available_height: float) -> void:
+func _layout_board_grid(
+		start_pos: Vector2,
+		available_width: float,
+		available_height: float
+	) -> void:
 	"""Layout a 2x2 grid of boards in the available space."""
 	var board_size: float = min(available_width / 2 - 15, available_height / 2 - 15)
 	board_size = max(board_size, 100)
