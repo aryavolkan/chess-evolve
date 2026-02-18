@@ -31,6 +31,12 @@ var all_time_best_black = null
 var all_time_best_white_fitness: float = -INF
 var all_time_best_black_fitness: float = -INF
 
+# Hall of Fame: Maintain a persistent collection of past best individuals
+# to prevent cycling in coevolution and ensure diverse opponents
+var hall_of_fame: Array = []        # Best white players from past generations
+var black_hall_of_fame: Array = []  # Best black players from past generations
+const HALL_OF_FAME_SIZE := 20      # Maximum number of individuals to keep
+
 
 func _init(
 	p_pop_size: int = 50,
@@ -100,6 +106,10 @@ func evolve() -> void:
 		all_time_best_black = black_pop[b_best_idx].clone()
 		all_time_best_black_fitness = best_black_fitness
 
+	# Add best individuals to Hall of Fame
+	_update_hall_of_fame(white_pop[w_best_idx], best_white_fitness, true)
+	_update_hall_of_fame(black_pop[b_best_idx], best_black_fitness, false)
+
 	generation += 1
 	_reset_fitness()
 	generation_complete.emit(generation, best_white_fitness, best_black_fitness)
@@ -156,3 +166,41 @@ func get_avg_fitness(color: int) -> float:
 	var total := 0.0
 	for v in f: total += v
 	return total / f.size() if f.size() > 0 else 0.0
+
+
+func _update_hall_of_fame(individual, fitness: float, is_white: bool) -> void:
+	## Add a high-performing individual to the Hall of Fame.
+	## Keeps only the best HALL_OF_FAME_SIZE individuals, sorted by fitness.
+	var hof := hall_of_fame if is_white else black_hall_of_fame
+	
+	# Create entry with fitness score for sorting
+	var entry := {
+		"network": individual.clone(),  # Clone to freeze the weights
+		"fitness": fitness,
+		"generation": generation
+	}
+	
+	# Add to hall of fame
+	hof.append(entry)
+	
+	# Sort by fitness descending and keep only the best
+	hof.sort_custom(func(a, b): return a.fitness > b.fitness)
+	if hof.size() > HALL_OF_FAME_SIZE:
+		hof.resize(HALL_OF_FAME_SIZE)
+
+
+func get_hall_of_fame_opponent(color: int):
+	## Get a random opponent from the Hall of Fame.
+	## Returns null if Hall of Fame is empty.
+	var hof := hall_of_fame if color == 0 else black_hall_of_fame
+	if hof.is_empty():
+		return null
+	
+	var idx := randi() % hof.size()
+	return hof[idx].network
+
+
+func has_hall_of_fame(color: int) -> bool:
+	## Check if Hall of Fame has any members for the given color.
+	var hof := hall_of_fame if color == 0 else black_hall_of_fame
+	return not hof.is_empty()
