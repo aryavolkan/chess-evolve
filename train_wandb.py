@@ -39,7 +39,8 @@ DEFAULT_CONFIG = {
     "output_size": 128,
 }
 
-PROJECT_PATH = os.path.expanduser("~/Projects/chess-evolve")
+PROJECT_PATH = os.path.expanduser("~/projects/chess-evolve")
+GODOT_PATH = os.environ.get("GODOT_PATH", "/usr/local/bin/godot")
 
 CHESS_LOG_KEYS = [
     "generation", "white_best", "white_avg", "black_best", "black_avg",
@@ -68,6 +69,7 @@ def do_training(config=None, visible=False):
         wandb_project="chess-evolve",
         wandb_tags=["chess", "neuroevolution", "coevolution"],
         visible=visible,
+        godot_path=GODOT_PATH,
         log_keys=CHESS_LOG_KEYS,
     )
 
@@ -105,6 +107,7 @@ def sweep_agent(sweep_id: str):
         
         godot_proc = launch_godot(
             project_path=PROJECT_PATH,
+            godot_path=GODOT_PATH,
             visible=False,
             metrics_path=metrics_path,
         )
