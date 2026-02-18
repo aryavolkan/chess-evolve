@@ -65,7 +65,7 @@ def do_training(config=None, visible=False):
     run_training(
         config=merged,
         project_path=PROJECT_PATH,
-        app_name="chess-evolve",
+        app_name="Chess Evolve",
         wandb_project="chess-evolve",
         wandb_tags=["chess", "neuroevolution", "coevolution"],
         visible=visible,
@@ -95,7 +95,7 @@ def sweep_agent(sweep_id: str):
         # Call run_training directly (it will NOT call wandb.init again)
         from godot_wandb import godot_user_dir, read_metrics, poll_metrics, launch_godot, write_config
         
-        user_dir = godot_user_dir("chess-evolve")
+        user_dir = godot_user_dir("Chess Evolve")
         metrics_path = user_dir / "metrics.json"
         config_path = user_dir / "sweep_config.json"
         
