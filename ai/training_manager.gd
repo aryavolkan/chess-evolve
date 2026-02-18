@@ -96,7 +96,7 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
 		sorted_indices.shuffle()
 	
 	# Divide into quintiles
-	var group_size := max(1, population_size / 5)
+	var group_size: int = max(1, population_size / 5)
 	var groups := []
 	for i in range(5):
 		var group := []
@@ -118,7 +118,7 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
 		while selected_opponents.size() < opponents_needed and quintile_idx < groups.size():
 			var group = groups[quintile_idx]
 			# Find an opponent in this quintile that isn't self
-			var candidates := group.filter(func(idx): return idx != i and idx not in selected_opponents)
+			var candidates: Array = group.filter(func(idx): return idx != i and idx not in selected_opponents)
 			if not candidates.is_empty():
 				selected_opponents.append(candidates[randi() % candidates.size()])
 			quintile_idx += 1
@@ -192,10 +192,10 @@ func _calculate_tournament_scores() -> Dictionary:
 		scores[i] = 0.0
 	
 	for key in tournament_results:
-		var parts := key.split("_")
+		var parts: PackedStringArray = key.split("_")
 		if parts.size() == 2:
 			var idx := int(parts[0])
-			var result := tournament_results[key]
+			var result: int = tournament_results[key]
 			
 			if result == 1:  # Win
 				scores[idx] += 1.0
@@ -216,10 +216,10 @@ func _update_fitness_from_tournament() -> void:
 		black_scores[i] = 0.0
 	
 	for key in tournament_results:
-		var parts := key.split("_")
+		var parts: PackedStringArray = key.split("_")
 		if parts.size() == 2 and parts[1] == "black":
 			var idx := int(parts[0])
-			var result := tournament_results[key]
+			var result: int = tournament_results[key]
 			
 			if result == 1:  # Win
 				black_scores[idx] += 1.0
@@ -233,16 +233,16 @@ func _update_fitness_from_tournament() -> void:
 	# Update fitness arrays with tournament scores
 	for i in evolution.population_size:
 		# Tournament score becomes base fitness
-		var white_tournament_score := white_scores.get(i, 0.0)
-		var black_tournament_score := black_scores.get(i, 0.0)
+		var white_tournament_score: float = white_scores.get(i, 0.0)
+		var black_tournament_score: float = black_scores.get(i, 0.0)
 		
 		# Store for metrics
 		_white_tournament_scores.append(white_tournament_score)
 		_black_tournament_scores.append(black_tournament_score)
 		
 		# Add small bonus based on material/position from accumulated fitness
-		var white_bonus := evolution.white_fitness[i] * 0.1  # 10% weight for material/position
-		var black_bonus := evolution.black_fitness[i] * 0.1
+		var white_bonus: float = evolution.white_fitness[i] * 0.1  # 10% weight for material/position
+		var black_bonus: float = evolution.black_fitness[i] * 0.1
 		
 		evolution.set_fitness(0, i, white_tournament_score + white_bonus)
 		evolution.set_fitness(1, i, black_tournament_score + black_bonus)
@@ -613,6 +613,8 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	last_game_state = state
 	last_game_history = game_history
 
+	# Return state with move_count for metrics tracking
+	state.move_count = move_count
 	return state
 
 

@@ -309,6 +309,8 @@ func _run_auto_train() -> void:
 		evo.mutation_rate = config["mutation_rate"]
 	if config.has("mutation_strength"):
 		evo.mutation_strength = config["mutation_strength"]
+	if config.has("crossover_rate"):
+		evo.crossover_rate = config["crossover_rate"]
 
 	training_manager = TrainingManager.new(
 		evo,
