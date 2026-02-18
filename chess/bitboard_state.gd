@@ -277,7 +277,11 @@ func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: in
 			and _bit_at(occupancy, 6) == 0
 			and _bit_at(bb_w_rooks, 7) == 1
 		):
-			if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
+			if (
+				not _is_square_attacked(4, 1)
+				and not _is_square_attacked(5, 1)
+				and not _is_square_attacked(6, 1)
+			):
 				moves.append(encode_move(4, 6))
 		if (
 			castling_rights & 0b0010
@@ -286,7 +290,11 @@ func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: in
 			and _bit_at(occupancy, 1) == 0
 			and _bit_at(bb_w_rooks, 0) == 1
 		):
-			if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
+			if (
+				not _is_square_attacked(4, 1)
+				and not _is_square_attacked(3, 1)
+				and not _is_square_attacked(2, 1)
+			):
 				moves.append(encode_move(4, 2))
 	elif side_to_move == 1 and sq == 60:
 		if (
@@ -295,7 +303,11 @@ func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: in
 			and _bit_at(occupancy, 62) == 0
 			and _bit_at(bb_b_rooks, 63) == 1
 		):
-			if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
+			if (
+				not _is_square_attacked(60, 0)
+				and not _is_square_attacked(61, 0)
+				and not _is_square_attacked(62, 0)
+			):
 				moves.append(encode_move(60, 62))
 		if (
 			castling_rights & 0b1000
@@ -304,7 +316,11 @@ func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: in
 			and _bit_at(occupancy, 57) == 0
 			and _bit_at(bb_b_rooks, 56) == 1
 		):
-			if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
+			if (
+				not _is_square_attacked(60, 0)
+				and not _is_square_attacked(59, 0)
+				and not _is_square_attacked(58, 0)
+			):
 				moves.append(encode_move(60, 58))
 
 
