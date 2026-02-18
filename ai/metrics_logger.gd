@@ -3,6 +3,10 @@ extends RefCounted
 
 ## Writes generation-by-generation training metrics to configurable path
 ## so that external tools (e.g. W&B bridge) can pick them up.
+##
+## Two outputs per write:
+##   metrics_path        — latest gen snapshot (overwritten each gen, for compatibility)
+##   metrics_path + "l"  — JSONL history file (appended each gen, for incremental polling)
 
 var metrics_path: String = "user://metrics.json"
 
@@ -17,14 +21,23 @@ func write_metrics(stats: Dictionary) -> void:
 	var absolute_path := ProjectSettings.globalize_path(metrics_path)
 	dir_create_recursive(absolute_path)
 
+	# Write latest-gen snapshot (overwrite)
 	var file := FileAccess.open(metrics_path, FileAccess.WRITE)
 	if file == null:
 		push_warning("Failed to open metrics file at %s" % metrics_path)
 		return
-
-	var json := JSON.new()
-	file.store_string(json.stringify(payload, "\t"))
+	file.store_string(JSON.new().stringify(payload, "\t"))
 	file.close()
+
+	# Append to JSONL history (one line per gen)
+	var jsonl_path := metrics_path + "l"  # metrics.json → metrics.jsonl
+	var jsonl_file := FileAccess.open(jsonl_path, FileAccess.READ_WRITE)
+	if jsonl_file == null:
+		jsonl_file = FileAccess.open(jsonl_path, FileAccess.WRITE)
+	if jsonl_file != null:
+		jsonl_file.seek_end(0)
+		jsonl_file.store_line(JSON.new().stringify(payload))
+		jsonl_file.close()
 
 
 func dir_create_recursive(abs_path: String) -> void:
