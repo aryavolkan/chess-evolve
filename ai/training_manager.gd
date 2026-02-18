@@ -44,6 +44,21 @@ var _current_game_idx: int = 0
 var _generation_in_progress: bool = false
 var _tournament_pairings: Dictionary = {}  # Pre-computed pairings for current generation
 
+# New metrics tracking
+var _generation_start_time: float = 0.0
+var _white_wins: int = 0
+var _white_draws: int = 0
+var _white_losses: int = 0
+var _black_wins: int = 0
+var _black_draws: int = 0
+var _black_losses: int = 0
+var _total_game_moves: int = 0
+var _games_this_generation: int = 0
+var _white_material_total: float = 0.0
+var _black_material_total: float = 0.0
+var _white_tournament_scores: Array = []
+var _black_tournament_scores: Array = []
+
 func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
 	if p_evolution:
 		evolution = p_evolution
@@ -211,11 +226,19 @@ func _update_fitness_from_tournament() -> void:
 			elif result == 0:  # Draw  
 				black_scores[idx] += 0.5
 	
+	# Store tournament scores for metrics
+	_white_tournament_scores.clear()
+	_black_tournament_scores.clear()
+	
 	# Update fitness arrays with tournament scores
 	for i in evolution.population_size:
 		# Tournament score becomes base fitness
 		var white_tournament_score := white_scores.get(i, 0.0)
 		var black_tournament_score := black_scores.get(i, 0.0)
+		
+		# Store for metrics
+		_white_tournament_scores.append(white_tournament_score)
+		_black_tournament_scores.append(black_tournament_score)
 		
 		# Add small bonus based on material/position from accumulated fitness
 		var white_bonus := evolution.white_fitness[i] * 0.1  # 10% weight for material/position
@@ -270,8 +293,31 @@ func run_generation() -> void:
 	training_step_complete.emit(evolution.generation, stats)
 
 
+func _track_game_metrics(game_result) -> void:
+	## Track metrics for any completed game.
+	_games_this_generation += 1
+	_total_game_moves += game_result.move_count
+	
+	# Track material scores
+	_white_material_total += game_result.material_score(0)
+	_black_material_total += game_result.material_score(1)
+	
+	# Track wins/draws/losses
+	if game_result.result == 2:  # Draw
+		_white_draws += 1
+		_black_draws += 1
+	elif game_result.result == 1:  # White wins
+		_white_wins += 1
+		_black_losses += 1
+	else:  # Black wins
+		_white_losses += 1
+		_black_wins += 1
+
+
 func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> void:
 	## Record tournament result for scoring.
+	_track_game_metrics(game_result)
+	
 	if game_result.result == 2:  # Draw
 		tournament_results[str(white_idx) + "_white"] = 0
 		tournament_results[str(black_idx) + "_black"] = 0
@@ -293,6 +339,21 @@ func run_one_game_step() -> bool:
 		# Reset fitness
 		evolution.white_fitness.fill(0.0)
 		evolution.black_fitness.fill(0.0)
+		
+		# Reset generation metrics
+		_generation_start_time = Time.get_unix_time_from_system()
+		_white_wins = 0
+		_white_draws = 0
+		_white_losses = 0
+		_black_wins = 0
+		_black_draws = 0
+		_black_losses = 0
+		_total_game_moves = 0
+		_games_this_generation = 0
+		_white_material_total = 0.0
+		_black_material_total = 0.0
+		_white_tournament_scores.clear()
+		_black_tournament_scores.clear()
 		
 		if use_tournament:
 			# Clear tournament data and generate pairings
@@ -354,6 +415,7 @@ func run_one_game_step() -> bool:
 			b_idx = randi() % int(evolution.population_size)
 		
 		var result = _play_game_with_hof(_current_white_idx, b_idx, use_hof)
+		_track_game_metrics(result)
 		game_complete.emit(_current_white_idx, b_idx, result.result)
 		total_games_played += 1
 
@@ -392,6 +454,7 @@ func _run_all_games() -> int:
 				b_idx = randi() % int(evolution.population_size)
 			
 			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
+			_track_game_metrics(result)
 			game_complete.emit(w_idx, b_idx, result.result)
 			games_played += 1
 	
@@ -411,6 +474,7 @@ func _run_all_games() -> int:
 			
 			# Note: we pass true for first parameter to indicate white is from HoF
 			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
+			_track_game_metrics(result)
 			game_complete.emit(w_idx, b_idx, result.result)
 			games_played += 1
 	
@@ -557,6 +621,51 @@ func get_stats() -> Dictionary:
 	var black_best: float = evolution.best_black_fitness
 	var white_avg: float = evolution.get_avg_fitness(0)
 	var black_avg: float = evolution.get_avg_fitness(1)
+	
+	# Calculate rates
+	var games_count: float = max(1.0, float(_games_this_generation))
+	var white_win_rate := float(_white_wins) / games_count
+	var white_draw_rate := float(_white_draws) / games_count
+	var white_loss_rate := float(_white_losses) / games_count
+	var black_win_rate := float(_black_wins) / games_count
+	var black_draw_rate := float(_black_draws) / games_count
+	var black_loss_rate := float(_black_losses) / games_count
+	
+	# Calculate averages
+	var avg_game_length := float(_total_game_moves) / games_count if games_count > 0 else 0.0
+	var white_material_avg := _white_material_total / games_count if games_count > 0 else 0.0
+	var black_material_avg := _black_material_total / games_count if games_count > 0 else 0.0
+	
+	# Calculate tournament scores
+	var white_tournament_best := 0.0
+	var white_tournament_avg := 0.0
+	var black_tournament_best := 0.0
+	var black_tournament_avg := 0.0
+	
+	if not _white_tournament_scores.is_empty():
+		white_tournament_best = _white_tournament_scores.max()
+		var white_sum := 0.0
+		for score in _white_tournament_scores:
+			white_sum += score
+		white_tournament_avg = white_sum / float(_white_tournament_scores.size())
+	
+	if not _black_tournament_scores.is_empty():
+		black_tournament_best = _black_tournament_scores.max()
+		var black_sum := 0.0
+		for score in _black_tournament_scores:
+			black_sum += score
+		black_tournament_avg = black_sum / float(_black_tournament_scores.size())
+	
+	# Calculate generation time
+	var generation_time_sec := 0.0
+	if _generation_start_time > 0:
+		generation_time_sec = Time.get_unix_time_from_system() - _generation_start_time
+	
+	# Calculate total games this generation (different for tournament vs regular)
+	var total_games_gen := _games_this_generation
+	if total_games_gen == 0:  # Fallback for compatibility
+		total_games_gen = evolution.population_size * games_per_individual
+	
 	return {
 		"generation": evolution.generation,
 		"white_best": white_best,
@@ -568,4 +677,23 @@ func get_stats() -> Dictionary:
 		"population_size": evolution.population_size,
 		"games_played": total_games_played,
 		"games_per_generation": evolution.population_size * games_per_individual,
+		
+		# New metrics
+		"white_win_rate": white_win_rate,
+		"white_draw_rate": white_draw_rate,
+		"white_loss_rate": white_loss_rate,
+		"black_win_rate": black_win_rate,
+		"black_draw_rate": black_draw_rate,
+		"black_loss_rate": black_loss_rate,
+		"white_hof_size": evolution.hall_of_fame.size(),
+		"black_hof_size": evolution.black_hall_of_fame.size(),
+		"white_tournament_score_best": white_tournament_best,
+		"white_tournament_score_avg": white_tournament_avg,
+		"black_tournament_score_best": black_tournament_best,
+		"black_tournament_score_avg": black_tournament_avg,
+		"total_games_this_gen": total_games_gen,
+		"avg_game_length": avg_game_length,
+		"white_material_avg": white_material_avg,
+		"black_material_avg": black_material_avg,
+		"generation_time_sec": generation_time_sec,
 	}

@@ -40,6 +40,15 @@ PROJECT_PATH = os.path.expanduser("~/Projects/chess-evolve")
 CHESS_LOG_KEYS = [
     "generation", "white_best", "white_avg", "black_best", "black_avg",
     "best_fitness", "avg_fitness", "games_played",
+    # New metrics
+    "white_win_rate", "white_draw_rate", "white_loss_rate",
+    "black_win_rate", "black_draw_rate", "black_loss_rate",
+    "white_hof_size", "black_hof_size",
+    "white_tournament_score_best", "white_tournament_score_avg",
+    "black_tournament_score_best", "black_tournament_score_avg",
+    "total_games_this_gen", "avg_game_length",
+    "white_material_avg", "black_material_avg",
+    "generation_time_sec",
 ]
 
 
