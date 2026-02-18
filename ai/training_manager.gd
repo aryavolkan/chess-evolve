@@ -59,14 +59,14 @@ var _black_material_total: float = 0.0
 var _white_tournament_scores: Array = []
 var _black_tournament_scores: Array = []
 
-func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
+func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_metrics_path: String = "") -> void:
 	if p_evolution:
 		evolution = p_evolution
 	else:
 		evolution = ChessEvolutionScript.new()
 	games_per_individual = p_games_per
 	max_moves_per_game = p_max_moves
-	metrics_logger = MetricsLogger.new()
+	metrics_logger = MetricsLogger.new(p_metrics_path)
 	
 	# If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
 	if use_tournament:

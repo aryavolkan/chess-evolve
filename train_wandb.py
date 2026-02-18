@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 
 # Set W&B environment variables
 os.environ['WANDB_ENTITY'] = 'aryavolkan-personal'
@@ -89,6 +90,10 @@ def sweep_agent(sweep_id: str):
         merged = DEFAULT_CONFIG.copy()
         merged.update(config)
         
+        # Generate unique worker ID for this process
+        worker_id = uuid.uuid4().hex[:8]
+        print(f"Worker ID: {worker_id}")
+        
         # Run the actual training
         print(f"Starting training with config: {merged}")
         
@@ -96,19 +101,25 @@ def sweep_agent(sweep_id: str):
         from godot_wandb import godot_user_dir, read_metrics, poll_metrics, launch_godot, write_config
         
         user_dir = godot_user_dir("Chess Evolve")
-        metrics_path = user_dir / "metrics.json"
-        config_path = user_dir / "sweep_config.json"
+        metrics_path = user_dir / f"metrics_{worker_id}.json"
+        config_path = user_dir / f"sweep_config_{worker_id}.json"
         
         max_gens = merged.get("max_generations", 100)
         print(f"\n🎮 Starting training (pop={merged.get('population_size', '?')}, "
               f"gens={max_gens})\n")
         
+        # Add worker_id to config so Godot can read it
+        merged['worker_id'] = worker_id
         write_config(merged, config_path)
+        
+        # Pass worker ID to Godot via extra args
+        extra_args = ["--auto-train", f"--worker-id={worker_id}"]
         
         godot_proc = launch_godot(
             project_path=PROJECT_PATH,
             godot_path=GODOT_PATH,
             visible=False,
+            extra_args=extra_args,
             metrics_path=metrics_path,
         )
         
@@ -124,6 +135,14 @@ def sweep_agent(sweep_id: str):
             if godot_proc:
                 godot_proc.terminate()
                 godot_proc.wait(timeout=10)
+            # Clean up worker-specific files
+            try:
+                if metrics_path.exists():
+                    metrics_path.unlink()
+                if config_path.exists():
+                    config_path.unlink()
+            except Exception:
+                pass
 
     wandb.agent(sweep_id, function=train_fn, count=1)
 

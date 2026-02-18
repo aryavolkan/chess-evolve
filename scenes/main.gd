@@ -53,7 +53,8 @@ func _ready() -> void:
 	training_manager = TrainingManager.new(
 		evo,
 		config.get("games_per_individual", 2),
-		config.get("max_moves_per_game", 100)
+		config.get("max_moves_per_game", 100),
+		"" # Use default metrics path for UI mode
 	)
 	
 	# Configure tournament settings
@@ -236,6 +237,15 @@ func _check_replay_arg() -> String:
 	return ""
 
 
+func _get_worker_id() -> String:
+	## Check for --worker-id=<id> argument, return id or empty string
+	var args := OS.get_cmdline_user_args()
+	for arg in args:
+		if arg.begins_with("--worker-id="):
+			return arg.substr(12)  # Skip "--worker-id="
+	return ""
+
+
 func _run_replay_mode(filename: String) -> void:
 	## Launch replay viewer for the specified file
 	print("Starting replay mode: %s" % filename)
@@ -275,7 +285,11 @@ func _run_replay_mode(filename: String) -> void:
 
 func _load_config() -> Dictionary:
 	## Load training config from user:// or use defaults
+	var worker_id := _get_worker_id()
 	var config_path := "user://sweep_config.json"
+	if not worker_id.is_empty():
+		config_path = "user://sweep_config_%s.json" % worker_id
+	
 	var config := {}
 
 	if FileAccess.file_exists(config_path):
@@ -294,6 +308,11 @@ func _load_config() -> Dictionary:
 func _run_auto_train() -> void:
 	## Run headless training without UI (for sweep/overnight runs)
 	print("Starting auto-train mode...")
+	
+	# Get worker ID if provided
+	var worker_id := _get_worker_id()
+	if not worker_id.is_empty():
+		print("Worker ID: %s" % worker_id)
 
 	var config := _load_config()
 	var evo := ChessEvolution.new(
@@ -311,11 +330,17 @@ func _run_auto_train() -> void:
 		evo.mutation_strength = config["mutation_strength"]
 	if config.has("crossover_rate"):
 		evo.crossover_rate = config["crossover_rate"]
+	
+	# Determine metrics path based on worker ID
+	var metrics_path := "user://metrics.json"
+	if not worker_id.is_empty():
+		metrics_path = "user://metrics_%s.json" % worker_id
 
 	training_manager = TrainingManager.new(
 		evo,
 		config.get("games_per_individual", 2),
-		config.get("max_moves_per_game", 100)
+		config.get("max_moves_per_game", 100),
+		metrics_path
 	)
 	
 	# Configure tournament settings

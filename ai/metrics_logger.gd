@@ -1,21 +1,25 @@
 class_name MetricsLogger
 extends RefCounted
 
-## Writes generation-by-generation training metrics to `user://metrics.json`
+## Writes generation-by-generation training metrics to configurable path
 ## so that external tools (e.g. W&B bridge) can pick them up.
 
-const METRICS_PATH := "user://metrics.json"
+var metrics_path: String = "user://metrics.json"
+
+func _init(path: String = "") -> void:
+	if not path.is_empty():
+		metrics_path = path
 
 func write_metrics(stats: Dictionary) -> void:
 	var payload := stats.duplicate(true)
 	payload["updated_at"] = Time.get_unix_time_from_system()
 
-	var absolute_path := ProjectSettings.globalize_path(METRICS_PATH)
+	var absolute_path := ProjectSettings.globalize_path(metrics_path)
 	dir_create_recursive(absolute_path)
 
-	var file := FileAccess.open(METRICS_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(metrics_path, FileAccess.WRITE)
 	if file == null:
-		push_warning("Failed to open metrics file at %s" % METRICS_PATH)
+		push_warning("Failed to open metrics file at %s" % metrics_path)
 		return
 
 	var json := JSON.new()
