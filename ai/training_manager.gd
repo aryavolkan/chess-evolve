@@ -293,14 +293,16 @@ func run_generation() -> void:
 	training_step_complete.emit(evolution.generation, stats)
 
 
-func _track_game_metrics(game_result) -> void:
+func _track_game_metrics(game_result: Dictionary) -> void:
 	## Track metrics for any completed game.
 	_games_this_generation += 1
 	_total_game_moves += game_result.move_count
 	
 	# Track material scores
-	_white_material_total += game_result.material_score(0)
-	_black_material_total += game_result.material_score(1)
+	var state = game_result.state
+	if state:
+		_white_material_total += state.material_score(0)
+		_black_material_total += state.material_score(1)
 	
 	# Track wins/draws/losses
 	if game_result.result == 2:  # Draw
@@ -511,7 +513,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		white_net = evolution.get_hall_of_fame_opponent(0)
 		if white_net == null:
 			push_error("Hall of Fame requested but empty for white")
-			return {"result": 2}  # Return draw on error
+			return {"result": 2, "move_count": 0, "state": null}  # Return draw on error
 	else:
 		white_net = evolution.get_network(0, white_idx)
 	
@@ -519,7 +521,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		black_net = evolution.get_hall_of_fame_opponent(1)
 		if black_net == null:
 			push_error("Hall of Fame requested but empty for black")
-			return {"result": 2}  # Return draw on error
+			return {"result": 2, "move_count": 0, "state": null}  # Return draw on error
 	else:
 		black_net = evolution.get_network(1, black_idx)
 	
@@ -613,9 +615,15 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	last_game_state = state
 	last_game_history = game_history
 
-	# Return state with move_count for metrics tracking
-	state.move_count = move_count
-	return state
+	# Return game result with all needed data
+	return {
+		"state": state,
+		"result": state.result,
+		"move_count": move_count,
+		"material_score": state.material_score.bind(state),  # Bind the method for later use
+		"king_safety_score": state.king_safety_score.bind(state),
+		"is_game_over": state.is_game_over
+	}
 
 
 func get_stats() -> Dictionary:

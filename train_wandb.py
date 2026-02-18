@@ -117,7 +117,7 @@ def sweep_agent(sweep_id: str):
                 run, metrics_path,
                 max_generations=max_gens,
                 poll_interval=2.0,
-                max_stale=60,
+                max_stale=300,
                 log_keys=CHESS_LOG_KEYS,
             )
         finally:
