@@ -25,7 +25,10 @@ DEFAULT_CONFIG = {
     "crossover_rate": 0.70,
     "mutation_rate": 0.25,
     "mutation_strength": 0.12,
-    "games_per_individual": 2,
+    "games_per_individual": 2,  # Legacy parameter, replaced by tournament_opponents
+    "tournament_opponents": 4,   # Number of opponents each individual plays
+    "use_tournament": True,      # Enable tournament-based selection
+    "tournament_mode": "round_robin",  # Tournament type: 'round_robin' or 'swiss'
     "max_generations": 100,
     "max_moves_per_game": 100,
     "input_size": 389,

@@ -23,7 +23,10 @@ sweep_config = {
 
         # Training parameters
         'max_generations': {'value': 100},
-        'games_per_individual': {'values': [2, 3]},  # Games against random opponents
+        'games_per_individual': {'values': [2, 3]},  # Games per individual (legacy, replaced by tournament_opponents)
+        'tournament_opponents': {'values': [4, 5, 6]},  # Number of opponents in tournament
+        'use_tournament': {'value': True},  # Enable tournament mode
+        'tournament_mode': {'value': 'round_robin'},  # Tournament type: 'round_robin' or 'swiss'
         'max_moves_per_game': {'value': 100},  # Move limit per game
     }
 }
@@ -40,7 +43,10 @@ sweep_config_quick = {
         'crossover_rate': {'values': [0.70]},
         'hidden_size': {'values': [64, 96]},
         'max_generations': {'value': 50},
-        'games_per_individual': {'value': 2},
+        'games_per_individual': {'value': 2},  # Legacy parameter
+        'tournament_opponents': {'value': 4},  # Tournament opponents
+        'use_tournament': {'value': True},
+        'tournament_mode': {'value': 'round_robin'},
         'max_moves_per_game': {'value': 100},
     }
 }
@@ -57,7 +63,10 @@ sweep_config_deep = {
         'crossover_rate': {'distribution': 'uniform', 'min': 0.50, 'max': 0.90},
         'hidden_size': {'values': [64, 96, 128, 192]},
         'max_generations': {'value': 200},
-        'games_per_individual': {'values': [2, 3, 4]},
+        'games_per_individual': {'values': [2, 3, 4]},  # Legacy parameter
+        'tournament_opponents': {'values': [4, 6, 8]},  # Tournament opponents
+        'use_tournament': {'value': True},
+        'tournament_mode': {'values': ['round_robin', 'swiss']},  # Try both modes
         'max_moves_per_game': {'value': 150},
     }
 }

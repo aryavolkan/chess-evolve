@@ -33,9 +33,16 @@ var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)
 
+# Tournament configuration
+var use_tournament: bool = true  # Use tournament system instead of random opponents
+var tournament_mode: String = "round_robin"  # "round_robin" or "swiss"
+var tournament_opponents: int = 4  # Number of opponents each individual plays against
+var tournament_results: Dictionary = {}  # Track wins/losses/draws for tournament scoring
+
 var _current_white_idx: int = 0
 var _current_game_idx: int = 0
 var _generation_in_progress: bool = false
+var _tournament_pairings: Dictionary = {}  # Pre-computed pairings for current generation
 
 func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> void:
 	if p_evolution:
@@ -45,16 +52,235 @@ func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150) -> 
 	games_per_individual = p_games_per
 	max_moves_per_game = p_max_moves
 	metrics_logger = MetricsLogger.new()
+	
+	# If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
+	if use_tournament:
+		games_per_individual = tournament_opponents
+
+
+func _generate_round_robin_pairings(population_size: int) -> Dictionary:
+	## Generate round-robin pairings where each individual plays against opponents
+	## from different fitness quintiles to ensure diverse matchups.
+	var pairings := {}
+	
+	# Initialize pairings for each individual
+	for i in population_size:
+		pairings[i] = []
+	
+	# Create fitness-based groups (quintiles)
+	var sorted_indices := []
+	for i in population_size:
+		sorted_indices.append(i)
+	
+	# Sort by fitness if we have previous generation data
+	if evolution.generation > 0:
+		var fitness_arr = evolution.white_fitness
+		sorted_indices.sort_custom(func(a, b): return fitness_arr[a] > fitness_arr[b])
+	else:
+		# Random shuffle for first generation
+		sorted_indices.shuffle()
+	
+	# Divide into quintiles
+	var group_size := max(1, population_size / 5)
+	var groups := []
+	for i in range(5):
+		var group := []
+		var start := int(i * group_size)
+		var end := int(min((i + 1) * group_size, population_size))
+		for j in range(start, end):
+			if j < sorted_indices.size():
+				group.append(sorted_indices[j])
+		if not group.is_empty():
+			groups.append(group)
+	
+	# For each individual, select opponents from different quintiles
+	for i in population_size:
+		var opponents_needed := tournament_opponents
+		var selected_opponents := []
+		
+		# Try to get one opponent from each quintile
+		var quintile_idx := 0
+		while selected_opponents.size() < opponents_needed and quintile_idx < groups.size():
+			var group = groups[quintile_idx]
+			# Find an opponent in this quintile that isn't self
+			var candidates := group.filter(func(idx): return idx != i and idx not in selected_opponents)
+			if not candidates.is_empty():
+				selected_opponents.append(candidates[randi() % candidates.size()])
+			quintile_idx += 1
+		
+		# If we need more opponents, select randomly from remaining population
+		while selected_opponents.size() < opponents_needed:
+			var opp := randi() % population_size
+			if opp != i and opp not in selected_opponents:
+				selected_opponents.append(opp)
+		
+		pairings[i] = selected_opponents
+	
+	return pairings
+
+
+func _generate_swiss_pairings(population_size: int, round_num: int) -> Dictionary:
+	## Generate Swiss-system pairings based on current tournament standings.
+	## In round 1, pair randomly. In subsequent rounds, pair by score.
+	var pairings := {}
+	
+	# Initialize pairings
+	for i in population_size:
+		pairings[i] = []
+	
+	if round_num == 0 or tournament_results.is_empty():
+		# First round: random pairings
+		var indices := []
+		for i in population_size:
+			indices.append(i)
+		indices.shuffle()
+		
+		# Pair adjacent individuals
+		for i in range(0, population_size - 1, 2):
+			pairings[indices[i]].append(indices[i + 1])
+			pairings[indices[i + 1]].append(indices[i])
+	else:
+		# Subsequent rounds: pair by score
+		var scores := _calculate_tournament_scores()
+		var sorted_indices := []
+		for i in population_size:
+			sorted_indices.append(i)
+		sorted_indices.sort_custom(func(a, b): return scores[a] > scores[b])
+		
+		# Pair individuals with similar scores
+		var paired := {}
+		for i in sorted_indices:
+			if i in paired:
+				continue
+			
+			# Find best unpaired opponent with similar score
+			var best_opp := -1
+			for j in sorted_indices:
+				if j != i and j not in paired and j not in pairings.get(i, []):
+					best_opp = j
+					break
+			
+			if best_opp != -1:
+				pairings[i].append(best_opp)
+				pairings[best_opp].append(i)
+				paired[i] = true
+				paired[best_opp] = true
+	
+	return pairings
+
+
+func _calculate_tournament_scores() -> Dictionary:
+	## Calculate tournament scores from results (1 point for win, 0.5 for draw, 0 for loss).
+	var scores := {}
+	
+	for i in evolution.population_size:
+		scores[i] = 0.0
+	
+	for key in tournament_results:
+		var parts := key.split("_")
+		if parts.size() == 2:
+			var idx := int(parts[0])
+			var result := tournament_results[key]
+			
+			if result == 1:  # Win
+				scores[idx] += 1.0
+			elif result == 0:  # Draw
+				scores[idx] += 0.5
+			# Loss gives 0 points
+	
+	return scores
+
+
+func _update_fitness_from_tournament() -> void:
+	## Update fitness based on tournament results instead of accumulated game fitness.
+	var white_scores := _calculate_tournament_scores()
+	var black_scores := {}
+	
+	# Calculate black tournament scores
+	for i in evolution.population_size:
+		black_scores[i] = 0.0
+	
+	for key in tournament_results:
+		var parts := key.split("_")
+		if parts.size() == 2 and parts[1] == "black":
+			var idx := int(parts[0])
+			var result := tournament_results[key]
+			
+			if result == 1:  # Win
+				black_scores[idx] += 1.0
+			elif result == 0:  # Draw  
+				black_scores[idx] += 0.5
+	
+	# Update fitness arrays with tournament scores
+	for i in evolution.population_size:
+		# Tournament score becomes base fitness
+		var white_tournament_score := white_scores.get(i, 0.0)
+		var black_tournament_score := black_scores.get(i, 0.0)
+		
+		# Add small bonus based on material/position from accumulated fitness
+		var white_bonus := evolution.white_fitness[i] * 0.1  # 10% weight for material/position
+		var black_bonus := evolution.black_fitness[i] * 0.1
+		
+		evolution.set_fitness(0, i, white_tournament_score + white_bonus)
+		evolution.set_fitness(1, i, black_tournament_score + black_bonus)
 
 
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
-	var games_this_gen := _run_all_games()
+	if use_tournament:
+		# Clear tournament results for new generation
+		tournament_results.clear()
+		_tournament_pairings.clear()
+		
+		# Generate pairings based on tournament mode
+		if tournament_mode == "swiss":
+			# Run multiple Swiss rounds
+			var swiss_rounds := mini(tournament_opponents, evolution.population_size - 1)
+			for round_idx in swiss_rounds:
+				var round_pairings := _generate_swiss_pairings(evolution.population_size, round_idx)
+				# Play all games in this round
+				for w_idx in round_pairings:
+					for b_idx in round_pairings[w_idx]:
+						if w_idx < b_idx:  # Avoid duplicate games
+							var result = _play_game(w_idx, b_idx)
+							_record_tournament_result(w_idx, b_idx, result)
+							game_complete.emit(w_idx, b_idx, result.result)
+							total_games_played += 1
+		else:
+			# Round-robin tournament
+			_tournament_pairings = _generate_round_robin_pairings(evolution.population_size)
+			# Play all tournament games
+			for w_idx in _tournament_pairings:
+				for b_idx in _tournament_pairings[w_idx]:
+					var result = _play_game(w_idx, b_idx)
+					_record_tournament_result(w_idx, b_idx, result)
+					game_complete.emit(w_idx, b_idx, result.result)
+					total_games_played += 1
+		
+		# Update fitness based on tournament results
+		_update_fitness_from_tournament()
+	else:
+		# Original random opponent selection
+		var games_this_gen := _run_all_games()
+		total_games_played += games_this_gen
+	
 	evolution.evolve()
-	total_games_played += games_this_gen
 	var stats := get_stats()
 	metrics_logger.write_metrics(stats)
 	training_step_complete.emit(evolution.generation, stats)
+
+
+func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> void:
+	## Record tournament result for scoring.
+	if game_result.result == 2:  # Draw
+		tournament_results[str(white_idx) + "_white"] = 0
+		tournament_results[str(black_idx) + "_black"] = 0
+	elif game_result.result == 1:  # White wins
+		tournament_results[str(white_idx) + "_white"] = 1
+		tournament_results[str(black_idx) + "_black"] = -1
+	else:  # Black wins
+		tournament_results[str(white_idx) + "_white"] = -1
+		tournament_results[str(black_idx) + "_black"] = 1
 
 
 func run_one_game_step() -> bool:
@@ -67,36 +293,84 @@ func run_one_game_step() -> bool:
 		# Reset fitness
 		evolution.white_fitness.fill(0.0)
 		evolution.black_fitness.fill(0.0)
+		
+		if use_tournament:
+			# Clear tournament data and generate pairings
+			tournament_results.clear()
+			_tournament_pairings.clear()
+			if tournament_mode == "round_robin":
+				_tournament_pairings = _generate_round_robin_pairings(evolution.population_size)
 
-	# Play one game (select opponent from population or Hall of Fame)
-	var use_hof := false
-	var b_idx: int = -1
-	
-	# Decide whether to use Hall of Fame opponent
-	if evolution.has_hall_of_fame(1) and randf() < hall_of_fame_ratio:
-		use_hof = true
-		b_idx = -1  # Special index for Hall of Fame
+	if use_tournament:
+		# Tournament mode: play pre-determined pairings
+		if tournament_mode == "swiss":
+			# Swiss system needs special handling for incremental play
+			# For simplicity, we'll fall back to batch processing in run_generation
+			push_warning("Swiss tournament mode not supported in incremental mode")
+			return false
+		else:
+			# Round-robin: play next game from pairings
+			var found_game := false
+			var w_idx := _current_white_idx
+			var b_idx := -1
+			
+			while w_idx < evolution.population_size and not found_game:
+				var opponents = _tournament_pairings.get(w_idx, [])
+				if _current_game_idx < opponents.size():
+					b_idx = opponents[_current_game_idx]
+					found_game = true
+				else:
+					w_idx += 1
+					_current_game_idx = 0
+					_current_white_idx = w_idx
+			
+			if found_game:
+				var result = _play_game(w_idx, b_idx)
+				_record_tournament_result(w_idx, b_idx, result)
+				game_complete.emit(w_idx, b_idx, result.result)
+				total_games_played += 1
+				
+				# Advance to next game
+				_current_game_idx += 1
+			else:
+				# All games played, update fitness and evolve
+				_update_fitness_from_tournament()
+				evolution.evolve()
+				var stats := get_stats()
+				metrics_logger.write_metrics(stats)
+				training_step_complete.emit(evolution.generation, stats)
+				_generation_in_progress = false
+				return true
 	else:
-		b_idx = randi() % int(evolution.population_size)
-	
-	var result = _play_game_with_hof(_current_white_idx, b_idx, use_hof)
-	game_complete.emit(_current_white_idx, b_idx, result.result)
-	total_games_played += 1
+		# Original random opponent selection
+		var use_hof := false
+		var b_idx: int = -1
+		
+		# Decide whether to use Hall of Fame opponent
+		if evolution.has_hall_of_fame(1) and randf() < hall_of_fame_ratio:
+			use_hof = true
+			b_idx = -1  # Special index for Hall of Fame
+		else:
+			b_idx = randi() % int(evolution.population_size)
+		
+		var result = _play_game_with_hof(_current_white_idx, b_idx, use_hof)
+		game_complete.emit(_current_white_idx, b_idx, result.result)
+		total_games_played += 1
 
-	# Advance to next game
-	_current_game_idx += 1
-	if _current_game_idx >= games_per_individual:
-		_current_game_idx = 0
-		_current_white_idx += 1
+		# Advance to next game
+		_current_game_idx += 1
+		if _current_game_idx >= games_per_individual:
+			_current_game_idx = 0
+			_current_white_idx += 1
 
-	# Check if generation complete
-	if _current_white_idx >= evolution.population_size:
-		evolution.evolve()
-		var stats := get_stats()
-		metrics_logger.write_metrics(stats)
-		training_step_complete.emit(evolution.generation, stats)
-		_generation_in_progress = false
-		return true
+		# Check if generation complete
+		if _current_white_idx >= evolution.population_size:
+			evolution.evolve()
+			var stats := get_stats()
+			metrics_logger.write_metrics(stats)
+			training_step_complete.emit(evolution.generation, stats)
+			_generation_in_progress = false
+			return true
 
 	return false
 
@@ -248,11 +522,19 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	# Only update fitness for current population members, not Hall of Fame
 	if not white_is_hof:
 		var w_prev: float = evolution.white_fitness[white_idx]
-		evolution.set_fitness(0, white_idx, w_prev + w_fitness / games_per_individual)
+		if use_tournament:
+			# In tournament mode, accumulate raw fitness for bonus calculation
+			evolution.set_fitness(0, white_idx, w_prev + w_fitness)
+		else:
+			evolution.set_fitness(0, white_idx, w_prev + w_fitness / games_per_individual)
 	
 	if not black_is_hof:
 		var b_prev: float = evolution.black_fitness[black_idx]
-		evolution.set_fitness(1, black_idx, b_prev + b_fitness / games_per_individual)
+		if use_tournament:
+			# In tournament mode, accumulate raw fitness for bonus calculation
+			evolution.set_fitness(1, black_idx, b_prev + b_fitness)
+		else:
+			evolution.set_fitness(1, black_idx, b_prev + b_fitness / games_per_individual)
 
 	# Add final state to history
 	game_history.append(state.clone())

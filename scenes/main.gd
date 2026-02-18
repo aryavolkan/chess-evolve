@@ -55,6 +55,17 @@ func _ready() -> void:
 		config.get("games_per_individual", 2),
 		config.get("max_moves_per_game", 100)
 	)
+	
+	# Configure tournament settings
+	if config.has("use_tournament"):
+		training_manager.use_tournament = config["use_tournament"]
+	if config.has("tournament_mode"):
+		training_manager.tournament_mode = config["tournament_mode"]
+	if config.has("tournament_opponents"):
+		training_manager.tournament_opponents = config["tournament_opponents"]
+		# Update games_per_individual to match tournament_opponents when in tournament mode
+		if training_manager.use_tournament:
+			training_manager.games_per_individual = config["tournament_opponents"]
 
 	# Dashboard on the right side
 	dashboard = Dashboard.new()
@@ -304,6 +315,17 @@ func _run_auto_train() -> void:
 		config.get("games_per_individual", 2),
 		config.get("max_moves_per_game", 100)
 	)
+	
+	# Configure tournament settings
+	if config.has("use_tournament"):
+		training_manager.use_tournament = config["use_tournament"]
+	if config.has("tournament_mode"):
+		training_manager.tournament_mode = config["tournament_mode"]
+	if config.has("tournament_opponents"):
+		training_manager.tournament_opponents = config["tournament_opponents"]
+		# Update games_per_individual to match tournament_opponents when in tournament mode
+		if training_manager.use_tournament:
+			training_manager.games_per_individual = config["tournament_opponents"]
 
 	var max_generations := int(config.get("max_generations", 100))
 

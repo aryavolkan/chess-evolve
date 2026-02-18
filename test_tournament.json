@@ -1,0 +1,10 @@
+{
+  "population_size": 10,
+  "hidden_size": 64,
+  "elite_count": 2,
+  "use_tournament": true,
+  "tournament_mode": "round_robin",
+  "tournament_opponents": 4,
+  "max_generations": 3,
+  "max_moves_per_game": 50
+}

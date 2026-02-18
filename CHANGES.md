@@ -1,6 +1,6 @@
 # NEAT Chess Evolution Improvements
 
-This document summarizes the two major improvements made to the chess-evolve project to enhance NEAT-based self-play training.
+This document summarizes the major improvements made to the chess-evolve project to enhance NEAT-based self-play training.
 
 ## Change 1: Minimax Wrapper (Value Network + Alpha-Beta Search)
 
@@ -93,9 +93,108 @@ var hall_of_fame_ratio: float = 0.5  # 50% of games against Hall of Fame
 - Consider reducing population size or games per individual if training is too slow
 - Hall of Fame has minimal performance impact (just stores best networks)
 
-## Future Enhancements (if time allows)
+## Change 3: Round-Robin Tournament Selection
 
-The bonus round-robin tournament feature was not implemented but would involve:
-- Replacing random opponent selection with systematic pairing
-- Each individual plays every other individual once
-- More reliable fitness signal but O(n²) games per generation
+### What was implemented:
+- Added tournament-based fitness evaluation system in `ai/training_manager.gd`
+- Individuals now play against a structured set of opponents instead of random selection
+- Tournament results (wins/draws/losses) determine fitness scores
+- Support for both round-robin and Swiss-system tournaments
+
+### Key features:
+
+1. **Round-Robin Mode**:
+   - Each individual plays against K opponents selected from different fitness quintiles
+   - Ensures diverse matchups between strong and weak agents
+   - Configurable number of opponents per individual (default: 4-6)
+   - Final fitness = tournament score (1pt win, 0.5pt draw, 0pt loss) + 10% material/position bonus
+
+2. **Swiss-System Mode**:
+   - After round 1, pairs individuals with similar scores
+   - More efficient for large populations than full round-robin
+   - Reduces total game count while maintaining accuracy
+
+3. **Backward Compatibility**:
+   - `use_tournament = false` flag to revert to original random opponent selection
+   - Existing training scripts work without modification
+
+### Configuration:
+```gdscript
+# In training_manager.gd:
+var use_tournament: bool = true              # Enable tournament mode
+var tournament_mode: String = "round_robin"  # "round_robin" or "swiss"
+var tournament_opponents: int = 4            # Opponents per individual
+
+# In sweep_config.py:
+'tournament_opponents': {'values': [4, 5, 6]},
+'use_tournament': {'value': True},
+'tournament_mode': {'value': 'round_robin'},
+```
+
+## Testing Instructions for Tournament Mode
+
+1. **Test Round-Robin Tournament**:
+   ```bash
+   # Create a test config with tournament enabled
+   cat > test_tournament.json << EOF
+   {
+     "population_size": 10,
+     "hidden_size": 64,
+     "use_tournament": true,
+     "tournament_mode": "round_robin",
+     "tournament_opponents": 4,
+     "max_generations": 5
+   }
+   EOF
+   
+   # Run training with tournament mode
+   python3 train_wandb.py --config test_tournament.json
+   ```
+
+2. **Test Swiss-System Tournament**:
+   ```bash
+   # Modify config for Swiss mode
+   cat > test_swiss.json << EOF
+   {
+     "population_size": 20,
+     "hidden_size": 64,
+     "use_tournament": true,
+     "tournament_mode": "swiss",
+     "tournament_opponents": 4,
+     "max_generations": 5
+   }
+   EOF
+   
+   python3 train_wandb.py --config test_swiss.json
+   ```
+
+3. **Compare with Random Selection**:
+   ```bash
+   # Run with tournaments disabled
+   cat > test_random.json << EOF
+   {
+     "population_size": 10,
+     "hidden_size": 64,
+     "use_tournament": false,
+     "games_per_individual": 4,
+     "max_generations": 5
+   }
+   EOF
+   
+   python3 train_wandb.py --config test_random.json
+   ```
+
+## Expected Improvements with Tournaments
+
+1. **More Reliable Fitness Rankings**:
+   - Each individual's fitness is based on performance against multiple diverse opponents
+   - Reduces variance from lucky/unlucky random pairings
+   - Better identification of truly strong individuals
+
+2. **Balanced Competition**:
+   - Quintile-based pairing ensures weak and strong agents both get appropriate challenges
+   - Prevents situations where weak agents only play other weak agents
+
+3. **Tournament Metrics**:
+   - Clear win/draw/loss records provide interpretable progress tracking
+   - Swiss system adapts difficulty as the tournament progresses
