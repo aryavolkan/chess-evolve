@@ -24,7 +24,7 @@ func start_recording(metadata: Dictionary = {}) -> void:
 	_recording = true
 
 
-func record_move(move: Vector2i, board_after: BoardState) -> void:
+func record_move(move: Vector2i, board_after) -> void:
 	## Record a single move and the resulting board state.
 	if not _recording:
 		return
