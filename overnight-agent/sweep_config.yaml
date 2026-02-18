@@ -1,4 +1,4 @@
-program: train_wandb.py
+program: chess_sweep_worker.py
 method: bayes
 metric:
   name: best_fitness
@@ -7,18 +7,6 @@ metric:
 parameters:
   population_size:
     values: [20, 50, 100]
-
-  hidden_size:
-    values: [32, 64, 128]
-
-  elite_count:
-    values: [2, 3, 5]
-
-  games_per_individual:
-    values: [3, 5, 10]
-
-  max_moves_per_game:
-    values: [80, 100, 150]
 
   mutation_rate:
     distribution: uniform
@@ -38,6 +26,15 @@ parameters:
   max_generations:
     value: 50
 
+  games_per_individual:
+    values: [3, 5, 10]
+
+  hidden_size:
+    values: [32, 64, 128]
+
+  elite_count:
+    values: [2, 3, 5]
+
   use_tournament:
     value: true
 
@@ -47,6 +44,10 @@ parameters:
   tournament_mode:
     values: [round_robin, swiss]
 
-early_terminate:
-  type: hyperband
-  min_iter: 10
+  species_target:
+    values: [3, 5, 8]
+
+  compatibility_threshold:
+    distribution: uniform
+    min: 2.0
+    max: 5.0

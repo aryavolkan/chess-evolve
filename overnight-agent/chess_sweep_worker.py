@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""W&B sweep worker for Chess-Evolve (headless Godot training)."""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Optional
+import json
+
+sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
+import wandb  # noqa: E402
+from godot_wandb import (  # noqa: E402
+    SweepWorker,
+    define_step_metric,
+    godot_user_dir,
+    launch_godot,
+    log_final_summary,
+    read_metrics,
+    run_sweep_agent,
+    wait_for_metrics,
+)
+
+PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/chess-evolve"))
+APP_NAME = os.environ.get("CHESS_EVOLVE_APP_NAME", "Chess Evolve")
+GODOT_PATH = os.environ.get("GODOT_PATH", "/opt/homebrew/bin/godot")
+
+DEFAULT_CONFIG = {
+    "population_size": 20,
+    "hidden_size": 64,
+    "elite_count": 3,
+    "crossover_rate": 0.70,
+    "mutation_rate": 0.25,
+    "mutation_strength": 0.12,
+    "games_per_individual": 2,
+    "max_generations": 50,
+    "max_moves_per_game": 40,
+    "input_size": 389,
+    "output_size": 128,
+    "use_minimax": False,
+    "use_tournament": True,
+    "tournament_opponents": 2,
+}
+
+CHESS_LOG_KEYS = [
+    "generation",
+    "white_best",
+    "white_avg",
+    "black_best",
+    "black_avg",
+    "best_fitness",
+    "avg_fitness",
+    "games_played",
+]
+
+
+def poll_metrics_with_timeout(
+    run: wandb.sdk.wandb_run.Run,
+    metrics_path: Path,
+    max_generations: int,
+    poll_interval: float,
+    max_stale: int,
+    timeout_minutes: Optional[float],
+    log_keys: Optional[list[str]] = None,
+) -> tuple[Optional[dict], str]:
+    """Tail metrics.jsonl with a hard timeout.
+
+    Returns (final_metrics, status) where status is one of:
+    "complete", "stale", "timeout".
+    """
+    jsonl_path = Path(str(metrics_path) + "l")
+    file_pos = 0
+    last_gen = -1
+    stale_count = 0
+    final_metrics = None
+    start = time.time()
+
+    while True:
+        if timeout_minutes and (time.time() - start) > timeout_minutes * 60:
+            return final_metrics, "timeout"
+
+        new_records = []
+        if jsonl_path.exists():
+            try:
+                with open(jsonl_path) as f:
+                    f.seek(file_pos)
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            new_records.append(json.loads(line))
+                        except Exception:
+                            pass
+                    file_pos = f.tell()
+            except OSError:
+                pass
+
+        if not new_records and not jsonl_path.exists():
+            snapshot = read_metrics(metrics_path)
+            if snapshot and snapshot.get("generation", -1) > last_gen:
+                new_records = [snapshot]
+
+        for metrics in new_records:
+            gen = metrics.get("generation", -1)
+            if gen <= last_gen:
+                continue
+            last_gen = gen
+            stale_count = 0
+            final_metrics = metrics
+
+            if log_keys:
+                log_data = {k: metrics.get(k, 0) for k in log_keys}
+            else:
+                log_data = {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+
+            run.log(log_data)
+
+        if last_gen >= max_generations - 1:
+            return final_metrics, "complete"
+
+        if not new_records:
+            stale_count += 1
+            if stale_count >= max_stale:
+                return final_metrics, "stale"
+
+        time.sleep(poll_interval)
+
+
+def run_training_once(
+    config: dict,
+    project: str,
+    entity: Optional[str],
+    visible: bool,
+    poll_interval: float,
+    max_stale: int,
+    timeout_minutes: Optional[float],
+    worker_id: Optional[str] = None,
+) -> None:
+    merged = DEFAULT_CONFIG.copy()
+    merged.update(config or {})
+
+    user_dir = godot_user_dir(APP_NAME)
+    worker = SweepWorker(user_dir, worker_id=worker_id)
+    worker.write_config(merged)
+    worker.clear_metrics()
+
+    run = wandb.init(
+        project=project,
+        entity=entity,
+        config=merged,
+        tags=["chess-evolve", "sweep"],
+    )
+    define_step_metric()
+
+    process = launch_godot(
+        PROJECT_PATH,
+        godot_path=GODOT_PATH,
+        visible=visible,
+        metrics_path=worker.metrics_path,
+        worker_id=worker.worker_id,
+    )
+
+    try:
+        if not wait_for_metrics(worker.metrics_path, timeout=120.0):
+            process.kill()
+            run.finish(exit_code=1)
+            return
+
+        max_gens = int(merged.get("max_generations", 50))
+        final, status = poll_metrics_with_timeout(
+            run,
+            worker.metrics_path,
+            max_generations=max_gens,
+            poll_interval=poll_interval,
+            max_stale=max_stale,
+            timeout_minutes=timeout_minutes,
+            log_keys=CHESS_LOG_KEYS,
+        )
+
+        if status == "timeout":
+            print("⏰ Training timeout exceeded")
+        elif status == "stale":
+            print("❌ Training stalled (no new metrics)")
+
+        log_final_summary(run, final)
+        run.finish(exit_code=0 if status == "complete" else 1)
+    finally:
+        try:
+            process.terminate()
+            process.wait(timeout=10)
+        except Exception:
+            process.kill()
+        worker.cleanup()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Chess-Evolve sweep worker")
+    parser.add_argument("--sweep-id", required=True, help="W&B sweep ID")
+    parser.add_argument("--project", default="chess-evolve", help="W&B project")
+    parser.add_argument("--entity", default=None, help="W&B entity")
+    parser.add_argument("--count", type=int, default=1, help="Runs per agent")
+    parser.add_argument("--visible", action="store_true", help="Show Godot window")
+    parser.add_argument("--poll-interval", type=float, default=2.0)
+    parser.add_argument("--max-stale", type=int, default=300)
+    parser.add_argument("--timeout-minutes", type=float, default=45.0)
+    parser.add_argument("--worker-id", default=None, help="Optional fixed worker id")
+    args = parser.parse_args()
+
+    def train_fn():
+        run_training_once(
+            dict(wandb.config),
+            project=args.project,
+            entity=args.entity,
+            visible=args.visible,
+            poll_interval=args.poll_interval,
+            max_stale=args.max_stale,
+            timeout_minutes=args.timeout_minutes,
+            worker_id=args.worker_id,
+        )
+
+    run_sweep_agent(args.sweep_id, args.project, train_fn, count=args.count)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

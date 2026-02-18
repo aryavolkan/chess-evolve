@@ -9,7 +9,7 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
+sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
 import wandb  # noqa: E402
 from godot_wandb import godot_user_dir, poll_metrics, read_metrics  # noqa: E402
 
