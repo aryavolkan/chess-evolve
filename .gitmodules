@@ -1,0 +1,3 @@
+[submodule "evolve-core"]
+	path = evolve-core
+	url = git@github.com:aryavolkan/evolve-core.git
