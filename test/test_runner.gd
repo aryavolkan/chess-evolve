@@ -34,6 +34,7 @@ func _init() -> void:
 func _run_all_tests() -> void:
 	var test_suites: Array = [
 		preload("res://test/test_board_state.gd"),
+		preload("res://test/test_bitboard_state.gd"),
 		preload("res://test/test_encoder.gd"),
 		preload("res://test/test_neural_network.gd"),
 		preload("res://test/test_evolution.gd"),

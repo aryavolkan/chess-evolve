@@ -69,8 +69,6 @@ func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_m
 	metrics_logger = MetricsLogger.new(p_metrics_path)
 	
 	# If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
-	if use_tournament:
-		games_per_individual = tournament_opponents
 
 
 func _generate_round_robin_pairings(population_size: int) -> Dictionary:
@@ -110,7 +108,7 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
 	
 	# For each individual, select opponents from different quintiles
 	for i in population_size:
-		var opponents_needed := tournament_opponents
+		var opponents_needed: int = mini(tournament_opponents, population_size - 1)
 		var selected_opponents := []
 		
 		# Try to get one opponent from each quintile
@@ -459,27 +457,7 @@ func _run_all_games() -> int:
 			_track_game_metrics(result)
 			game_complete.emit(w_idx, b_idx, result.result)
 			games_played += 1
-	
-	# Also evaluate black population as primary players against white opponents
-	# This ensures both populations benefit from Hall of Fame diversity
-	for b_idx in evolution.population_size:
-		for _g in games_per_individual:
-			var use_hof := false
-			var w_idx: int = -1
-			
-			# Decide whether to use Hall of Fame opponent
-			if evolution.has_hall_of_fame(0) and randf() < hall_of_fame_ratio:
-				use_hof = true
-				w_idx = -1  # Special index for Hall of Fame
-			else:
-				w_idx = randi() % int(evolution.population_size)
-			
-			# Note: we pass true for first parameter to indicate white is from HoF
-			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
-			_track_game_metrics(result)
-			game_complete.emit(w_idx, b_idx, result.result)
-			games_played += 1
-	
+		
 	return games_played
 
 
