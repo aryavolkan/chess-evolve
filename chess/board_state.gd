@@ -131,6 +131,16 @@ func generate_legal_moves() -> Array[Vector2i]:
 	return moves
 
 
+func benchmark_generate_legal_moves(iterations: int = 1000) -> void:
+	var state := BoardState.new()
+	state.setup_initial()
+	var start := Time.get_ticks_usec()
+	for i in iterations:
+		state.generate_legal_moves()
+	var elapsed := Time.get_ticks_usec() - start
+	print("generate_legal_moves ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
+
+
 func _generate_pseudo_legal_moves() -> Array[Vector2i]:
 	var moves: Array[Vector2i] = []
 	for sq in range(64):
@@ -193,14 +203,20 @@ func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
 func _add_slider_moves(sq: int, moves: Array[Vector2i], directions: Array) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
+	var side_sign := 1 if side_to_move == 0 else -1
 	for dir: Vector2i in directions:
 		var nf := f + dir.x
 		var nr := r + dir.y
 		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
 			var target := square(nf, nr)
-			if is_friendly(target): break
-			moves.append(Vector2i(sq, target))
-			if is_enemy(target): break
+			var p := board[target]
+			if p == 0:
+				moves.append(Vector2i(sq, target))
+			elif p * side_sign > 0:
+				break
+			else:
+				moves.append(Vector2i(sq, target))
+				break
 			nf += dir.x
 			nr += dir.y
 
