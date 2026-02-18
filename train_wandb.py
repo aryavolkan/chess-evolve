@@ -8,7 +8,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
+sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
 import wandb  # noqa: E402
 from godot_wandb import run_training  # noqa: E402
 
@@ -18,17 +18,20 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # Default config (overridden by W&B sweep)
 DEFAULT_CONFIG = {
-    "population_size": 30,
+    "population_size": 20,
     "hidden_size": 64,
     "elite_count": 3,
     "crossover_rate": 0.70,
     "mutation_rate": 0.25,
     "mutation_strength": 0.12,
     "games_per_individual": 2,
-    "max_generations": 100,
-    "max_moves_per_game": 100,
+    "max_generations": 50,
+    "max_moves_per_game": 40,    # capped for GDScript performance
     "input_size": 389,
     "output_size": 128,
+    "use_minimax": False,        # minimax too slow in GDScript; direct NN output
+    "use_tournament": True,
+    "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
 }
 
 PROJECT_PATH = os.path.expanduser("~/Projects/chess-evolve")
@@ -47,7 +50,7 @@ def do_training(config=None, visible=False):
     run_training(
         config=merged,
         project_path=PROJECT_PATH,
-        app_name="chess-evolve",
+        app_name="Chess Evolve",
         wandb_project="chess-evolve",
         wandb_tags=["chess", "neuroevolution", "coevolution"],
         visible=visible,
