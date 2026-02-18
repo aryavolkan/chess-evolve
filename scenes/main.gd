@@ -363,7 +363,9 @@ func _run_auto_train() -> void:
 
 	# Run training loop
 	var total_games := 0
+	print("Starting training loop for %d generations" % max_generations)
 	for gen in max_generations:
+		print("Main: Running generation %d" % gen)
 		training_manager.run_generation()  # MetricsLogger inside run_generation() writes metrics.json.
 		total_games += evo.population_size * config.get("games_per_individual", 2)
 

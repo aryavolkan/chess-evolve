@@ -14,7 +14,9 @@ func write_metrics(stats: Dictionary) -> void:
 	var payload := stats.duplicate(true)
 	payload["updated_at"] = Time.get_unix_time_from_system()
 
+	print("MetricsLogger: Writing metrics to %s" % metrics_path)
 	var absolute_path := ProjectSettings.globalize_path(metrics_path)
+	print("MetricsLogger: Absolute path: %s" % absolute_path)
 	dir_create_recursive(absolute_path)
 
 	var file := FileAccess.open(metrics_path, FileAccess.WRITE)

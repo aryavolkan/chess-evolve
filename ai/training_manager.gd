@@ -27,7 +27,7 @@ var game_recorder: GameRecorderScript = null  # Optional: records full games for
 var record_replays: bool = false  # Enable to save every game as a replay file
 
 # Minimax search configuration
-var use_minimax: bool = true  # Use minimax search instead of direct network output
+var use_minimax: bool = false  # Use minimax search instead of direct network output
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
 # Hall of Fame configuration
@@ -250,6 +250,7 @@ func _update_fitness_from_tournament() -> void:
 
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
+	print("TrainingManager: Starting generation %d" % evolution.generation)
 	if use_tournament:
 		# Clear tournament results for new generation
 		tournament_results.clear()
@@ -265,13 +266,16 @@ func run_generation() -> void:
 				for w_idx in round_pairings:
 					for b_idx in round_pairings[w_idx]:
 						if w_idx < b_idx:  # Avoid duplicate games
+							print("Playing game: white_%d vs black_%d" % [w_idx, b_idx])
 							var result = _play_game(w_idx, b_idx)
+							print("Game result: %s" % result)
 							_record_tournament_result(w_idx, b_idx, result)
 							game_complete.emit(w_idx, b_idx, result["result"])
 							total_games_played += 1
 		else:
 			# Round-robin tournament
 			_tournament_pairings = _generate_round_robin_pairings(evolution.population_size)
+			print("Generated %d tournament pairings" % _tournament_pairings.size())
 			# Play all tournament games
 			for w_idx in _tournament_pairings:
 				for b_idx in _tournament_pairings[w_idx]:
@@ -498,8 +502,10 @@ func _play_game_with_hof(white_idx: int, black_idx: int, idx_is_hof: bool = fals
 
 func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, black_is_hof: bool = false):
 	## Play a single game between two networks, return final board state.
+	print("_play_game: white_idx=%d, black_idx=%d" % [white_idx, black_idx])
 	var state := BoardStateScript.new()
 	state.setup_initial()
+	print("Board initialized")
 
 	# Track game history for visualization (every 5th move to reduce memory)
 	var game_history: Array = []
@@ -509,6 +515,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	var white_net = null
 	var black_net = null
 	
+	print("Getting networks...")
 	if white_is_hof:
 		white_net = evolution.get_hall_of_fame_opponent(0)
 		if white_net == null:
@@ -525,12 +532,16 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	else:
 		black_net = evolution.get_network(1, black_idx)
 	
+	print("Networks retrieved: white=%s, black=%s" % [white_net != null, black_net != null])
+	
 	# Create minimax players if enabled
 	var white_player = null
 	var black_player = null
 	if use_minimax:
+		print("Creating minimax players with depth=%d" % minimax_depth)
 		white_player = MinimaxPlayerScript.new(white_net, minimax_depth)
 		black_player = MinimaxPlayerScript.new(black_net, minimax_depth)
+		print("Minimax players created")
 
 	# Set up game recorder if enabled
 	var recorder: GameRecorderScript = null
@@ -543,6 +554,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		})
 
 	var move_count := 0
+	print("Starting game loop, max_moves=%d" % max_moves_per_game)
 	while not state.is_game_over and move_count < max_moves_per_game:
 		var chosen: Vector2i
 		
@@ -553,7 +565,9 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		if use_minimax:
 			# Use minimax search to choose move
 			var player = white_player if state.side_to_move == 0 else black_player
+			print("Using minimax to choose move for %s" % ("white" if state.side_to_move == 0 else "black"))
 			chosen = player.choose_move(state)
+			print("Minimax chose: %s" % chosen)
 		else:
 			# Use direct network output (original behavior)
 			var net = white_net if state.side_to_move == 0 else black_net
