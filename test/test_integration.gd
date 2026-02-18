@@ -121,7 +121,7 @@ func _run_tests() -> void:
 		var legal_moves := state.generate_legal_moves()
 		assert_gt(legal_moves.size(), 0.0, "Initial position should have legal moves")
 
-		var chosen: Vector2i = ChessEncoderScript.decode_move(outputs, legal_moves)
+		var chosen := ChessEncoderScript.decode_move(outputs, legal_moves)
 		assert_true(legal_moves.has(chosen), "Decoded move should be in legal moves")
 	)
 
@@ -139,7 +139,7 @@ func _run_tests() -> void:
 			var legal := state.generate_legal_moves()
 			if legal.is_empty():
 				break
-			var chosen: Vector2i = ChessEncoderScript.decode_move(outputs, legal)
+			var chosen: int = ChessEncoderScript.decode_move(outputs, legal)
 			state.make_move(chosen)
 			moves += 1
 

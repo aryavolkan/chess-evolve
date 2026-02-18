@@ -544,7 +544,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 
 	var move_count := 0
 	while not state.is_game_over and move_count < max_moves_per_game:
-		var chosen: Vector2i
+		var chosen := -1
 		
 		var legal_moves := state.generate_legal_moves()
 		if legal_moves.is_empty():
@@ -561,7 +561,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 			var outputs: PackedFloat32Array = net.forward(inputs)
 			chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
 		
-		if chosen.x == -1 or chosen.y == -1:
+		if chosen == -1:
 			break  # Invalid move
 		
 		state.make_move(chosen)

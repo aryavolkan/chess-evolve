@@ -15,10 +15,10 @@ func _run_tests() -> void:
 
 
 func test_save_and_load_game() -> void:
-	var moves: Array[Vector2i] = [
-		Vector2i(12, 28),  # e2->e4
-		Vector2i(52, 36),  # e7->e5
-	]
+	var moves := PackedInt32Array([
+		BoardState.encode_move(12, 28),  # e2->e4
+		BoardState.encode_move(52, 36),  # e7->e5
+	])
 
 	var metadata := {
 		"generation": 5,
@@ -55,10 +55,10 @@ func test_save_and_load_game() -> void:
 
 
 func test_replay_moves() -> void:
-	var moves: Array[Vector2i] = [
-		Vector2i(52, 36),  # e2->e4 (52=e2, 36=e4 in 0-63 board indexing)
-		Vector2i(12, 28),  # e7->e5 (12=e7, 28=e5)
-	]
+	var moves := PackedInt32Array([
+		BoardState.encode_move(52, 36),  # e2->e4 (52=e2, 36=e4 in 0-63 board indexing)
+		BoardState.encode_move(12, 28),  # e7->e5 (12=e7, 28=e5)
+	])
 
 	var states := GameRecorder.replay_moves(moves)
 
@@ -92,7 +92,7 @@ func test_save_creates_directory() -> void:
 	recorder.start_recording({})
 	var board := BoardState.new()
 	board.setup_initial()
-	recorder.record_move(Vector2i(0, 0), board)
+	recorder.record_move(BoardState.encode_move(0, 0), board)
 	recorder.stop_recording(2)
 	recorder.save_to_file("dir_test.json")
 
@@ -113,7 +113,7 @@ func test_list_replays() -> void:
 	recorder1.start_recording({"test": 1})
 	var board1 := BoardState.new()
 	board1.setup_initial()
-	recorder1.record_move(Vector2i(0, 0), board1)
+	recorder1.record_move(BoardState.encode_move(0, 0), board1)
 	recorder1.stop_recording(2)
 	recorder1.save_to_file("test1.json")
 
@@ -121,7 +121,7 @@ func test_list_replays() -> void:
 	recorder2.start_recording({"test": 2})
 	var board2 := BoardState.new()
 	board2.setup_initial()
-	recorder2.record_move(Vector2i(1, 1), board2)
+	recorder2.record_move(BoardState.encode_move(1, 1), board2)
 	recorder2.stop_recording(2)
 	recorder2.save_to_file("test2.json")
 

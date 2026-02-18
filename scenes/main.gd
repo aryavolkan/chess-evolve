@@ -212,7 +212,7 @@ func _play_showcase_game() -> void:
 		var outputs: PackedFloat32Array = net.forward(inputs)
 		var legal := state.generate_legal_moves()
 		if legal.is_empty(): break
-		var move: Vector2i = ChessEncoder.decode_move(outputs, legal)
+		var move: int = ChessEncoder.decode_move(outputs, legal)
 		state.make_move(move)
 		moves_played += 1
 

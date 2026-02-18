@@ -66,6 +66,17 @@ func setup_initial() -> void:
 	_black_king_sq = 60
 
 
+func _rebuild_piece_lists() -> void:
+	_white_king_sq = -1
+	_black_king_sq = -1
+	for sq in range(64):
+		var p := board[sq]
+		if p == Piece.KING:
+			_white_king_sq = sq
+		elif p == -Piece.KING:
+			_black_king_sq = sq
+
+
 static func file_of(sq: int) -> int:
 	return sq % 8
 
@@ -77,6 +88,22 @@ static func square(file: int, rank: int) -> int:
 
 static func is_valid_square(sq: int) -> bool:
 	return sq >= 0 and sq < 64
+
+
+static func encode_move(from_sq: int, to_sq: int) -> int:
+	return (from_sq << 6) | to_sq
+
+
+static func move_from(encoded_move: int) -> int:
+	return encoded_move >> 6
+
+
+static func move_to(encoded_move: int) -> int:
+	return encoded_move & 0x3f
+
+
+static func move_to_vec(encoded_move: int) -> Vector2i:
+	return Vector2i(move_from(encoded_move), move_to(encoded_move))
 
 
 func piece_at(sq: int) -> int:
@@ -120,9 +147,9 @@ func clone() -> BoardState:
 	return copy
 
 
-func generate_legal_moves() -> Array[Vector2i]:
-	## Returns array of Vector2i(from, to) for all legal moves.
-	var moves: Array[Vector2i] = []
+func generate_legal_moves() -> PackedInt32Array:
+	## Returns packed int moves: (from << 6) | to.
+	var moves := PackedInt32Array()
 	var pseudo := _generate_pseudo_legal_moves()
 	var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
 	for m in pseudo:
@@ -141,15 +168,15 @@ func benchmark_generate_legal_moves(iterations: int = 1000) -> void:
 	print("generate_legal_moves ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
 
 
-func _generate_pseudo_legal_moves() -> Array[Vector2i]:
-	var moves: Array[Vector2i] = []
+func _generate_pseudo_legal_moves() -> PackedInt32Array:
+	var moves := PackedInt32Array()
 	for sq in range(64):
 		if (side_to_move == 0 and board[sq] > 0) or (side_to_move == 1 and board[sq] < 0):
 			_add_piece_moves(sq, moves)
 	return moves
 
 
-func _add_piece_moves(sq: int, moves: Array[Vector2i]) -> void:
+func _add_piece_moves(sq: int, moves: PackedInt32Array) -> void:
 	var piece := abs_piece(sq)
 	match piece:
 		Piece.PAWN: _add_pawn_moves(sq, moves)
@@ -160,7 +187,7 @@ func _add_piece_moves(sq: int, moves: Array[Vector2i]) -> void:
 		Piece.KING: _add_king_moves(sq, moves)
 
 
-func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
+func _add_pawn_moves(sq: int, moves: PackedInt32Array) -> void:
 	var dir := 1 if side_to_move == 0 else -1
 	var start_rank := 1 if side_to_move == 0 else 6
 	var f := file_of(sq)
@@ -169,12 +196,12 @@ func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
 	# Forward one
 	var fwd := square(f, r + dir)
 	if is_valid_square(fwd) and board[fwd] == 0:
-		moves.append(Vector2i(sq, fwd))
+		moves.append(encode_move(sq, fwd))
 		# Forward two from starting rank
 		if r == start_rank:
 			var fwd2 := square(f, r + 2 * dir)
 			if board[fwd2] == 0:
-				moves.append(Vector2i(sq, fwd2))
+				moves.append(encode_move(sq, fwd2))
 
 	# Captures
 	for df in [-1, 1]:
@@ -183,12 +210,12 @@ func _add_pawn_moves(sq: int, moves: Array[Vector2i]) -> void:
 		var cap_sq := square(nf, r + dir)
 		if not is_valid_square(cap_sq): continue
 		if is_enemy(cap_sq):
-			moves.append(Vector2i(sq, cap_sq))
+			moves.append(encode_move(sq, cap_sq))
 		elif cap_sq == en_passant_square:
-			moves.append(Vector2i(sq, cap_sq))
+			moves.append(encode_move(sq, cap_sq))
 
 
-func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
+func _add_knight_moves(sq: int, moves: PackedInt32Array) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
 	for off in _KNIGHT_OFFSETS:
@@ -197,10 +224,10 @@ func _add_knight_moves(sq: int, moves: Array[Vector2i]) -> void:
 		if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
 		var target := square(nf, nr)
 		if not is_friendly(target):
-			moves.append(Vector2i(sq, target))
+			moves.append(encode_move(sq, target))
 
 
-func _add_slider_moves(sq: int, moves: Array[Vector2i], directions: Array) -> void:
+func _add_slider_moves(sq: int, moves: PackedInt32Array, directions: Array) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
 	var side_sign := 1 if side_to_move == 0 else -1
@@ -211,17 +238,17 @@ func _add_slider_moves(sq: int, moves: Array[Vector2i], directions: Array) -> vo
 			var target := square(nf, nr)
 			var p := board[target]
 			if p == 0:
-				moves.append(Vector2i(sq, target))
+				moves.append(encode_move(sq, target))
 			elif p * side_sign > 0:
 				break
 			else:
-				moves.append(Vector2i(sq, target))
+				moves.append(encode_move(sq, target))
 				break
 			nf += dir.x
 			nr += dir.y
 
 
-func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
+func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
 	var f := file_of(sq)
 	var r := rank_of(sq)
 	for df in [-1, 0, 1]:
@@ -232,7 +259,7 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 			if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
 			var target := square(nf, nr)
 			if not is_friendly(target):
-				moves.append(Vector2i(sq, target))
+				moves.append(encode_move(sq, target))
 
 	# Castling
 	if side_to_move == 0 and sq == 4:
@@ -243,7 +270,7 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 			and board[7] == Piece.ROOK
 		):
 			if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
-				moves.append(Vector2i(4, 6))
+				moves.append(encode_move(4, 6))
 		if (
 			castling_rights & 0b0010
 			and board[3] == 0
@@ -252,7 +279,7 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 			and board[0] == Piece.ROOK
 		):
 			if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
-				moves.append(Vector2i(4, 2))
+				moves.append(encode_move(4, 2))
 	elif side_to_move == 1 and sq == 60:
 		if (
 			castling_rights & 0b0100
@@ -261,7 +288,7 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 			and board[63] == -Piece.ROOK
 		):
 			if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
-				moves.append(Vector2i(60, 62))
+				moves.append(encode_move(60, 62))
 		if (
 			castling_rights & 0b1000
 			and board[59] == 0
@@ -270,14 +297,14 @@ func _add_king_moves(sq: int, moves: Array[Vector2i]) -> void:
 			and board[56] == -Piece.ROOK
 		):
 			if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
-				moves.append(Vector2i(60, 58))
+				moves.append(encode_move(60, 58))
 
 
-func _is_legal(move: Vector2i, king_sq: int) -> bool:
+func _is_legal(move: int, king_sq: int) -> bool:
 	## Check legality via in-place make/unmake — avoids cloning the entire board.
 	## Equivalent to the original clone-based approach but allocates nothing.
-	var from := move.x
-	var to := move.y
+	var from := move_from(move)
+	var to := move_to(move)
 	var piece := board[from]
 	var abs_p := absi(piece)
 	var captured := board[to]
@@ -385,7 +412,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 	return false
 
 
-func make_move(move: Vector2i) -> void:
+func make_move(move) -> void:
 	## Apply a legal move and update game state.
 	_apply_move_unchecked(move)
 	side_to_move = 1 - side_to_move
@@ -394,9 +421,9 @@ func make_move(move: Vector2i) -> void:
 	_check_game_over()
 
 
-func _apply_move_unchecked(move: Vector2i) -> void:
-	var from := move.x
-	var to := move.y
+func _apply_move_unchecked(move) -> void:
+	var from: int = move_from(move) if typeof(move) == TYPE_INT else move.x
+	var to: int = move_to(move) if typeof(move) == TYPE_INT else move.y
 	var piece := board[from]
 	var abs_p := absi(piece)
 	var captured := board[to]

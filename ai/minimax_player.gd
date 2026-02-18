@@ -22,12 +22,12 @@ func _init(network, depth: int = 2):
 	search_depth = depth
 
 ## Choose the best move using minimax with alpha-beta pruning
-func choose_move(state: BoardStateScript) -> Vector2i:
+func choose_move(state: BoardStateScript) -> int:
 	nodes_evaluated = 0
 	var legal_moves := state.generate_legal_moves()
 	
 	if legal_moves.is_empty():
-		return Vector2i(-1, -1)
+		return -1
 	
 	if legal_moves.size() == 1:
 		return legal_moves[0]

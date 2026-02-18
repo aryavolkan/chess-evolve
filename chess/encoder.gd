@@ -49,19 +49,21 @@ static func encode_board(state) -> PackedFloat32Array:
 	return inputs
 
 
-static func decode_move(outputs: PackedFloat32Array, legal_moves: Array[Vector2i]) -> Vector2i:
+static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Array) -> int:
 	## Decode network output into a legal move.
 	## Output is split: first 64 = from-square preferences, next 64 = to-square preferences.
 	## We score each legal move as from_score + to_score and pick the best.
 	if legal_moves.is_empty():
-		return Vector2i(-1, -1)
+		return -1
 
 	var best_move := legal_moves[0]
 	var best_score := -INF
 
 	for move in legal_moves:
-		var from_score: float = outputs[move.x] if move.x < outputs.size() else 0.0
-		var to_score: float = outputs[64 + move.y] if (64 + move.y) < outputs.size() else 0.0
+		var from_sq := BoardState.move_from(move)
+		var to_sq := BoardState.move_to(move)
+		var from_score: float = outputs[from_sq] if from_sq < outputs.size() else 0.0
+		var to_score: float = outputs[64 + to_sq] if (64 + to_sq) < outputs.size() else 0.0
 		var score := from_score + to_score
 		if score > best_score:
 			best_score = score

@@ -21,6 +21,7 @@ func _run_tests() -> void:
 		b.board[4] = ChessConstants.Piece.KING
 		b.board[60] = -ChessConstants.Piece.KING
 		b.board[3] = ChessConstants.Piece.QUEEN  # White has extra queen
+		b._rebuild_piece_lists()
 		b.is_game_over = false
 		var w: float = fitness.call("evaluate", b, 0, 10)
 		var bl: float = fitness.call("evaluate", b, 1, 10)
@@ -32,6 +33,7 @@ func _run_tests() -> void:
 		b.board.fill(0)
 		b.board[4] = ChessConstants.Piece.KING
 		b.board[60] = -ChessConstants.Piece.KING
+		b._rebuild_piece_lists()
 		b.is_game_over = true
 		b.result = 1  # White wins
 		var w: float = fitness.call("evaluate", b, 0, 20)
