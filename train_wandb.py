@@ -8,7 +8,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
+sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
 from godot_wandb import run_training  # noqa: E402
 
 import wandb  # noqa: E402
