@@ -83,16 +83,28 @@ func _run_tests() -> void:
 		assert_eq(b.en_passant_square, 20, "EP square should be e3 (20)")
 	)
 
-	_test("scholar's mate produces checkmate", func():
+	_test("en passant capture is legal", func():
 		var b := BoardStateScript.new()
 		b.setup_initial()
 		b.make_move(BoardStateScript.encode_move(12, 28))  # e2-e4
+		b.make_move(BoardStateScript.encode_move(48, 40))  # a7-a6
+		b.make_move(BoardStateScript.encode_move(28, 36))  # e4-e5
+		b.make_move(BoardStateScript.encode_move(51, 35))  # d7-d5
+		assert_eq(b.en_passant_square, 43, "EP square should be d6 (43)")
+		var moves := b.generate_legal_moves()
+		var ep := BoardStateScript.encode_move(36, 43)  # e5xd6 en passant
+		assert_true(moves.has(ep), "En passant capture should be legal")
+	)
+
+	_test("fool's mate produces checkmate", func():
+		var b := BoardStateScript.new()
+		b.setup_initial()
+		b.make_move(BoardStateScript.encode_move(13, 21))  # f2-f3
 		b.make_move(BoardStateScript.encode_move(52, 36))  # e7-e5
-		b.make_move(BoardStateScript.encode_move(5, 26))   # Bf1-c4
-		b.make_move(BoardStateScript.encode_move(57, 42))  # Nb8-c6
-		# Qd1-h5 (not quite scholar's mate but enough for checkmate-state testing)
-		b.make_move(BoardStateScript.encode_move(3, 39))
-		# This isn't exactly scholar's mate - let me do a simpler checkmate test
+		b.make_move(BoardStateScript.encode_move(14, 30))  # g2-g4
+		b.make_move(BoardStateScript.encode_move(59, 31))  # Qd8-h4
+		assert_true(b.is_game_over, "Game should be over (checkmate)")
+		assert_eq(b.result, -1, "Black should win by checkmate")
 	)
 
 	_test("stalemate detected", func():
