@@ -343,6 +343,12 @@ func _run_auto_train() -> void:
 		metrics_path
 	)
 	
+	# Configure minimax settings
+	if config.has("use_minimax"):
+		training_manager.use_minimax = config["use_minimax"]
+	if config.has("minimax_depth"):
+		training_manager.minimax_depth = config["minimax_depth"]
+
 	# Configure tournament settings
 	if config.has("use_tournament"):
 		training_manager.use_tournament = config["use_tournament"]
