@@ -267,7 +267,7 @@ func run_generation() -> void:
 						if w_idx < b_idx:  # Avoid duplicate games
 							var result = _play_game(w_idx, b_idx)
 							_record_tournament_result(w_idx, b_idx, result)
-							game_complete.emit(w_idx, b_idx, result.result)
+							game_complete.emit(w_idx, b_idx, result["result"])
 							total_games_played += 1
 		else:
 			# Round-robin tournament
@@ -277,7 +277,7 @@ func run_generation() -> void:
 				for b_idx in _tournament_pairings[w_idx]:
 					var result = _play_game(w_idx, b_idx)
 					_record_tournament_result(w_idx, b_idx, result)
-					game_complete.emit(w_idx, b_idx, result.result)
+					game_complete.emit(w_idx, b_idx, result["result"])
 					total_games_played += 1
 		
 		# Update fitness based on tournament results
@@ -296,19 +296,19 @@ func run_generation() -> void:
 func _track_game_metrics(game_result: Dictionary) -> void:
 	## Track metrics for any completed game.
 	_games_this_generation += 1
-	_total_game_moves += game_result.move_count
+	_total_game_moves += game_result["move_count"]
 	
 	# Track material scores
-	var state = game_result.state
+	var state = game_result["state"]
 	if state:
 		_white_material_total += state.material_score(0)
 		_black_material_total += state.material_score(1)
 	
 	# Track wins/draws/losses
-	if game_result.result == 2:  # Draw
+	if game_result["result"] == 2:  # Draw
 		_white_draws += 1
 		_black_draws += 1
-	elif game_result.result == 1:  # White wins
+	elif game_result["result"] == 1:  # White wins
 		_white_wins += 1
 		_black_losses += 1
 	else:  # Black wins
@@ -320,10 +320,10 @@ func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> v
 	## Record tournament result for scoring.
 	_track_game_metrics(game_result)
 	
-	if game_result.result == 2:  # Draw
+	if game_result["result"] == 2:  # Draw
 		tournament_results[str(white_idx) + "_white"] = 0
 		tournament_results[str(black_idx) + "_black"] = 0
-	elif game_result.result == 1:  # White wins
+	elif game_result["result"] == 1:  # White wins
 		tournament_results[str(white_idx) + "_white"] = 1
 		tournament_results[str(black_idx) + "_black"] = -1
 	else:  # Black wins
@@ -390,7 +390,7 @@ func run_one_game_step() -> bool:
 			if found_game:
 				var result = _play_game(w_idx, b_idx)
 				_record_tournament_result(w_idx, b_idx, result)
-				game_complete.emit(w_idx, b_idx, result.result)
+				game_complete.emit(w_idx, b_idx, result["result"])
 				total_games_played += 1
 				
 				# Advance to next game
@@ -418,7 +418,7 @@ func run_one_game_step() -> bool:
 		
 		var result = _play_game_with_hof(_current_white_idx, b_idx, use_hof)
 		_track_game_metrics(result)
-		game_complete.emit(_current_white_idx, b_idx, result.result)
+		game_complete.emit(_current_white_idx, b_idx, result["result"])
 		total_games_played += 1
 
 		# Advance to next game
@@ -457,7 +457,7 @@ func _run_all_games() -> int:
 			
 			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
 			_track_game_metrics(result)
-			game_complete.emit(w_idx, b_idx, result.result)
+			game_complete.emit(w_idx, b_idx, result["result"])
 			games_played += 1
 	
 	# Also evaluate black population as primary players against white opponents
@@ -477,7 +477,7 @@ func _run_all_games() -> int:
 			# Note: we pass true for first parameter to indicate white is from HoF
 			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
 			_track_game_metrics(result)
-			game_complete.emit(w_idx, b_idx, result.result)
+			game_complete.emit(w_idx, b_idx, result["result"])
 			games_played += 1
 	
 	return games_played
