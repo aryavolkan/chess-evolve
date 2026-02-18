@@ -9,24 +9,13 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.expanduser("~/projects/shared-evolve-utils"))
-from godot_wandb import godot_user_dir, read_metrics, poll_metrics  # noqa: E402
-
+sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
 import wandb  # noqa: E402
-
+from godot_wandb import godot_user_dir, poll_metrics, read_metrics  # noqa: E402
 
 CHESS_LOG_KEYS = [
     "generation", "white_best", "white_avg", "black_best", "black_avg",
     "best_fitness", "avg_fitness", "games_played",
-    # New metrics
-    "white_win_rate", "white_draw_rate", "white_loss_rate",
-    "black_win_rate", "black_draw_rate", "black_loss_rate",
-    "white_hof_size", "black_hof_size",
-    "white_tournament_score_best", "white_tournament_score_avg",
-    "black_tournament_score_best", "black_tournament_score_avg",
-    "total_games_this_gen", "avg_game_length",
-    "white_material_avg", "black_material_avg",
-    "generation_time_sec",
 ]
 
 
