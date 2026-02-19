@@ -249,8 +249,25 @@ func _update_fitness_from_tournament() -> void:
 		evolution.set_fitness(1, i, black_tournament_score + black_bonus)
 
 
+func _reset_generation_metrics() -> void:
+	_generation_start_time = Time.get_unix_time_from_system()
+	_white_wins = 0
+	_white_draws = 0
+	_white_losses = 0
+	_black_wins = 0
+	_black_draws = 0
+	_black_losses = 0
+	_total_game_moves = 0
+	_games_this_generation = 0
+	_white_material_total = 0.0
+	_black_material_total = 0.0
+	_white_tournament_scores.clear()
+	_black_tournament_scores.clear()
+
+
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
+	_reset_generation_metrics()
 	if use_tournament:
 		# Clear tournament results for new generation
 		tournament_results.clear()
@@ -344,19 +361,7 @@ func run_one_game_step() -> bool:
 		evolution.black_fitness.fill(0.0)
 		
 		# Reset generation metrics
-		_generation_start_time = Time.get_unix_time_from_system()
-		_white_wins = 0
-		_white_draws = 0
-		_white_losses = 0
-		_black_wins = 0
-		_black_draws = 0
-		_black_losses = 0
-		_total_game_moves = 0
-		_games_this_generation = 0
-		_white_material_total = 0.0
-		_black_material_total = 0.0
-		_white_tournament_scores.clear()
-		_black_tournament_scores.clear()
+		_reset_generation_metrics()
 		
 		if use_tournament:
 			# Clear tournament data and generate pairings
@@ -658,6 +663,13 @@ func get_stats() -> Dictionary:
 	if total_games_gen == 0:  # Fallback for compatibility
 		total_games_gen = evolution.population_size * games_per_individual
 	
+	# Derived throughput metrics
+	var games_per_sec := 0.0
+	var moves_per_sec := 0.0
+	if generation_time_sec > 0.0:
+		games_per_sec = float(total_games_gen) / generation_time_sec
+		moves_per_sec = float(_total_game_moves) / generation_time_sec
+	
 	return {
 		"generation": evolution.generation,
 		"white_best": white_best,
@@ -688,4 +700,6 @@ func get_stats() -> Dictionary:
 		"white_material_avg": white_material_avg,
 		"black_material_avg": black_material_avg,
 		"generation_time_sec": generation_time_sec,
+		"games_per_sec": games_per_sec,
+		"moves_per_sec": moves_per_sec,
 	}

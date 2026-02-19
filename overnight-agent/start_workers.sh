@@ -15,7 +15,7 @@ cd "$ROOT_DIR"
 for i in $(seq 1 "$WORKERS"); do
   LOG_FILE="worker${i}.log"
   echo "Starting worker ${i} → ${LOG_FILE}"
-  nohup python3 chess_sweep_worker.py --sweep-id "$SWEEP_ID" --count 1 > "$LOG_FILE" 2>&1 &
+  nohup python3 chess_sweep_worker.py --sweep-id "$SWEEP_ID" --count 1 --worker-id "worker${i}" > "$LOG_FILE" 2>&1 &
   sleep 2
 done
 

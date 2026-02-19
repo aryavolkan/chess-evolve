@@ -53,6 +53,25 @@ CHESS_LOG_KEYS = [
     "best_fitness",
     "avg_fitness",
     "games_played",
+    "total_games_this_gen",
+    "avg_game_length",
+    "games_per_sec",
+    "moves_per_sec",
+    "white_win_rate",
+    "white_draw_rate",
+    "white_loss_rate",
+    "black_win_rate",
+    "black_draw_rate",
+    "black_loss_rate",
+    "white_hof_size",
+    "black_hof_size",
+    "white_tournament_score_best",
+    "white_tournament_score_avg",
+    "black_tournament_score_best",
+    "black_tournament_score_avg",
+    "white_material_avg",
+    "black_material_avg",
+    "generation_time_sec",
 ]
 
 
@@ -147,26 +166,34 @@ def run_training_once(
     worker.write_config(merged)
     worker.clear_metrics()
 
-    run = wandb.init(
-        project=project,
-        entity=entity,
-        config=merged,
-        tags=["chess-evolve", "sweep"],
-    )
-    define_step_metric()
-
-    process = launch_godot(
-        PROJECT_PATH,
-        godot_path=GODOT_PATH,
-        visible=visible,
-        metrics_path=worker.metrics_path,
-        worker_id=worker.worker_id,
-    )
+    run = None
+    process = None
 
     try:
+        run = wandb.init(
+            project=project,
+            entity=entity,
+            config=merged,
+            tags=["chess-evolve", "sweep"],
+        )
+        define_step_metric()
+        if run is not None:
+            print(f"🔗 W&B run: {run.url}")
+
+        process = launch_godot(
+            PROJECT_PATH,
+            godot_path=GODOT_PATH,
+            visible=visible,
+            metrics_path=worker.metrics_path,
+            worker_id=worker.worker_id,
+        )
+
         if not wait_for_metrics(worker.metrics_path, timeout=120.0):
-            process.kill()
-            run.finish(exit_code=1)
+            print("❌ Metrics file never appeared; terminating run")
+            if process is not None:
+                process.kill()
+            if run is not None:
+                run.finish(exit_code=1)
             return
 
         max_gens = int(merged.get("max_generations", 50))
@@ -187,12 +214,18 @@ def run_training_once(
 
         log_final_summary(run, final)
         run.finish(exit_code=0 if status == "complete" else 1)
+    except Exception as exc:
+        print(f"❌ Training crashed: {exc}")
+        if run is not None:
+            run.finish(exit_code=1)
+        raise
     finally:
-        try:
-            process.terminate()
-            process.wait(timeout=10)
-        except Exception:
-            process.kill()
+        if process is not None:
+            try:
+                process.terminate()
+                process.wait(timeout=10)
+            except Exception:
+                process.kill()
         worker.cleanup()
 
 
@@ -210,16 +243,19 @@ def main() -> int:
     args = parser.parse_args()
 
     def train_fn():
-        run_training_once(
-            dict(wandb.config),
-            project=args.project,
-            entity=args.entity,
-            visible=args.visible,
-            poll_interval=args.poll_interval,
-            max_stale=args.max_stale,
-            timeout_minutes=args.timeout_minutes,
-            worker_id=args.worker_id,
-        )
+        try:
+            run_training_once(
+                dict(wandb.config),
+                project=args.project,
+                entity=args.entity,
+                visible=args.visible,
+                poll_interval=args.poll_interval,
+                max_stale=args.max_stale,
+                timeout_minutes=args.timeout_minutes,
+                worker_id=args.worker_id,
+            )
+        except Exception as exc:
+            print(f"❌ Sweep worker failed: {exc}")
 
     run_sweep_agent(args.sweep_id, args.project, train_fn, count=args.count)
     return 0
