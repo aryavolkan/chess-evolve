@@ -13,12 +13,12 @@ jobs:
 
       - name: Python lint (ruff)
         run: |
-          pip3 install --quiet ruff
+          pip3 install --quiet --break-system-packages ruff
           ruff check scripts/ train_wandb.py sweep_config.py || true
 
       - name: GDScript lint (gdlint)
         run: |
-          pip3 install --quiet gdtoolkit
+          pip3 install --quiet --break-system-packages gdtoolkit
           gdlint ai/*.gd chess/*.gd scenes/*.gd ui/*.gd benchmark_network.gd benchmark_network_sizes.gd || true
 
   python-tests:
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create venv and run pytest
+      - name: Run pytest
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet pytest
@@ -34,10 +34,12 @@ jobs:
 
   godot-tests:
     runs-on: [self-hosted, macos, arm64]
-    env:
-      GODOT_VERSION: "4.5"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build Rust GDExtension
+        run: cargo build
+        working-directory: rust/chess-native
 
       - name: Import assets (headless)
         run: /opt/homebrew/bin/godot --headless --editor --quit --path . || true
