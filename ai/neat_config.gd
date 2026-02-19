@@ -8,7 +8,7 @@ class_name NeatConfig
 # ============================================================
 
 var input_count: int = 389
-var output_count: int = 218
+var output_count: int = 128
 var use_bias: bool = false
 var allow_recurrent: bool = false
 

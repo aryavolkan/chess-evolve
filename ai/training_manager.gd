@@ -9,6 +9,7 @@ signal game_complete(white_idx: int, black_idx: int, result: int)
 
 const MetricsLogger = preload("res://ai/metrics_logger.gd")
 const ChessEvolutionScript = preload("res://ai/evolution.gd")
+const ChessNeatEvolutionScript = preload("res://ai/chess_neat_evolution.gd")
 const BoardStateScript = preload("res://chess/board_state.gd")
 const ChessEncoderScript = preload("res://chess/encoder.gd")
 const ChessFitnessScript = preload("res://ai/fitness.gd")
@@ -16,6 +17,7 @@ const GameRecorderScript = preload("res://ai/game_recorder.gd")
 const MinimaxPlayerScript = preload("res://ai/minimax_player.gd")
 
 var evolution
+var use_neat: bool = false
 var games_per_individual: int = 3  # Each individual plays N games per generation
 var max_moves_per_game: int = 150
 var current_games: Array = []  # Array of active GameState dicts
@@ -123,14 +125,19 @@ var _black_material_total: float = 0.0
 var _white_tournament_scores: Array = []
 var _black_tournament_scores: Array = []
 
-func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_metrics_path: String = "") -> void:
+func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_metrics_path: String = "", p_use_neat: bool = false) -> void:
 	if p_evolution:
 		evolution = p_evolution
+		use_neat = p_use_neat or p_evolution is ChessNeatEvolutionScript
 	else:
-		evolution = ChessEvolutionScript.new()
+		use_neat = p_use_neat
+		evolution = ChessNeatEvolutionScript.new() if use_neat else ChessEvolutionScript.new()
 	games_per_individual = p_games_per
 	max_moves_per_game = p_max_moves
 	metrics_logger = MetricsLogger.new(p_metrics_path)
+	
+	if use_neat:
+		use_rust_batch_sim = false
 	
 	# If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
 
@@ -624,7 +631,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	
 	print("Networks retrieved: white=%s, black=%s" % [white_net != null, black_net != null])
 
-	if use_rust_batch_sim and not use_minimax and ClassDB.class_exists(&"RustBatchSimulator"):
+	if use_rust_batch_sim and not use_neat and not use_minimax and ClassDB.class_exists(&"RustBatchSimulator"):
 		if _rust_batch_sim == null:
 			_rust_batch_sim = ClassDB.instantiate("RustBatchSimulator")
 		var w_weights: PackedFloat32Array = white_net.get_weights()

@@ -6,6 +6,9 @@ const BoardStateScript = preload("res://chess/board_state.gd")
 const BoardRenderer = preload("res://ui/board_renderer.gd")
 const Dashboard = preload("res://ui/training_dashboard.gd")
 const ChessEvolution = preload("res://ai/evolution.gd")
+const ChessNeatEvolution = preload("res://ai/chess_neat_evolution.gd")
+const NeatConfig = preload("res://ai/neat_config.gd")
+const NeatNetwork = preload("res://ai/neat_network.gd")
 const TrainingManager = preload("res://ai/training_manager.gd")
 const ChessEncoder = preload("res://chess/encoder.gd")
 const ReplayViewer = preload("res://ui/replay_viewer.gd")
@@ -43,18 +46,28 @@ func _ready() -> void:
 
 	# Initialize training with UI
 	var config := _load_config()
-	var evo := ChessEvolution.new(
-		config.get("population_size", 30),
-		config.get("input_size", 389),
-		config.get("hidden_size", 32),
-		config.get("output_size", 128),
-		config.get("elite_count", 3)
-	)
+	var use_neat: bool = config.get("use_neat", false)
+	var evo
+	if use_neat:
+		var neat_config := NeatConfig.new()
+		neat_config.population_size = config.get("population_size", 30)
+		neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
+		neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
+		evo = ChessNeatEvolution.new(neat_config)
+	else:
+		evo = ChessEvolution.new(
+			config.get("population_size", 30),
+			config.get("input_size", 389),
+			config.get("hidden_size", 32),
+			config.get("output_size", 128),
+			config.get("elite_count", 3)
+		)
 	training_manager = TrainingManager.new(
 		evo,
 		config.get("games_per_individual", 2),
 		config.get("max_moves_per_game", 100),
-		"" # Use default metrics path for UI mode
+		"", # Use default metrics path for UI mode
+		use_neat
 	)
 	
 	# Configure tournament settings
@@ -197,12 +210,17 @@ func _on_generation_complete(gen: int, _wb: float, _bb: float) -> void:
 
 func _play_showcase_game() -> void:
 	## Play a game between the best white and a random black, show on first board.
-	var evo: ChessEvolution = training_manager.evolution
-	if evo.all_time_best_white == null: return
+	var evo = training_manager.evolution
+	if evo.all_time_best_white == null:
+		return
 
 	var state := BoardStateScript.new()
 	state.setup_initial()
-	var white_net = evo.all_time_best_white
+	var white_net
+	if evo is ChessNeatEvolution:
+		white_net = NeatNetwork.from_genome(evo.all_time_best_white)
+	else:
+		white_net = evo.all_time_best_white
 	var black_net = evo.get_network(1, randi() % evo.population_size)
 
 	var moves_played := 0
@@ -315,21 +333,30 @@ func _run_auto_train() -> void:
 		print("Worker ID: %s" % worker_id)
 
 	var config := _load_config()
-	var evo := ChessEvolution.new(
-		config.get("population_size", 30),
-		config.get("input_size", 389),
-		config.get("hidden_size", 64),
-		config.get("output_size", 128),
-		config.get("elite_count", 3)
-	)
+	var use_neat: bool = config.get("use_neat", false)
+	var evo
+	if use_neat:
+		var neat_config := NeatConfig.new()
+		neat_config.population_size = config.get("population_size", 30)
+		neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
+		neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
+		evo = ChessNeatEvolution.new(neat_config)
+	else:
+		evo = ChessEvolution.new(
+			config.get("population_size", 30),
+			config.get("input_size", 389),
+			config.get("hidden_size", 64),
+			config.get("output_size", 128),
+			config.get("elite_count", 3)
+		)
 
-	# Set mutation params
-	if config.has("mutation_rate"):
-		evo.mutation_rate = config["mutation_rate"]
-	if config.has("mutation_strength"):
-		evo.mutation_strength = config["mutation_strength"]
-	if config.has("crossover_rate"):
-		evo.crossover_rate = config["crossover_rate"]
+		# Set mutation params
+		if config.has("mutation_rate"):
+			evo.mutation_rate = config["mutation_rate"]
+		if config.has("mutation_strength"):
+			evo.mutation_strength = config["mutation_strength"]
+		if config.has("crossover_rate"):
+			evo.crossover_rate = config["crossover_rate"]
 	
 	# Determine metrics path based on worker ID
 	var metrics_path := "user://metrics.json"
@@ -340,7 +367,8 @@ func _run_auto_train() -> void:
 		evo,
 		config.get("games_per_individual", 2),
 		config.get("max_moves_per_game", 100),
-		metrics_path
+		metrics_path,
+		use_neat
 	)
 	
 	# Configure minimax settings
@@ -362,10 +390,16 @@ func _run_auto_train() -> void:
 
 	var max_generations := int(config.get("max_generations", 100))
 
-	print("Config: pop=%d, hidden=%d, elite=%d, games_per=%d, max_gen=%d" % [
-		evo.population_size, evo.hidden_size, evo.elite_count,
-		training_manager.games_per_individual, max_generations
-	])
+	if use_neat:
+		print("Config: pop=%d, inputs=%d, outputs=%d, games_per=%d, max_gen=%d" % [
+			evo.population_size, ChessEncoder.INPUT_SIZE, ChessEncoder.MOVE_OUTPUT_SIZE,
+			training_manager.games_per_individual, max_generations
+		])
+	else:
+		print("Config: pop=%d, hidden=%d, elite=%d, games_per=%d, max_gen=%d" % [
+			evo.population_size, evo.hidden_size, evo.elite_count,
+			training_manager.games_per_individual, max_generations
+		])
 
 	# Run training loop
 	var total_games := 0
