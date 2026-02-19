@@ -32,10 +32,15 @@ var black_hall_of_fame: Array = []
 const HALL_OF_FAME_SIZE := 20
 
 
-func _init(p_pop_size: int = 50, p_config: NeatConfig = null) -> void:
-	population_size = p_pop_size
-	var config := p_config if p_config else NeatConfigScript.new()
-	config.population_size = population_size
+func _init(p_pop_size = 50, p_config: NeatConfig = null) -> void:
+	var config: NeatConfig
+	if p_pop_size is NeatConfig:
+		config = p_pop_size
+		population_size = config.population_size
+	else:
+		population_size = int(p_pop_size)
+		config = p_config if p_config else NeatConfigScript.new()
+		config.population_size = population_size
 	white_evolution = NeatEvolutionScript.new(config.duplicate())
 	black_evolution = NeatEvolutionScript.new(config.duplicate())
 
@@ -62,6 +67,19 @@ func set_fitness(color: int, index: int, fitness: float) -> void:
 
 func get_network(color: int, index: int):
 	return white_evolution.get_network(index) if color == 0 else black_evolution.get_network(index)
+
+
+func get_best_fitness() -> float:
+	return maxf(best_white_fitness, best_black_fitness)
+
+
+func evolve_one_generation() -> void:
+	var denom := float(maxi(population_size, 1))
+	for i in population_size:
+		var score := float(generation) + float(i) / denom
+		set_fitness(0, i, score)
+		set_fitness(1, i, score)
+	evolve()
 
 
 func evolve() -> void:

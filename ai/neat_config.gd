@@ -40,6 +40,7 @@ var disable_connection_rate: float = 0.01
 # ============================================================
 
 var population_size: int = 50
+var max_generations: int = 0
 var elite_fraction: float = 0.1
 var survival_fraction: float = 0.5
 var interspecies_crossover_rate: float = 0.001
@@ -91,6 +92,7 @@ func duplicate() -> NeatConfig:
 	copy.add_connection_rate = add_connection_rate
 	copy.disable_connection_rate = disable_connection_rate
 	copy.population_size = population_size
+	copy.max_generations = max_generations
 	copy.elite_fraction = elite_fraction
 	copy.survival_fraction = survival_fraction
 	copy.interspecies_crossover_rate = interspecies_crossover_rate

@@ -4,6 +4,7 @@ const NeatConfigScript = preload("res://ai/neat_config.gd")
 const NeatGenomeScript = preload("res://ai/neat_genome.gd")
 const NeatInnovationScript = preload("res://ai/neat_innovation.gd")
 const NeatSpeciesScript = preload("res://ai/neat_species.gd")
+const NeatEvolutionScript = preload("res://ai/neat_evolution.gd")
 const ChessNeatPlayerScript = preload("res://ai/chess_neat_player.gd")
 const ChessNeatEvolutionScript = preload("res://ai/chess_neat_evolution.gd")
 const BoardStateScript = preload("res://chess/board_state.gd")
@@ -139,4 +140,46 @@ func _run_tests() -> void:
 		assert_true(evo.has_hall_of_fame(0))
 		assert_true(evo.has_hall_of_fame(1))
 		assert_not_null(evo.get_hall_of_fame_opponent(0))
+	)
+
+	_test("neat config defaults reflect tuning", func():
+		var config := NeatConfigScript.new()
+		assert_eq(config.population_size, 50)
+		assert_eq(config.target_species_count, 4)
+	)
+
+	_test("species best fitness handles negatives", func():
+		var config := NeatConfigScript.new()
+		config.input_count = 2
+		config.output_count = 1
+		config.initial_connections_per_output = 1
+		var tracker := NeatInnovationScript.new(config.input_count + config.output_count)
+		var g1 := NeatGenomeScript.create(config, tracker)
+		g1.create_basic()
+		g1.fitness = -2.0
+		var g2 := NeatGenomeScript.create(config, tracker)
+		g2.create_basic()
+		g2.fitness = -1.0
+		var species := NeatSpeciesScript.new(0, g1)
+		species.add_member(g2)
+		species.update_best_fitness()
+		assert_eq(species.best_fitness, -1.0)
+	)
+
+	_test("fitness improves over generations with deterministic eval", func():
+		seed(12345)
+		var config := NeatConfigScript.new()
+		config.population_size = 6
+		config.input_count = 4
+		config.output_count = 2
+		config.initial_connections_per_output = 1
+		var evo := NeatEvolutionScript.new(config)
+		var bests: Array = []
+		for gen in range(3):
+			for i in config.population_size:
+				evo.set_fitness(i, float(gen) + float(i) * 0.001)
+			evo.evolve()
+			bests.append(evo.best_fitness)
+		assert_gt(bests[1], bests[0])
+		assert_gt(bests[2], bests[1])
 	)
