@@ -36,6 +36,14 @@ var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move 
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)
 
+# Opponent sampling bias configuration
+var use_fitness_weighted_sampling: bool = true
+var opponent_sampling_temperature: float = 1.0  # Higher => flatter distribution
+
+# Early termination (mercy rule)
+var mercy_min_moves: int = 20
+var mercy_material_threshold: float = 10.0  # End game if abs material diff exceeds this
+
 # Tournament configuration
 var use_tournament: bool = true  # Use tournament system instead of random opponents
 var tournament_mode: String = "round_robin"  # "round_robin" or "swiss"
@@ -416,15 +424,9 @@ func run_one_game_step() -> bool:
 				return true
 	else:
 		# Original random opponent selection
-		var use_hof := false
-		var b_idx: int = -1
-		
-		# Decide whether to use Hall of Fame opponent
-		if evolution.has_hall_of_fame(1) and randf() < hall_of_fame_ratio:
-			use_hof = true
-			b_idx = -1  # Special index for Hall of Fame
-		else:
-			b_idx = randi() % int(evolution.population_size)
+		var opp := _select_black_opponent(_current_white_idx)
+		var b_idx: int = opp["idx"]
+		var use_hof: bool = opp["use_hof"]
 		
 		var result = _play_game_with_hof(_current_white_idx, b_idx, use_hof)
 		_track_game_metrics(result)
@@ -455,15 +457,9 @@ func _run_all_games() -> int:
 	var games_played := 0
 	for w_idx in evolution.population_size:
 		for _g in games_per_individual:
-			var use_hof := false
-			var b_idx: int = -1
-			
-			# Decide whether to use Hall of Fame opponent
-			if evolution.has_hall_of_fame(1) and randf() < hall_of_fame_ratio:
-				use_hof = true
-				b_idx = -1  # Special index for Hall of Fame
-			else:
-				b_idx = randi() % int(evolution.population_size)
+			var opp := _select_black_opponent(w_idx)
+			var b_idx: int = opp["idx"]
+			var use_hof: bool = opp["use_hof"]
 			
 			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
 			_track_game_metrics(result)
@@ -471,6 +467,47 @@ func _run_all_games() -> int:
 			games_played += 1
 		
 	return games_played
+
+
+func _weighted_sample_index(fitness: PackedFloat32Array, target: float, temperature: float) -> int:
+	if fitness.is_empty():
+		return 0
+	var denom: float = maxf(0.001, temperature)
+	var total: float = 0.0
+	for i in fitness.size():
+		var diff: float = absf(fitness[i] - target)
+		var w: float = 1.0 / (1.0 + (diff / denom))
+		total += w
+	if total <= 0.0:
+		return randi() % fitness.size()
+	var r: float = randf() * total
+	var acc: float = 0.0
+	for i in fitness.size():
+		var diff: float = absf(fitness[i] - target)
+		var w: float = 1.0 / (1.0 + (diff / denom))
+		acc += w
+		if r <= acc:
+			return i
+	return fitness.size() - 1
+
+
+func _select_black_opponent(white_idx: int) -> Dictionary:
+	var use_hof := false
+	var b_idx: int = -1
+	
+	if evolution.has_hall_of_fame(1) and randf() < hall_of_fame_ratio:
+		use_hof = true
+		b_idx = -1
+	else:
+		if use_fitness_weighted_sampling and evolution.black_fitness.size() == evolution.population_size:
+			var target := 0.0
+			if evolution.white_fitness.size() == evolution.population_size:
+				target = evolution.white_fitness[white_idx]
+			b_idx = _weighted_sample_index(evolution.black_fitness, target, opponent_sampling_temperature)
+		else:
+			b_idx = randi() % int(evolution.population_size)
+	
+	return {"idx": b_idx, "use_hof": use_hof}
 
 
 func _play_game_with_hof(white_idx: int, black_idx: int, idx_is_hof: bool = false):
@@ -567,6 +604,14 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		
 		state.make_move(chosen)
 		move_count += 1
+
+		# Early termination (mercy rule) to save compute
+		if move_count >= mercy_min_moves:
+			var material_diff := state.material_score(0) - state.material_score(1)
+			if absf(material_diff) >= mercy_material_threshold:
+				state.is_game_over = true
+				state.result = 1 if material_diff > 0.0 else -1
+				break
 
 		# Record every move for replay
 		if recorder:
