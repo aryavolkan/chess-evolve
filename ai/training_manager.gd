@@ -94,7 +94,7 @@ var encoder_cache_max: int = 5000
 var _encoder_cache: Dictionary = {}
 
 # Rust batch simulation (optional)
-var use_rust_batch_sim: bool = false
+var use_rust_batch_sim: bool = true
 var _rust_batch_sim = null
 
 # Tournament configuration
