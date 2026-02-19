@@ -13,6 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Build Rust GDExtension (required for artifact tests)
+        run: cargo build --release
+        working-directory: rust/chess-native
+
       - name: Install Python tooling
         run: pip3 install --quiet --break-system-packages pytest ruff
 
