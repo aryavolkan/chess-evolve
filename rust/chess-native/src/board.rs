@@ -118,6 +118,7 @@ pub struct BitBoard(pub u64);
 #[derive(Clone, Copy)]
 pub struct ChessBoard {
     pub bb: [BitBoard; 12],
+    pub pieces: [i8; 64],
     pub side_to_move: u8,
     pub castling_rights: u8,
     pub en_passant_sq: i8,
@@ -140,21 +141,54 @@ impl ChessBoard {
         let b_queens = 0x0800_0000_0000_0000u64;
         let b_king = 0x1000_0000_0000_0000u64;
 
+        let bb = [
+            BitBoard(w_pawns),
+            BitBoard(w_knights),
+            BitBoard(w_bishops),
+            BitBoard(w_rooks),
+            BitBoard(w_queens),
+            BitBoard(w_king),
+            BitBoard(b_pawns),
+            BitBoard(b_knights),
+            BitBoard(b_bishops),
+            BitBoard(b_rooks),
+            BitBoard(b_queens),
+            BitBoard(b_king),
+        ];
+
+        let mut pieces = [PIECE_NONE; 64];
+        for sq in 0..64 {
+            let mask = 1u64 << sq;
+            if bb[0].0 & mask != 0 {
+                pieces[sq] = PIECE_PAWN;
+            } else if bb[1].0 & mask != 0 {
+                pieces[sq] = PIECE_KNIGHT;
+            } else if bb[2].0 & mask != 0 {
+                pieces[sq] = PIECE_BISHOP;
+            } else if bb[3].0 & mask != 0 {
+                pieces[sq] = PIECE_ROOK;
+            } else if bb[4].0 & mask != 0 {
+                pieces[sq] = PIECE_QUEEN;
+            } else if bb[5].0 & mask != 0 {
+                pieces[sq] = PIECE_KING;
+            } else if bb[6].0 & mask != 0 {
+                pieces[sq] = -PIECE_PAWN;
+            } else if bb[7].0 & mask != 0 {
+                pieces[sq] = -PIECE_KNIGHT;
+            } else if bb[8].0 & mask != 0 {
+                pieces[sq] = -PIECE_BISHOP;
+            } else if bb[9].0 & mask != 0 {
+                pieces[sq] = -PIECE_ROOK;
+            } else if bb[10].0 & mask != 0 {
+                pieces[sq] = -PIECE_QUEEN;
+            } else if bb[11].0 & mask != 0 {
+                pieces[sq] = -PIECE_KING;
+            }
+        }
+
         ChessBoard {
-            bb: [
-                BitBoard(w_pawns),
-                BitBoard(w_knights),
-                BitBoard(w_bishops),
-                BitBoard(w_rooks),
-                BitBoard(w_queens),
-                BitBoard(w_king),
-                BitBoard(b_pawns),
-                BitBoard(b_knights),
-                BitBoard(b_bishops),
-                BitBoard(b_rooks),
-                BitBoard(b_queens),
-                BitBoard(b_king),
-            ],
+            bb,
+            pieces,
             side_to_move: 0,
             castling_rights: 0b1111,
             en_passant_sq: -1,
@@ -163,15 +197,17 @@ impl ChessBoard {
     }
 
     pub fn get_legal_moves(&self) -> Vec<u32> {
-        let pseudo = self.generate_pseudo_legal_moves();
-        pseudo
-            .into_iter()
-            .filter(|&mv| {
-                let mut copy = *self;
-                copy.make_move_unchecked(mv);
-                !copy.is_in_check(1 - copy.side_to_move)
-            })
-            .collect()
+        let mut pseudo = Vec::with_capacity(256);
+        self.generate_pseudo_legal_moves_into(&mut pseudo);
+        let mut legal = Vec::with_capacity(pseudo.len());
+        for mv in pseudo {
+            let mut copy = *self;
+            copy.make_move_unchecked(mv);
+            if !copy.is_in_check(1 - copy.side_to_move) {
+                legal.push(mv);
+            }
+        }
+        legal
     }
 
     pub fn make_move(&self, mv: u32) -> Self {
@@ -288,7 +324,13 @@ impl ChessBoard {
     }
 
     fn generate_pseudo_legal_moves(&self) -> Vec<u32> {
-        let mut moves = Vec::new();
+        let mut moves = Vec::with_capacity(256);
+        self.generate_pseudo_legal_moves_into(&mut moves);
+        moves
+    }
+
+    fn generate_pseudo_legal_moves_into(&self, moves: &mut Vec<u32>) {
+        moves.clear();
         let white_occ = self.white_occ();
         let black_occ = self.black_occ();
         let all_occ = white_occ | black_occ;
@@ -304,24 +346,22 @@ impl ChessBoard {
         };
 
         if self.side_to_move == 0 {
-            self.add_pawn_moves(self.bb[0].0, 0, friendly_occ, enemy_occ, &mut moves);
-            self.add_knight_moves(self.bb[1].0, friendly_occ, &mut moves);
-            self.add_slider_moves(self.bb[2].0, all_occ, friendly_occ, &mut moves, true);
-            self.add_slider_moves(self.bb[3].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, &mut moves, true);
-            self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_king_moves(self.bb[5].0, friendly_occ, enemy_occ, all_occ, &mut moves);
+            self.add_pawn_moves(self.bb[0].0, 0, friendly_occ, enemy_occ, moves);
+            self.add_knight_moves(self.bb[1].0, friendly_occ, moves);
+            self.add_slider_moves(self.bb[2].0, all_occ, friendly_occ, moves, true);
+            self.add_slider_moves(self.bb[3].0, all_occ, friendly_occ, moves, false);
+            self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, moves, true);
+            self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, moves, false);
+            self.add_king_moves(self.bb[5].0, friendly_occ, enemy_occ, all_occ, moves);
         } else {
-            self.add_pawn_moves(self.bb[6].0, 1, friendly_occ, enemy_occ, &mut moves);
-            self.add_knight_moves(self.bb[7].0, friendly_occ, &mut moves);
-            self.add_slider_moves(self.bb[8].0, all_occ, friendly_occ, &mut moves, true);
-            self.add_slider_moves(self.bb[9].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, &mut moves, true);
-            self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_king_moves(self.bb[11].0, friendly_occ, enemy_occ, all_occ, &mut moves);
+            self.add_pawn_moves(self.bb[6].0, 1, friendly_occ, enemy_occ, moves);
+            self.add_knight_moves(self.bb[7].0, friendly_occ, moves);
+            self.add_slider_moves(self.bb[8].0, all_occ, friendly_occ, moves, true);
+            self.add_slider_moves(self.bb[9].0, all_occ, friendly_occ, moves, false);
+            self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, moves, true);
+            self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, moves, false);
+            self.add_king_moves(self.bb[11].0, friendly_occ, enemy_occ, all_occ, moves);
         }
-
-        moves
     }
 
     fn add_pawn_moves(
@@ -573,48 +613,12 @@ impl ChessBoard {
     }
 
     fn piece_at(&self, sq: usize) -> i8 {
-        let mask = 1u64 << sq;
-        if self.bb[0].0 & mask != 0 {
-            return PIECE_PAWN;
-        }
-        if self.bb[1].0 & mask != 0 {
-            return PIECE_KNIGHT;
-        }
-        if self.bb[2].0 & mask != 0 {
-            return PIECE_BISHOP;
-        }
-        if self.bb[3].0 & mask != 0 {
-            return PIECE_ROOK;
-        }
-        if self.bb[4].0 & mask != 0 {
-            return PIECE_QUEEN;
-        }
-        if self.bb[5].0 & mask != 0 {
-            return PIECE_KING;
-        }
-        if self.bb[6].0 & mask != 0 {
-            return -PIECE_PAWN;
-        }
-        if self.bb[7].0 & mask != 0 {
-            return -PIECE_KNIGHT;
-        }
-        if self.bb[8].0 & mask != 0 {
-            return -PIECE_BISHOP;
-        }
-        if self.bb[9].0 & mask != 0 {
-            return -PIECE_ROOK;
-        }
-        if self.bb[10].0 & mask != 0 {
-            return -PIECE_QUEEN;
-        }
-        if self.bb[11].0 & mask != 0 {
-            return -PIECE_KING;
-        }
-        PIECE_NONE
+        self.pieces[sq]
     }
 
     fn set_piece_at(&mut self, sq: usize, piece: i8) {
         let mask = 1u64 << sq;
+        self.pieces[sq] = piece;
         match piece {
             PIECE_PAWN => self.bb[0].0 |= mask,
             PIECE_KNIGHT => self.bb[1].0 |= mask,
@@ -637,6 +641,7 @@ impl ChessBoard {
             return;
         }
         let mask = !(1u64 << sq);
+        self.pieces[sq] = PIECE_NONE;
         match piece {
             PIECE_PAWN => self.bb[0].0 &= mask,
             PIECE_KNIGHT => self.bb[1].0 &= mask,
@@ -773,6 +778,7 @@ mod tests {
     fn in_check_filters_illegal_moves() {
         let mut board = ChessBoard {
             bb: [BitBoard(0); 12],
+            pieces: [PIECE_NONE; 64],
             side_to_move: 0,
             castling_rights: 0,
             en_passant_sq: -1,

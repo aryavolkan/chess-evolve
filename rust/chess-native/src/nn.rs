@@ -29,9 +29,9 @@ impl DenseNetwork {
         }
     }
 
-    pub fn forward(&self, inputs: &[f32]) -> Vec<f32> {
-        let mut hidden = vec![0.0f32; self.hidden_size];
-        let mut output = vec![0.0f32; self.output_size];
+    pub fn forward_into(&self, inputs: &[f32], hidden: &mut [f32], output: &mut [f32]) {
+        debug_assert_eq!(hidden.len(), self.hidden_size);
+        debug_assert_eq!(output.len(), self.output_size);
 
         for h in 0..self.hidden_size {
             let mut sum = self.biases_h[h];
@@ -50,7 +50,12 @@ impl DenseNetwork {
             }
             output[o] = sum.tanh();
         }
+    }
 
+    pub fn forward(&self, inputs: &[f32]) -> Vec<f32> {
+        let mut hidden = vec![0.0f32; self.hidden_size];
+        let mut output = vec![0.0f32; self.output_size];
+        self.forward_into(inputs, &mut hidden, &mut output);
         output
     }
 }

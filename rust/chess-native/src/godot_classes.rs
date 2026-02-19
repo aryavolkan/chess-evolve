@@ -57,6 +57,8 @@ impl RustChessBoard {
 #[class(base=RefCounted)]
 pub struct RustDenseNetwork {
     net: DenseNetwork,
+    scratch_hidden: Vec<f32>,
+    scratch_output: Vec<f32>,
     base: Base<RefCounted>,
 }
 
@@ -73,6 +75,8 @@ impl IRefCounted for RustDenseNetwork {
                 Vec::new(),
                 Vec::new(),
             ),
+            scratch_hidden: Vec::new(),
+            scratch_output: Vec::new(),
             base,
         }
     }
@@ -94,6 +98,8 @@ impl RustDenseNetwork {
             vec![0.0; hidden_size * output_size],
             vec![0.0; output_size],
         );
+        self.scratch_hidden.resize(hidden_size, 0.0);
+        self.scratch_output.resize(output_size, 0.0);
     }
 
     #[func]
@@ -111,13 +117,20 @@ impl RustDenseNetwork {
     }
 
     #[func]
-    pub fn forward(&self, inputs: PackedFloat32Array) -> PackedFloat32Array {
-        let input_vec: Vec<f32> = inputs.to_vec();
-        let out = self.net.forward(&input_vec);
-        let mut arr = PackedFloat32Array::new();
-        for v in out {
-            arr.push(v);
+    pub fn forward(&mut self, inputs: PackedFloat32Array) -> PackedFloat32Array {
+        if self.scratch_hidden.len() != self.net.hidden_size {
+            self.scratch_hidden.resize(self.net.hidden_size, 0.0);
         }
-        arr
+        if self.scratch_output.len() != self.net.output_size {
+            self.scratch_output.resize(self.net.output_size, 0.0);
+        }
+
+        self.net.forward_into(
+            inputs.as_slice(),
+            &mut self.scratch_hidden,
+            &mut self.scratch_output,
+        );
+
+        self.scratch_output.iter().cloned().collect()
     }
 }
