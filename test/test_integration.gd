@@ -210,6 +210,7 @@ func _run_tests() -> void:
 		var tm = TrainingManagerScript.new(evo, 1, 30)
 		tm.use_minimax = false
 		tm.use_tournament = false
+		tm.use_rust_batch_sim = false
 		tm.run_generation()
 		assert_not_null(tm.last_game_state, "last_game_state should be set")
 		assert_gt(tm.last_game_history.size(), 0.0, "last_game_history should have entries")
