@@ -20,7 +20,7 @@ var compatibility_threshold: float = 3.0
 var c1_excess: float = 1.0
 var c2_disjoint: float = 1.0
 var c3_weight_diff: float = 0.4
-var target_species_count: int = 8
+var target_species_count: int = 4
 var threshold_step: float = 0.3
 
 # ============================================================
@@ -39,7 +39,7 @@ var disable_connection_rate: float = 0.01
 # REPRODUCTION
 # ============================================================
 
-var population_size: int = 100
+var population_size: int = 50
 var elite_fraction: float = 0.1
 var survival_fraction: float = 0.5
 var interspecies_crossover_rate: float = 0.001

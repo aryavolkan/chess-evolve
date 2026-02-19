@@ -40,7 +40,7 @@ func calculate_adjusted_fitness() -> void:
 
 
 func update_best_fitness() -> void:
-	var current_best: float = 0.0
+	var current_best: float = -INF
 	for genome in members:
 		current_best = maxf(current_best, genome.fitness)
 
