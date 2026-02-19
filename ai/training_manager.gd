@@ -93,10 +93,9 @@ var use_encoder_cache: bool = true
 var encoder_cache_max: int = 5000
 var _encoder_cache: Dictionary = {}
 
-# Encoder output cache (position -> outputs)
-var use_encoder_cache: bool = true
-var encoder_cache_max: int = 5000
-var _encoder_cache: Dictionary = {}
+# Rust batch simulation (optional)
+var use_rust_batch_sim: bool = false
+var _rust_batch_sim = null
 
 # Tournament configuration
 var use_tournament: bool = true  # Use tournament system instead of random opponents
@@ -550,7 +549,7 @@ func _weighted_sample_index(fitness: PackedFloat32Array, target: float, temperat
 func _apply_curriculum() -> void:
 	if not use_curriculum:
 		return
-	var gen := evolution.generation
+	var gen: int = evolution.generation
 	for stage in curriculum_stages:
 		if gen >= stage["min_gen"] and gen <= stage["max_gen"]:
 			max_moves_per_game = stage["max_moves"]
@@ -624,6 +623,62 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		black_net = evolution.get_network(1, black_idx)
 	
 	print("Networks retrieved: white=%s, black=%s" % [white_net != null, black_net != null])
+
+	if use_rust_batch_sim and not use_minimax and ClassDB.class_exists(&"RustBatchSimulator"):
+		if _rust_batch_sim == null:
+			_rust_batch_sim = ClassDB.instantiate("RustBatchSimulator")
+		var w_weights: PackedFloat32Array = white_net.get_weights()
+		var b_weights: PackedFloat32Array = black_net.get_weights()
+		var stats: Dictionary = _rust_batch_sim.simulate_game(
+			w_weights,
+			b_weights,
+			white_net.input_size,
+			white_net.hidden_size,
+			white_net.output_size,
+			max_moves_per_game
+		)
+		var result_val: int = stats.get("result", 2)
+		var moves_val: int = stats.get("move_count", 0)
+		var w_fitness: float = ChessFitnessScript.evaluate_from_metrics(
+			result_val,
+			0,
+			moves_val,
+			stats.get("white_material", 0.0),
+			stats.get("black_material", 0.0),
+			stats.get("white_mobility", 0.0),
+			stats.get("white_king_safety", 0.0),
+			true
+		)
+		var b_fitness: float = ChessFitnessScript.evaluate_from_metrics(
+			result_val,
+			1,
+			moves_val,
+			stats.get("black_material", 0.0),
+			stats.get("white_material", 0.0),
+			stats.get("black_mobility", 0.0),
+			stats.get("black_king_safety", 0.0),
+			true
+		)
+		if not white_is_hof:
+			var w_prev: float = evolution.white_fitness[white_idx]
+			if use_tournament:
+				evolution.set_fitness(0, white_idx, w_prev + w_fitness)
+			else:
+				evolution.set_fitness(0, white_idx, w_prev + w_fitness / games_per_individual)
+		if not black_is_hof:
+			var b_prev: float = evolution.black_fitness[black_idx]
+			if use_tournament:
+				evolution.set_fitness(1, black_idx, b_prev + b_fitness)
+			else:
+				evolution.set_fitness(1, black_idx, b_prev + b_fitness / games_per_individual)
+		return {
+			"state": null,
+			"result": result_val,
+			"move_count": moves_val,
+			"material_score": null,
+			"king_safety_score": null,
+			"is_game_over": true
+		}
 	
 	# Create minimax players if enabled
 	var white_player = null

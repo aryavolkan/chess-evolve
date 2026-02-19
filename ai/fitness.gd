@@ -57,3 +57,31 @@ static func evaluate(state, color: int, move_count: int) -> float:
 	fitness += move_count * move_count_bonus
 
 	return maxf(fitness, 0.0)
+
+
+static func evaluate_from_metrics(
+		result: int,
+		color: int,
+		move_count: int,
+		my_material: float,
+		opp_material: float,
+		my_mobility: float,
+		my_king_safety: float,
+		is_game_over: bool = true
+	) -> float:
+	var fitness := 0.0
+	if is_game_over:
+		if result == 2:
+			fitness += draw_bonus
+		elif (result == 1 and color == 0) or (result == -1 and color == 1):
+			fitness += win_bonus
+			fitness += checkmate_bonus
+		else:
+			fitness += loss_penalty
+
+	fitness += (my_material - opp_material) * material_weight
+	if not is_game_over:
+		fitness += my_mobility * mobility_weight
+	fitness += my_king_safety * king_safety_weight
+	fitness += move_count * move_count_bonus
+	return maxf(fitness, 0.0)

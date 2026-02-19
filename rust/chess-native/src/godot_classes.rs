@@ -62,6 +62,12 @@ pub struct RustDenseNetwork {
     base: Base<RefCounted>,
 }
 
+#[derive(GodotClass)]
+#[class(base=RefCounted)]
+pub struct RustBatchSimulator {
+    base: Base<RefCounted>,
+}
+
 #[godot_api]
 impl IRefCounted for RustDenseNetwork {
     fn init(base: Base<RefCounted>) -> Self {
@@ -133,4 +139,222 @@ impl RustDenseNetwork {
 
         self.scratch_output.iter().cloned().collect()
     }
+}
+
+#[godot_api]
+impl IRefCounted for RustBatchSimulator {
+    fn init(base: Base<RefCounted>) -> Self {
+        Self { base }
+    }
+}
+
+#[godot_api]
+impl RustBatchSimulator {
+    #[func]
+    pub fn simulate_game(
+        &self,
+        white_weights: PackedFloat32Array,
+        black_weights: PackedFloat32Array,
+        input_size: i32,
+        hidden_size: i32,
+        output_size: i32,
+        max_moves: i32,
+    ) -> Dictionary<Variant, Variant> {
+        let input_size = input_size as usize;
+        let hidden_size = hidden_size as usize;
+        let output_size = output_size as usize;
+        let max_moves = max_moves as usize;
+
+        let white = dense_from_flat_weights(
+            input_size,
+            hidden_size,
+            output_size,
+            white_weights.as_slice(),
+        );
+        let black = dense_from_flat_weights(
+            input_size,
+            hidden_size,
+            output_size,
+            black_weights.as_slice(),
+        );
+
+        let mut board = ChessBoard::startpos();
+        let mut move_count = 0usize;
+        let mut result: i32 = 2; // default draw
+
+        let mut hidden = vec![0.0f32; hidden_size];
+        let mut output = vec![0.0f32; output_size];
+        let mut inputs = vec![0.0f32; 6 * 64 + 1 + 4];
+
+        while move_count < max_moves {
+            let legal_moves = board.get_legal_moves();
+            if legal_moves.is_empty() {
+                if board.is_in_check(board.side_to_move) {
+                    result = if board.side_to_move == 0 { -1 } else { 1 };
+                } else {
+                    result = 2;
+                }
+                break;
+            }
+
+            encode_board(&board, &mut inputs);
+            let net = if board.side_to_move == 0 { &white } else { &black };
+            net.forward_into(&inputs, &mut hidden, &mut output);
+            let chosen = decode_move(&output, &legal_moves);
+            board = board.make_move(chosen);
+            move_count += 1;
+
+            if board.halfmove_clock >= 100 {
+                result = 2;
+                break;
+            }
+        }
+
+        let white_material = material_score(&board, 0);
+        let black_material = material_score(&board, 1);
+        let white_mobility = mobility_score(&board, 0);
+        let black_mobility = mobility_score(&board, 1);
+        let white_king_safety = king_safety_score(&board, 0);
+        let black_king_safety = king_safety_score(&board, 1);
+
+        let mut dict = Dictionary::new();
+        let _ = dict.insert("result", result);
+        let _ = dict.insert("move_count", move_count as i32);
+        let _ = dict.insert("white_material", white_material);
+        let _ = dict.insert("black_material", black_material);
+        let _ = dict.insert("white_mobility", white_mobility);
+        let _ = dict.insert("black_mobility", black_mobility);
+        let _ = dict.insert("white_king_safety", white_king_safety);
+        let _ = dict.insert("black_king_safety", black_king_safety);
+        dict
+    }
+}
+
+fn dense_from_flat_weights(
+    input_size: usize,
+    hidden_size: usize,
+    output_size: usize,
+    weights: &[f32],
+) -> DenseNetwork {
+    let ih = input_size * hidden_size;
+    let bh = hidden_size;
+    let ho = hidden_size * output_size;
+    let bo = output_size;
+    let total = ih + bh + ho + bo;
+    let buf = vec![0.0f32; total];
+    let src = if weights.len() >= total { weights } else { &buf };
+    let mut cursor = 0usize;
+    let weights_ih = take_from(src, &mut cursor, ih);
+    let biases_h = take_from(src, &mut cursor, bh);
+    let weights_ho = take_from(src, &mut cursor, ho);
+    let biases_o = take_from(src, &mut cursor, bo);
+    DenseNetwork::from_weights(
+        input_size,
+        hidden_size,
+        output_size,
+        weights_ih,
+        biases_h,
+        weights_ho,
+        biases_o,
+    )
+}
+
+fn take_from(src: &[f32], cursor: &mut usize, n: usize) -> Vec<f32> {
+    let slice = &src[*cursor..*cursor + n];
+    *cursor += n;
+    slice.to_vec()
+}
+
+fn encode_board(board: &ChessBoard, out: &mut [f32]) {
+    out.fill(0.0);
+    let mut idx = 0usize;
+    for piece_type in 1..=6 {
+        for sq in 0..64 {
+            let p = board.piece_at(sq);
+            if p.abs() == piece_type as i8 {
+                out[idx] = if p > 0 { 1.0 } else { -1.0 };
+            }
+            idx += 1;
+        }
+    }
+    out[idx] = if board.side_to_move == 0 { 0.0 } else { 1.0 };
+    idx += 1;
+    out[idx] = if board.castling_rights & 0b0001 != 0 { 1.0 } else { 0.0 };
+    idx += 1;
+    out[idx] = if board.castling_rights & 0b0010 != 0 { 1.0 } else { 0.0 };
+    idx += 1;
+    out[idx] = if board.castling_rights & 0b0100 != 0 { 1.0 } else { 0.0 };
+    idx += 1;
+    out[idx] = if board.castling_rights & 0b1000 != 0 { 1.0 } else { 0.0 };
+}
+
+fn decode_move(outputs: &[f32], legal_moves: &[u32]) -> u32 {
+    let mut best = legal_moves[0];
+    let mut best_score = f32::NEG_INFINITY;
+    for &mv in legal_moves {
+        let from = ((mv >> 6) & 0x3f) as usize;
+        let to = (mv & 0x3f) as usize;
+        let from_score = if from < outputs.len() { outputs[from] } else { 0.0 };
+        let to_score = if 64 + to < outputs.len() { outputs[64 + to] } else { 0.0 };
+        let score = from_score + to_score;
+        if score > best_score {
+            best_score = score;
+            best = mv;
+        }
+    }
+    best
+}
+
+fn material_score(board: &ChessBoard, color: u8) -> f32 {
+    let values: [f32; 7] = [0.0, 1.0, 3.0, 3.25, 5.0, 9.0, 0.0];
+    let mut total = 0.0;
+    for sq in 0..64 {
+        let p = board.piece_at(sq);
+        if p == 0 {
+            continue;
+        }
+        let is_white = p > 0;
+        if (color == 0 && is_white) || (color == 1 && !is_white) {
+            total += values[p.abs() as usize];
+        }
+    }
+    total
+}
+
+fn mobility_score(board: &ChessBoard, color: u8) -> i32 {
+    let mut copy = *board;
+    copy.side_to_move = color;
+    copy.get_legal_moves().len() as i32
+}
+
+fn king_safety_score(board: &ChessBoard, color: u8) -> f32 {
+    let king_piece = if color == 0 { 6 } else { -6 };
+    let mut king_sq: i32 = -1;
+    for sq in 0..64 {
+        if board.piece_at(sq) == king_piece {
+            king_sq = sq as i32;
+            break;
+        }
+    }
+    if king_sq < 0 {
+        return 0.0;
+    }
+    let kf = (king_sq % 8) as i32;
+    let kr = (king_sq / 8) as i32;
+    let pawn_piece = if color == 0 { 1 } else { -1 };
+    let mut safety = 0.0;
+    for df in -1..=1 {
+        for dr in -1..=1 {
+            let nf = kf + df;
+            let nr = kr + dr;
+            if nf < 0 || nf > 7 || nr < 0 || nr > 7 {
+                continue;
+            }
+            let sq = (nr * 8 + nf) as usize;
+            if board.piece_at(sq) == pawn_piece {
+                safety += 1.0;
+            }
+        }
+    }
+    safety
 }

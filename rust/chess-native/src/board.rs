@@ -612,7 +612,7 @@ impl ChessBoard {
         self.bb[6].0 | self.bb[7].0 | self.bb[8].0 | self.bb[9].0 | self.bb[10].0 | self.bb[11].0
     }
 
-    fn piece_at(&self, sq: usize) -> i8 {
+    pub fn piece_at(&self, sq: usize) -> i8 {
         self.pieces[sq]
     }
 
