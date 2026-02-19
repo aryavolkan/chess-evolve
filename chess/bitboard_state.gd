@@ -455,19 +455,20 @@ func _black_occ() -> int:
 
 func _piece_at(sq: int) -> int:
 	var mask := 1 << sq
-	if bb_w_pawns & mask: return Piece.PAWN
-	if bb_w_knights & mask: return Piece.KNIGHT
-	if bb_w_bishops & mask: return Piece.BISHOP
-	if bb_w_rooks & mask: return Piece.ROOK
-	if bb_w_queens & mask: return Piece.QUEEN
-	if bb_w_king & mask: return Piece.KING
-	if bb_b_pawns & mask: return -Piece.PAWN
-	if bb_b_knights & mask: return -Piece.KNIGHT
-	if bb_b_bishops & mask: return -Piece.BISHOP
-	if bb_b_rooks & mask: return -Piece.ROOK
-	if bb_b_queens & mask: return -Piece.QUEEN
-	if bb_b_king & mask: return -Piece.KING
-	return 0
+	var piece := 0
+	if bb_w_pawns & mask: piece = Piece.PAWN
+	elif bb_w_knights & mask: piece = Piece.KNIGHT
+	elif bb_w_bishops & mask: piece = Piece.BISHOP
+	elif bb_w_rooks & mask: piece = Piece.ROOK
+	elif bb_w_queens & mask: piece = Piece.QUEEN
+	elif bb_w_king & mask: piece = Piece.KING
+	elif bb_b_pawns & mask: piece = -Piece.PAWN
+	elif bb_b_knights & mask: piece = -Piece.KNIGHT
+	elif bb_b_bishops & mask: piece = -Piece.BISHOP
+	elif bb_b_rooks & mask: piece = -Piece.ROOK
+	elif bb_b_queens & mask: piece = -Piece.QUEEN
+	elif bb_b_king & mask: piece = -Piece.KING
+	return piece
 
 
 func _set_piece_at(sq: int, piece: int) -> void:

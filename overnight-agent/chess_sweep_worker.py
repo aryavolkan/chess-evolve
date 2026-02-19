@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
-import json
 
 sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
 import wandb  # noqa: E402
@@ -81,9 +80,9 @@ def poll_metrics_with_timeout(
     max_generations: int,
     poll_interval: float,
     max_stale: int,
-    timeout_minutes: Optional[float],
-    log_keys: Optional[list[str]] = None,
-) -> tuple[Optional[dict], str]:
+    timeout_minutes: float | None,
+    log_keys: list[str] | None = None,
+) -> tuple[dict | None, str]:
     """Tail metrics.jsonl with a hard timeout.
 
     Returns (final_metrics, status) where status is one of:
@@ -151,12 +150,12 @@ def poll_metrics_with_timeout(
 def run_training_once(
     config: dict,
     project: str,
-    entity: Optional[str],
+    entity: str | None,
     visible: bool,
     poll_interval: float,
     max_stale: int,
-    timeout_minutes: Optional[float],
-    worker_id: Optional[str] = None,
+    timeout_minutes: float | None,
+    worker_id: str | None = None,
 ) -> None:
     merged = DEFAULT_CONFIG.copy()
     merged.update(config or {})
