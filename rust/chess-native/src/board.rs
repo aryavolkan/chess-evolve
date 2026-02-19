@@ -730,3 +730,83 @@ fn bit_at(bb: u64, sq: usize) -> u8 {
         0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sq(file: char, rank: u8) -> u32 {
+        let file_idx = (file as u8 - b'a') as u32;
+        let rank_idx = (rank - 1) as u32;
+        rank_idx * 8 + file_idx
+    }
+
+    fn perft(board: &ChessBoard, depth: u32) -> u64 {
+        if depth == 0 {
+            return 1;
+        }
+        let moves = board.get_legal_moves();
+        let mut nodes = 0u64;
+        for mv in moves {
+            let next = board.make_move(mv);
+            nodes += perft(&next, depth - 1);
+        }
+        nodes
+    }
+
+    #[test]
+    fn startpos_has_20_moves_and_perft() {
+        let board = ChessBoard::startpos();
+        let moves = board.get_legal_moves();
+        assert_eq!(moves.len(), 20);
+        assert!(moves.contains(&encode_move(sq('e', 2), sq('e', 4), 0)));
+        assert_eq!(perft(&board, 1), 20);
+        assert_eq!(perft(&board, 2), 400);
+    }
+
+    #[test]
+    fn en_passant_is_generated() {
+        let mut board = ChessBoard::startpos();
+        board = board.make_move(encode_move(sq('e', 2), sq('e', 4), 0));
+        board = board.make_move(encode_move(sq('a', 7), sq('a', 6), 0));
+        board = board.make_move(encode_move(sq('e', 4), sq('e', 5), 0));
+        board = board.make_move(encode_move(sq('d', 7), sq('d', 5), 0));
+        let moves = board.get_legal_moves();
+        let ep_move = encode_move(sq('e', 5), sq('d', 6), MOVE_FLAG_EN_PASSANT);
+        assert!(moves.contains(&ep_move));
+    }
+
+    #[test]
+    fn castling_available_when_clear() {
+        let mut board = ChessBoard::startpos();
+        board = board.make_move(encode_move(sq('e', 2), sq('e', 4), 0));
+        board = board.make_move(encode_move(sq('a', 7), sq('a', 6), 0));
+        board = board.make_move(encode_move(sq('g', 1), sq('f', 3), 0));
+        board = board.make_move(encode_move(sq('a', 6), sq('a', 5), 0));
+        board = board.make_move(encode_move(sq('f', 1), sq('e', 2), 0));
+        board = board.make_move(encode_move(sq('a', 5), sq('a', 4), 0));
+        let moves = board.get_legal_moves();
+        assert!(moves.contains(&encode_move(4, 6, 0)));
+    }
+
+    #[test]
+    fn in_check_filters_illegal_moves() {
+        let mut board = ChessBoard {
+            bb: [BitBoard(0); 12],
+            side_to_move: 0,
+            castling_rights: 0,
+            en_passant_sq: -1,
+            halfmove_clock: 0,
+        };
+        board.set_piece_at(4, PIECE_KING);
+        board.set_piece_at(0, PIECE_ROOK);
+        board.set_piece_at(60, -PIECE_ROOK);
+        board.set_piece_at(56, -PIECE_KING);
+        assert!(board.is_in_check(0));
+        let moves = board.get_legal_moves();
+        for mv in moves {
+            let from = ((mv >> 6) & 0x3f) as usize;
+            assert_ne!(from, 0);
+        }
+    }
+}
