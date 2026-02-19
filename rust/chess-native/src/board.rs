@@ -25,12 +25,12 @@ static KNIGHT_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
             attacks |= bb << 15;
         }
         if sq % 8 < 7 {
-            attacks |= bb >> 6;
-            attacks |= bb << 10;
-        }
-        if sq % 8 < 6 {
             attacks |= bb >> 15;
             attacks |= bb << 17;
+        }
+        if sq % 8 < 6 {
+            attacks |= bb >> 6;
+            attacks |= bb << 10;
         }
         table[sq] = attacks;
     }
