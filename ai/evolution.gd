@@ -20,6 +20,15 @@ var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
 
+# Adaptive mutation configuration
+var adaptive_mutation: bool = true
+var mutation_rate_min: float = 0.05
+var mutation_rate_max: float = 0.35
+var mutation_strength_min: float = 0.05
+var mutation_strength_max: float = 0.4
+var stagnation_window: int = 5
+var _best_history: Array = []
+
 var input_size: int
 var hidden_size: int
 var output_size: int
@@ -120,6 +129,9 @@ func evolve() -> void:
 	last_white_avg = get_avg_fitness(0)
 	last_black_avg = get_avg_fitness(1)
 
+	if adaptive_mutation:
+		_update_mutation_schedule(max(best_white_fitness, best_black_fitness))
+
 	generation += 1
 	_reset_fitness()
 	generation_complete.emit(generation, best_white_fitness, best_black_fitness)
@@ -178,6 +190,24 @@ func get_avg_fitness(color: int) -> float:
 	var total := 0.0
 	for v in f: total += v
 	return total / f.size() if f.size() > 0 else 0.0
+
+
+func _update_mutation_schedule(best_fitness: float) -> void:
+	_best_history.append(best_fitness)
+	if _best_history.size() > stagnation_window:
+		_best_history.pop_front()
+
+	var improved := false
+	if _best_history.size() >= 2:
+		improved = best_fitness > _best_history[0]
+
+	if improved:
+		mutation_rate = maxf(mutation_rate_min, mutation_rate * 0.9)
+		mutation_strength = maxf(mutation_strength_min, mutation_strength * 0.9)
+	else:
+		# If stagnant, nudge mutation upward
+		mutation_rate = minf(mutation_rate_max, mutation_rate * 1.1)
+		mutation_strength = minf(mutation_strength_max, mutation_strength * 1.1)
 
 
 func _update_hall_of_fame(individual, fitness: float, is_white: bool) -> void:

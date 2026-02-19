@@ -30,6 +30,50 @@ var record_replays: bool = false  # Enable to save every game as a replay file
 var use_minimax: bool = false  # Use minimax search instead of direct network output
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
+# Curriculum configuration
+var use_curriculum: bool = true
+var curriculum_stages: Array = [
+	{
+		"min_gen": 0,
+		"max_gen": 2,
+		"max_moves": 60,
+		"weights": {
+			"win_bonus": 6.0,
+			"draw_bonus": 1.0,
+			"material_weight": 1.2,
+			"mobility_weight": 0.1,
+			"king_safety_weight": 0.2,
+			"move_count_bonus": 0.02
+		}
+	},
+	{
+		"min_gen": 3,
+		"max_gen": 7,
+		"max_moves": 100,
+		"weights": {
+			"win_bonus": 8.0,
+			"draw_bonus": 2.0,
+			"material_weight": 1.0,
+			"mobility_weight": 0.08,
+			"king_safety_weight": 0.35,
+			"move_count_bonus": 0.015
+		}
+	},
+	{
+		"min_gen": 8,
+		"max_gen": 999999,
+		"max_moves": 150,
+		"weights": {
+			"win_bonus": 10.0,
+			"draw_bonus": 3.0,
+			"material_weight": 1.0,
+			"mobility_weight": 0.05,
+			"king_safety_weight": 0.5,
+			"move_count_bonus": 0.01
+		}
+	}
+]
+
 # Move generation configuration
 var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move generation
 
@@ -43,6 +87,16 @@ var opponent_sampling_temperature: float = 1.0  # Higher => flatter distribution
 # Early termination (mercy rule)
 var mercy_min_moves: int = 20
 var mercy_material_threshold: float = 10.0  # End game if abs material diff exceeds this
+
+# Encoder output cache (position -> outputs)
+var use_encoder_cache: bool = true
+var encoder_cache_max: int = 5000
+var _encoder_cache: Dictionary = {}
+
+# Encoder output cache (position -> outputs)
+var use_encoder_cache: bool = true
+var encoder_cache_max: int = 5000
+var _encoder_cache: Dictionary = {}
 
 # Tournament configuration
 var use_tournament: bool = true  # Use tournament system instead of random opponents
@@ -276,6 +330,7 @@ func _reset_generation_metrics() -> void:
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
 	print("TrainingManager: Starting generation %d" % evolution.generation)
+	_apply_curriculum()
 	_reset_generation_metrics()
 	if use_tournament:
 		# Clear tournament results for new generation
@@ -372,6 +427,7 @@ func run_one_game_step() -> bool:
 		evolution.white_fitness.fill(0.0)
 		evolution.black_fitness.fill(0.0)
 		
+		_apply_curriculum()
 		# Reset generation metrics
 		_reset_generation_metrics()
 		
@@ -491,6 +547,17 @@ func _weighted_sample_index(fitness: PackedFloat32Array, target: float, temperat
 	return fitness.size() - 1
 
 
+func _apply_curriculum() -> void:
+	if not use_curriculum:
+		return
+	var gen := evolution.generation
+	for stage in curriculum_stages:
+		if gen >= stage["min_gen"] and gen <= stage["max_gen"]:
+			max_moves_per_game = stage["max_moves"]
+			ChessFitnessScript.set_weights(stage["weights"])
+			return
+
+
 func _select_black_opponent(white_idx: int) -> Dictionary:
 	var use_hof := false
 	var b_idx: int = -1
@@ -595,8 +662,20 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 		else:
 			# Use direct network output (original behavior)
 			var net = white_net if state.side_to_move == 0 else black_net
-			var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(state)
-			var outputs: PackedFloat32Array = net.forward(inputs)
+			var outputs: PackedFloat32Array
+			if use_encoder_cache:
+				var cache_key := state.get_position_key()
+				if _encoder_cache.has(cache_key):
+					outputs = _encoder_cache[cache_key]
+				else:
+					var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(state)
+					outputs = net.forward(inputs)
+					_encoder_cache[cache_key] = outputs
+					if _encoder_cache.size() > encoder_cache_max:
+						_encoder_cache.clear()
+			else:
+				var inputs2: PackedFloat32Array = ChessEncoderScript.encode_board(state)
+				outputs = net.forward(inputs2)
 			chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
 		
 		if chosen == -1:

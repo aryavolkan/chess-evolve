@@ -79,6 +79,15 @@ func _mark_dirty() -> void:
 	_encoder_dirty = true
 
 
+func get_position_key() -> String:
+	# Compact key for encoder cache: board + side + castling + ep
+	var parts := PackedStringArray()
+	parts.resize(board.size())
+	for i in board.size():
+		parts[i] = str(board[i])
+	return ",".join(parts) + "|" + str(side_to_move) + "|" + str(castling_rights) + "|" + str(en_passant_square)
+
+
 func _rebuild_piece_lists() -> void:
 	_white_king_sq = -1
 	_black_king_sq = -1
