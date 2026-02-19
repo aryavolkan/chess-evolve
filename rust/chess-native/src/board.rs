@@ -310,13 +310,7 @@ impl ChessBoard {
             self.add_slider_moves(self.bb[3].0, all_occ, friendly_occ, &mut moves, false);
             self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, &mut moves, true);
             self.add_slider_moves(self.bb[4].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_king_moves(
-                self.bb[5].0,
-                friendly_occ,
-                enemy_occ,
-                all_occ,
-                &mut moves,
-            );
+            self.add_king_moves(self.bb[5].0, friendly_occ, enemy_occ, all_occ, &mut moves);
         } else {
             self.add_pawn_moves(self.bb[6].0, 1, friendly_occ, enemy_occ, &mut moves);
             self.add_knight_moves(self.bb[7].0, friendly_occ, &mut moves);
@@ -324,13 +318,7 @@ impl ChessBoard {
             self.add_slider_moves(self.bb[9].0, all_occ, friendly_occ, &mut moves, false);
             self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, &mut moves, true);
             self.add_slider_moves(self.bb[10].0, all_occ, friendly_occ, &mut moves, false);
-            self.add_king_moves(
-                self.bb[11].0,
-                friendly_occ,
-                enemy_occ,
-                all_occ,
-                &mut moves,
-            );
+            self.add_king_moves(self.bb[11].0, friendly_occ, enemy_occ, all_occ, &mut moves);
         }
 
         moves
@@ -360,10 +348,7 @@ impl ChessBoard {
             let r = rank_of(sq) as i32;
 
             let one_sq = sq as i32 + dir;
-            if one_sq >= 0
-                && one_sq < 64
-                && ((friendly_occ | enemy_occ) & (1u64 << one_sq)) == 0
-            {
+            if one_sq >= 0 && one_sq < 64 && ((friendly_occ | enemy_occ) & (1u64 << one_sq)) == 0 {
                 let flags = if rank_of(one_sq as usize) as i32 == promotion_rank {
                     MOVE_FLAG_PROMOTE
                 } else {
@@ -584,12 +569,7 @@ impl ChessBoard {
     }
 
     fn black_occ(&self) -> u64 {
-        self.bb[6].0
-            | self.bb[7].0
-            | self.bb[8].0
-            | self.bb[9].0
-            | self.bb[10].0
-            | self.bb[11].0
+        self.bb[6].0 | self.bb[7].0 | self.bb[8].0 | self.bb[9].0 | self.bb[10].0 | self.bb[11].0
     }
 
     fn piece_at(&self, sq: usize) -> i8 {

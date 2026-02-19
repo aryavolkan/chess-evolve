@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Rust GDExtension
-        run: cargo build
+        run: cargo build --release
         working-directory: rust/chess-native
 
       - name: Import assets (headless)

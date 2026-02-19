@@ -64,7 +64,15 @@ pub struct RustDenseNetwork {
 impl IRefCounted for RustDenseNetwork {
     fn init(base: Base<RefCounted>) -> Self {
         Self {
-            net: DenseNetwork::from_weights(0, 0, 0, Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+            net: DenseNetwork::from_weights(
+                0,
+                0,
+                0,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
             base,
         }
     }

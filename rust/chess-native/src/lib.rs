@@ -1,8 +1,8 @@
 use godot::prelude::*;
 
 mod board;
-mod nn;
 mod godot_classes;
+mod nn;
 
 struct ChessNativeExtension;
 

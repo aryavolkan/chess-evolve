@@ -60,10 +60,7 @@ mod tests {
     use super::*;
 
     fn softmax(values: &[f32]) -> Vec<f32> {
-        let max = values
-            .iter()
-            .cloned()
-            .fold(f32::NEG_INFINITY, f32::max);
+        let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let mut exp_vals: Vec<f32> = values.iter().map(|v| (v - max).exp()).collect();
         let sum: f32 = exp_vals.iter().sum();
         for v in &mut exp_vals {
