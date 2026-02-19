@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build Rust GDExtension (required for artifact tests)
+        run: cargo build --release
+        working-directory: rust/chess-native
+
       - name: Run pytest
         run: |
           python3 -m venv .venv
