@@ -31,6 +31,10 @@ var all_time_best_black = null
 var all_time_best_white_fitness: float = -INF
 var all_time_best_black_fitness: float = -INF
 
+var last_white_avg: float = 0.0
+var last_black_avg: float = 0.0
+var _fitness_cleared: bool = true
+
 # Hall of Fame: Maintain a persistent collection of past best individuals
 # to prevent cycling in coevolution and ensure diverse opponents
 var hall_of_fame: Array = []        # Best white players from past generations
@@ -75,9 +79,11 @@ func _initialize_population() -> void:
 func _reset_fitness() -> void:
 	white_fitness.fill(0.0)
 	black_fitness.fill(0.0)
+	_fitness_cleared = true
 
 
 func set_fitness(color: int, index: int, fitness: float) -> void:
+	_fitness_cleared = false
 	if color == 0:
 		white_fitness[index] = fitness
 	else:
@@ -109,6 +115,10 @@ func evolve() -> void:
 	# Add best individuals to Hall of Fame
 	_update_hall_of_fame(white_pop[w_best_idx], best_white_fitness, true)
 	_update_hall_of_fame(black_pop[b_best_idx], best_black_fitness, false)
+
+	# Cache average fitness before clearing arrays
+	last_white_avg = get_avg_fitness(0)
+	last_black_avg = get_avg_fitness(1)
 
 	generation += 1
 	_reset_fitness()
@@ -162,6 +172,8 @@ func _best_index(fitness: PackedFloat32Array) -> int:
 
 
 func get_avg_fitness(color: int) -> float:
+	if _fitness_cleared:
+		return last_white_avg if color == 0 else last_black_avg
 	var f := white_fitness if color == 0 else black_fitness
 	var total := 0.0
 	for v in f: total += v

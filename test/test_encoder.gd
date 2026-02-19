@@ -34,16 +34,16 @@ func _run_tests() -> void:
 		outputs.resize(MOVE_OUTPUT_SIZE)
 		for i in outputs.size():
 			outputs[i] = randf_range(-1.0, 1.0)
-		var move: Vector2i = encoder.call("decode_move", outputs, legal)
+		var move: int = encoder.call("decode_move", outputs, legal)
 		assert_true(legal.has(move), "Decoded move should be legal")
 	)
 
-	_test("decode with empty moves returns -1, -1", func():
+	_test("decode with empty moves returns -1", func():
 		var outputs := PackedFloat32Array()
 		outputs.resize(128)
-		var empty: Array[Vector2i] = []
-		var move: Vector2i = encoder.call("decode_move", outputs, empty)
-		assert_eq(move, Vector2i(-1, -1))
+		var empty := PackedInt32Array()
+		var move: int = encoder.call("decode_move", outputs, empty)
+		assert_eq(move, -1)
 	)
 
 	_test("encoding differs for different positions", func():
@@ -51,7 +51,7 @@ func _run_tests() -> void:
 		b1.setup_initial()
 		var b2 := BoardStateScript.new()
 		b2.setup_initial()
-		b2.make_move(Vector2i(12, 28))  # e2-e4
+		b2.make_move(BoardStateScript.encode_move(12, 28))  # e2-e4
 		var e1: PackedFloat32Array = encoder.call("encode_board", b1)
 		var e2: PackedFloat32Array = encoder.call("encode_board", b2)
 		var diffs := 0

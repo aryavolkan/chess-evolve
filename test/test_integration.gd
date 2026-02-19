@@ -15,6 +15,9 @@ func _run_tests() -> void:
 	_test("full generation runs without errors", func():
 		var evo = ChessEvolutionScript.new(6, 389, 16, 128, 2, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 2, 50)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 2
 		tm.run_generation()
 		assert_eq(evo.generation, 1, "Generation should be 1 after one run")
 		assert_gt(tm.total_games_played, 0.0, "Should have played some games")
@@ -23,6 +26,9 @@ func _run_tests() -> void:
 	_test("two generations evolve populations", func():
 		var evo = ChessEvolutionScript.new(6, 389, 16, 128, 2, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 2, 50)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 2
 		tm.run_generation()
 		tm.run_generation()
 		assert_eq(evo.generation, 2)
@@ -34,6 +40,9 @@ func _run_tests() -> void:
 	_test("fitness values are non-negative after generation", func():
 		var evo = ChessEvolutionScript.new(6, 389, 16, 128, 2, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 2, 50)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 2
 
 		# Manually run games without evolving to check fitness
 		for w_idx in evo.population_size:
@@ -50,6 +59,8 @@ func _run_tests() -> void:
 	_test("best fitness tracked across generations", func():
 		var evo = ChessEvolutionScript.new(6, 389, 16, 128, 2, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 2, 50)
+		tm.use_minimax = false
+		tm.use_tournament = false
 		tm.run_generation()
 		# all_time_best should be set after first generation
 		assert_not_null(evo.all_time_best_white, "Should track all-time best white")
@@ -61,6 +72,9 @@ func _run_tests() -> void:
 	_test("incremental game step completes a generation", func():
 		var evo = ChessEvolutionScript.new(4, 389, 16, 128, 1, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 1, 30)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 1
 
 		var gen_complete := false
 		var steps := 0
@@ -77,6 +91,9 @@ func _run_tests() -> void:
 	_test("stats dictionary has required keys", func():
 		var evo = ChessEvolutionScript.new(4, 389, 16, 128, 1, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 1, 30)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 1
 		tm.run_generation()
 		var stats := tm.get_stats()
 		assert_true(stats.has("generation"), "Stats should have generation")
@@ -91,6 +108,8 @@ func _run_tests() -> void:
 	_test("training_step_complete signal fires", func():
 		var evo = ChessEvolutionScript.new(4, 389, 16, 128, 1, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 1, 30)
+		tm.use_minimax = false
+		tm.use_tournament = false
 		var counter := [0, -1]  # [received, gen]
 		tm.training_step_complete.connect(_make_step_cb(counter))
 		tm.run_generation()
@@ -101,6 +120,8 @@ func _run_tests() -> void:
 	_test("game_complete signal fires for each game", func():
 		var evo = ChessEvolutionScript.new(4, 389, 16, 128, 1, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 1, 30)
+		tm.use_minimax = false
+		tm.use_tournament = false
 		var counter := [0]
 		tm.game_complete.connect(_make_game_cb(counter))
 		tm.run_generation()
@@ -121,7 +142,7 @@ func _run_tests() -> void:
 		var legal_moves := state.generate_legal_moves()
 		assert_gt(legal_moves.size(), 0.0, "Initial position should have legal moves")
 
-		var chosen: Vector2i = ChessEncoderScript.decode_move(outputs, legal_moves)
+		var chosen := ChessEncoderScript.decode_move(outputs, legal_moves)
 		assert_true(legal_moves.has(chosen), "Decoded move should be in legal moves")
 	)
 
@@ -139,7 +160,7 @@ func _run_tests() -> void:
 			var legal := state.generate_legal_moves()
 			if legal.is_empty():
 				break
-			var chosen: Vector2i = ChessEncoderScript.decode_move(outputs, legal)
+			var chosen: int = ChessEncoderScript.decode_move(outputs, legal)
 			state.make_move(chosen)
 			moves += 1
 
@@ -166,6 +187,9 @@ func _run_tests() -> void:
 	_test("evolution improves or maintains all-time best over 3 gens", func():
 		var evo = ChessEvolutionScript.new(8, 389, 16, 128, 2, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 2, 50)
+		tm.use_minimax = false
+		tm.use_tournament = false
+		tm.games_per_individual = 2
 
 		tm.run_generation()
 		var first_best_w: float = evo.all_time_best_white_fitness
@@ -184,6 +208,8 @@ func _run_tests() -> void:
 	_test("last_game_state is populated after training", func():
 		var evo = ChessEvolutionScript.new(4, 389, 16, 128, 1, 0.15, 0.2, 0.7)
 		var tm = TrainingManagerScript.new(evo, 1, 30)
+		tm.use_minimax = false
+		tm.use_tournament = false
 		tm.run_generation()
 		assert_not_null(tm.last_game_state, "last_game_state should be set")
 		assert_gt(tm.last_game_history.size(), 0.0, "last_game_history should have entries")

@@ -42,7 +42,7 @@ func load_replay_file(path: String) -> bool:
 	return load_replay_data(data["moves"], data["metadata"])
 
 
-func load_replay_data(moves: Array[Vector2i], metadata: Dictionary = {}) -> bool:
+func load_replay_data(moves: PackedInt32Array, metadata: Dictionary = {}) -> bool:
 	## Load replay from move list and optional metadata.
 	_metadata = metadata
 	_states = GameRecorderScript.replay_moves(moves)

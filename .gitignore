@@ -24,3 +24,7 @@ venv/
 
 # Test configs
 test_config.json
+
+# Rust
+rust/**/target/
+rust/**/Cargo.lock

@@ -48,14 +48,17 @@ Training config is written to:
 ```
 
 Default config in `train_wandb.py`:
-- population_size: 30
+- population_size: 20
 - hidden_size: 64
 - elite_count: 3
 - games_per_individual: 2
-- max_moves_per_game: 100
-- max_generations: 100
-- mutation_rate: 0.15
-- mutation_strength: 0.3
+- max_moves_per_game: 40
+- max_generations: 50
+- mutation_rate: 0.25
+- mutation_strength: 0.12
+- crossover_rate: 0.70
+- use_tournament: true
+- tournament_opponents: 2
 
 ## Metrics
 
@@ -69,7 +72,13 @@ Updated each generation with:
 - white_best, white_avg
 - black_best, black_avg
 - best_fitness, avg_fitness
-- games_played
+- games_played, total_games_this_gen
+- avg_game_length, generation_time_sec
+- games_per_sec, moves_per_sec
+- white/black win/draw/loss rates
+- white/black tournament score best/avg
+- white/black material avg
+- white/black hall-of-fame size
 
 ## How It Works
 

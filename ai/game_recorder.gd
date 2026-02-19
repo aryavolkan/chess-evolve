@@ -9,7 +9,7 @@ const BoardStateScript = preload("res://chess/board_state.gd")
 
 const REPLAY_DIR := "user://replays/"
 
-var _moves: Array[Vector2i] = []  # Every move as Vector2i(from, to)
+var _moves: PackedInt32Array = PackedInt32Array()  # Every move as encoded int
 var _board_snapshots: Array = []  # BoardState clone after each move
 var _metadata: Dictionary = {}
 var _recording := false
@@ -24,7 +24,7 @@ func start_recording(metadata: Dictionary = {}) -> void:
 	_recording = true
 
 
-func record_move(move: Vector2i, board_after) -> void:
+func record_move(move: int, board_after) -> void:
 	## Record a single move and the resulting board state.
 	if not _recording:
 		return
@@ -43,7 +43,7 @@ func is_recording() -> bool:
 	return _recording
 
 
-func get_moves() -> Array[Vector2i]:
+func get_moves() -> PackedInt32Array:
 	return _moves
 
 
@@ -81,7 +81,7 @@ func save_to_file(filename: String = "") -> String:
 
 
 static func load_from_file(path: String) -> Dictionary:
-	## Load a replay file. Returns {"metadata": Dict, "moves": Array[Vector2i]} or empty on error.
+	## Load a replay file. Returns {"metadata": Dict, "moves": PackedInt32Array} or empty on error.
 	if not FileAccess.file_exists(path):
 		push_error("GameRecorder: File not found: %s" % path)
 		return {}
@@ -123,7 +123,7 @@ static func list_replays() -> Array[String]:
 	return files
 
 
-static func replay_moves(moves: Array[Vector2i]) -> Array:
+static func replay_moves(moves: PackedInt32Array) -> Array:
 	## Reconstruct board states from a move list. Returns Array of BoardState.
 	var states: Array = []
 	var board := BoardStateScript.new()
@@ -138,15 +138,15 @@ static func replay_moves(moves: Array[Vector2i]) -> Array:
 func _serialize_moves() -> Array:
 	var arr: Array = []
 	for m in _moves:
-		arr.append([m.x, m.y])
+		arr.append([BoardStateScript.move_from(m), BoardStateScript.move_to(m)])
 	return arr
 
 
-static func _deserialize_moves(arr: Array) -> Array[Vector2i]:
-	var moves: Array[Vector2i] = []
+static func _deserialize_moves(arr: Array) -> PackedInt32Array:
+	var moves := PackedInt32Array()
 	for item in arr:
 		if item is Array and item.size() == 2:
-			moves.append(Vector2i(int(item[0]), int(item[1])))
+			moves.append(BoardStateScript.encode_move(int(item[0]), int(item[1])))
 	return moves
 
 

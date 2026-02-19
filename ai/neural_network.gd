@@ -15,6 +15,8 @@ var bias_o: PackedFloat32Array
 
 var _hidden: PackedFloat32Array
 var _output: PackedFloat32Array
+var _ih_offsets: PackedInt32Array
+var _ho_offsets: PackedInt32Array
 
 
 func _init(
@@ -33,6 +35,12 @@ func _init(
 	bias_o.resize(output_size)
 	_hidden.resize(hidden_size)
 	_output.resize(output_size)
+	_ih_offsets.resize(hidden_size)
+	_ho_offsets.resize(output_size)
+	for h in hidden_size:
+		_ih_offsets[h] = h * input_size
+	for o in output_size:
+		_ho_offsets[o] = o * hidden_size
 
 	if p_randomize:
 		randomize_weights()
@@ -52,21 +60,46 @@ func randomize_weights() -> void:
 
 
 func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:
-	for h in hidden_size:
-		var sum := bias_h[h]
-		var offset := h * input_size
-		for i in input_size:
-			sum += weights_ih[offset + i] * inputs[i]
-		_hidden[h] = tanh(sum)
+	var ih := weights_ih
+	var bh := bias_h
+	var ho := weights_ho
+	var bo := bias_o
+	var hidden := _hidden
+	var output := _output
+	var input_len := input_size
+	var hidden_len := hidden_size
+	var output_len := output_size
 
-	for o in output_size:
-		var sum := bias_o[o]
-		var offset := o * hidden_size
-		for h in hidden_size:
-			sum += weights_ho[offset + h] * _hidden[h]
-		_output[o] = tanh(sum)
+	var ih_offsets := _ih_offsets
+	var ho_offsets := _ho_offsets
 
-	return _output
+	for h in hidden_len:
+		var sum := bh[h]
+		var offset := ih_offsets[h]
+		for i in input_len:
+			sum += ih[offset + i] * inputs[i]
+		hidden[h] = tanh(sum)
+
+	for o in output_len:
+		var sum := bo[o]
+		var offset := ho_offsets[o]
+		for h in hidden_len:
+			sum += ho[offset + h] * hidden[h]
+		output[o] = tanh(sum)
+
+	return output
+
+
+func benchmark_forward(iterations: int = 1000) -> void:
+	var input := PackedFloat32Array()
+	input.resize(input_size)
+	for i in input.size():
+		input[i] = randf()
+	var start := Time.get_ticks_usec()
+	for i in iterations:
+		forward(input)
+	var elapsed := Time.get_ticks_usec() - start
+	print("forward ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
 
 
 func get_weights() -> PackedFloat32Array:

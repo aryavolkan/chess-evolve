@@ -30,6 +30,9 @@ var record_replays: bool = false  # Enable to save every game as a replay file
 var use_minimax: bool = false  # Use minimax search instead of direct network output
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
+# Move generation configuration
+var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move generation
+
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)
 
@@ -69,8 +72,6 @@ func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_m
 	metrics_logger = MetricsLogger.new(p_metrics_path)
 	
 	# If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
-	if use_tournament:
-		games_per_individual = tournament_opponents
 
 
 func _generate_round_robin_pairings(population_size: int) -> Dictionary:
@@ -110,7 +111,7 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
 	
 	# For each individual, select opponents from different quintiles
 	for i in population_size:
-		var opponents_needed := tournament_opponents
+		var opponents_needed: int = mini(tournament_opponents, population_size - 1)
 		var selected_opponents := []
 		
 		# Try to get one opponent from each quintile
@@ -248,9 +249,26 @@ func _update_fitness_from_tournament() -> void:
 		evolution.set_fitness(1, i, black_tournament_score + black_bonus)
 
 
+func _reset_generation_metrics() -> void:
+	_generation_start_time = Time.get_unix_time_from_system()
+	_white_wins = 0
+	_white_draws = 0
+	_white_losses = 0
+	_black_wins = 0
+	_black_draws = 0
+	_black_losses = 0
+	_total_game_moves = 0
+	_games_this_generation = 0
+	_white_material_total = 0.0
+	_black_material_total = 0.0
+	_white_tournament_scores.clear()
+	_black_tournament_scores.clear()
+
+
 func run_generation() -> void:
 	## Run all games for one generation, evaluate fitness, and evolve.
 	print("TrainingManager: Starting generation %d" % evolution.generation)
+	_reset_generation_metrics()
 	if use_tournament:
 		# Clear tournament results for new generation
 		tournament_results.clear()
@@ -347,19 +365,7 @@ func run_one_game_step() -> bool:
 		evolution.black_fitness.fill(0.0)
 		
 		# Reset generation metrics
-		_generation_start_time = Time.get_unix_time_from_system()
-		_white_wins = 0
-		_white_draws = 0
-		_white_losses = 0
-		_black_wins = 0
-		_black_draws = 0
-		_black_losses = 0
-		_total_game_moves = 0
-		_games_this_generation = 0
-		_white_material_total = 0.0
-		_black_material_total = 0.0
-		_white_tournament_scores.clear()
-		_black_tournament_scores.clear()
+		_reset_generation_metrics()
 		
 		if use_tournament:
 			# Clear tournament data and generate pairings
@@ -463,27 +469,7 @@ func _run_all_games() -> int:
 			_track_game_metrics(result)
 			game_complete.emit(w_idx, b_idx, result["result"])
 			games_played += 1
-	
-	# Also evaluate black population as primary players against white opponents
-	# This ensures both populations benefit from Hall of Fame diversity
-	for b_idx in evolution.population_size:
-		for _g in games_per_individual:
-			var use_hof := false
-			var w_idx: int = -1
-			
-			# Decide whether to use Hall of Fame opponent
-			if evolution.has_hall_of_fame(0) and randf() < hall_of_fame_ratio:
-				use_hof = true
-				w_idx = -1  # Special index for Hall of Fame
-			else:
-				w_idx = randi() % int(evolution.population_size)
-			
-			# Note: we pass true for first parameter to indicate white is from HoF
-			var result = _play_game_with_hof(w_idx, b_idx, use_hof)
-			_track_game_metrics(result)
-			game_complete.emit(w_idx, b_idx, result["result"])
-			games_played += 1
-	
+		
 	return games_played
 
 
@@ -504,6 +490,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	## Play a single game between two networks, return final board state.
 	print("_play_game: white_idx=%d, black_idx=%d" % [white_idx, black_idx])
 	var state := BoardStateScript.new()
+	state.use_bitboard_movegen = use_bitboard_movegen
 	state.setup_initial()
 	print("Board initialized")
 
@@ -556,7 +543,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 	var move_count := 0
 	print("Starting game loop, max_moves=%d" % max_moves_per_game)
 	while not state.is_game_over and move_count < max_moves_per_game:
-		var chosen: Vector2i
+		var chosen := -1
 		
 		var legal_moves := state.generate_legal_moves()
 		if legal_moves.is_empty():
@@ -575,7 +562,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
 			var outputs: PackedFloat32Array = net.forward(inputs)
 			chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
 		
-		if chosen.x == -1 or chosen.y == -1:
+		if chosen == -1:
 			break  # Invalid move
 		
 		state.make_move(chosen)
@@ -690,6 +677,13 @@ func get_stats() -> Dictionary:
 	if total_games_gen == 0:  # Fallback for compatibility
 		total_games_gen = evolution.population_size * games_per_individual
 	
+	# Derived throughput metrics
+	var games_per_sec := 0.0
+	var moves_per_sec := 0.0
+	if generation_time_sec > 0.0:
+		games_per_sec = float(total_games_gen) / generation_time_sec
+		moves_per_sec = float(_total_game_moves) / generation_time_sec
+	
 	return {
 		"generation": evolution.generation,
 		"white_best": white_best,
@@ -720,4 +714,6 @@ func get_stats() -> Dictionary:
 		"white_material_avg": white_material_avg,
 		"black_material_avg": black_material_avg,
 		"generation_time_sec": generation_time_sec,
+		"games_per_sec": games_per_sec,
+		"moves_per_sec": moves_per_sec,
 	}
