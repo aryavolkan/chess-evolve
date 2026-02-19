@@ -31,6 +31,22 @@ jobs:
         run: |
           gdlint ai/*.gd chess/*.gd scenes/*.gd ui/*.gd benchmark_network.gd benchmark_network_sizes.gd
 
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run pytest
+        run: python -m pytest tests/python -q
+
   godot-tests:
     runs-on: ubuntu-latest
     env:
