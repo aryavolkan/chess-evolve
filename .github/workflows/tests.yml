@@ -14,12 +14,20 @@ jobs:
       - name: Python lint (ruff)
         run: |
           pip3 install --quiet --break-system-packages ruff
-          ruff check scripts/ train_wandb.py sweep_config.py || true
+          ruff check scripts/ train_wandb.py sweep_config.py
 
       - name: GDScript lint (gdlint)
         run: |
           pip3 install --quiet --break-system-packages gdtoolkit
-          gdlint ai/*.gd chess/*.gd scenes/*.gd ui/*.gd benchmark_network.gd benchmark_network_sizes.gd || true
+          ./scripts/lint_gdscript.sh
+
+      - name: Rust format check
+        run: cargo fmt --check
+        working-directory: rust/chess-native
+
+      - name: Rust lint (clippy)
+        run: cargo clippy -- -D warnings
+        working-directory: rust/chess-native
 
   python-tests:
     runs-on: [self-hosted, macos, arm64]
