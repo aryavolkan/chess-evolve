@@ -34,10 +34,17 @@ var result: int = 0  # 0=ongoing, 1=white wins, -1=black wins, 2=draw
 var _white_king_sq: int = -1
 var _black_king_sq: int = -1
 
+var use_bitboard_movegen: bool = false
+var _legal_moves_cache: PackedInt32Array = PackedInt32Array()
+var _legal_moves_dirty: bool = true
+var _encoder_cache: PackedFloat32Array = PackedFloat32Array()
+var _encoder_dirty: bool = true
+
 
 func _init() -> void:
 	board.resize(64)
 	board.fill(0)
+	_mark_dirty()
 
 
 func setup_initial() -> void:
@@ -64,6 +71,12 @@ func setup_initial() -> void:
 	result = 0
 	_white_king_sq = 4
 	_black_king_sq = 60
+	_mark_dirty()
+
+
+func _mark_dirty() -> void:
+	_legal_moves_dirty = true
+	_encoder_dirty = true
 
 
 func _rebuild_piece_lists() -> void:
@@ -75,6 +88,7 @@ func _rebuild_piece_lists() -> void:
 			_white_king_sq = sq
 		elif p == -Piece.KING:
 			_black_king_sq = sq
+	_mark_dirty()
 
 
 static func file_of(sq: int) -> int:
@@ -144,17 +158,33 @@ func clone() -> BoardState:
 	copy.result = result
 	copy._white_king_sq = _white_king_sq
 	copy._black_king_sq = _black_king_sq
+	copy.use_bitboard_movegen = use_bitboard_movegen
+	copy._legal_moves_dirty = true
+	copy._encoder_dirty = true
 	return copy
 
 
 func generate_legal_moves() -> PackedInt32Array:
 	## Returns packed int moves: (from << 6) | to.
+	if not _legal_moves_dirty:
+		return _legal_moves_cache
+
 	var moves := PackedInt32Array()
-	var pseudo := _generate_pseudo_legal_moves()
-	var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
-	for m in pseudo:
-		if _is_legal(m, king_sq):
-			moves.append(m)
+	if use_bitboard_movegen:
+		var bb := BitboardState.from_board_state(self)
+		var bb_moves := bb.get_legal_moves()
+		moves.resize(bb_moves.size())
+		for i in bb_moves.size():
+			moves[i] = bb_moves[i] & 0xFFF
+	else:
+		var pseudo := _generate_pseudo_legal_moves()
+		var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
+		for m in pseudo:
+			if _is_legal(m, king_sq):
+				moves.append(m)
+
+	_legal_moves_cache = moves
+	_legal_moves_dirty = false
 	return moves
 
 
@@ -475,6 +505,8 @@ func _apply_move_unchecked(move) -> void:
 	if abs_p == Piece.PAWN:
 		if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
 			board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+
+	_mark_dirty()
 
 
 func _check_game_over() -> void:

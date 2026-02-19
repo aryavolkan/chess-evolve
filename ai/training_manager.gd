@@ -30,6 +30,9 @@ var record_replays: bool = false  # Enable to save every game as a replay file
 var use_minimax: bool = true  # Use minimax search instead of direct network output
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
+# Move generation configuration
+var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move generation
+
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)
 
@@ -477,6 +480,7 @@ func _play_game_with_hof(white_idx: int, black_idx: int, idx_is_hof: bool = fals
 func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, black_is_hof: bool = false):
 	## Play a single game between two networks, return final board state.
 	var state := BoardStateScript.new()
+	state.use_bitboard_movegen = use_bitboard_movegen
 	state.setup_initial()
 
 	# Track game history for visualization (every 5th move to reduce memory)
