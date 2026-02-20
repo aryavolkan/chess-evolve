@@ -323,12 +323,6 @@ impl ChessBoard {
         self.is_square_attacked(king_sq, 1 - color)
     }
 
-    fn generate_pseudo_legal_moves(&self) -> Vec<u32> {
-        let mut moves = Vec::with_capacity(256);
-        self.generate_pseudo_legal_moves_into(&mut moves);
-        moves
-    }
-
     fn generate_pseudo_legal_moves_into(&self, moves: &mut Vec<u32>) {
         moves.clear();
         let white_occ = self.white_occ();
