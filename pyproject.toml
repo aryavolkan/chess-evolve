@@ -39,3 +39,15 @@ indent-style = "space"
 testpaths = ["tests/python"]
 python_files = ["test_*.py"]
 addopts = "-q"
+
+[tool.black]
+line-length = 120
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | assets
+)/
+'''
