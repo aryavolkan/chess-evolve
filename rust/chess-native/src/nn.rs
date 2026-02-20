@@ -1,4 +1,4 @@
-#![allow(clippy::needless_range_loop)]
+#![allow(clippy::needless_range_loop, dead_code)]
 
 pub struct DenseNetwork {
     pub input_size: usize,
