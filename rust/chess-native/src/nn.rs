@@ -29,6 +29,7 @@ impl DenseNetwork {
         }
     }
 
+    #[allow(clippy::needless_range_loop)]
     pub fn forward_into(&self, inputs: &[f32], hidden: &mut [f32], output: &mut [f32]) {
         debug_assert_eq!(hidden.len(), self.hidden_size);
         debug_assert_eq!(output.len(), self.output_size);

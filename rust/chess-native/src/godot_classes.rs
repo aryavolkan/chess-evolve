@@ -198,7 +198,11 @@ impl RustBatchSimulator {
             }
 
             encode_board(&board, &mut inputs);
-            let net = if board.side_to_move == 0 { &white } else { &black };
+            let net = if board.side_to_move == 0 {
+                &white
+            } else {
+                &black
+            };
             net.forward_into(&inputs, &mut hidden, &mut output);
             let chosen = decode_move(&output, &legal_moves);
             board = board.make_move(chosen);
@@ -242,7 +246,11 @@ fn dense_from_flat_weights(
     let bo = output_size;
     let total = ih + bh + ho + bo;
     let buf = vec![0.0f32; total];
-    let src = if weights.len() >= total { weights } else { &buf };
+    let src = if weights.len() >= total {
+        weights
+    } else {
+        &buf
+    };
     let mut cursor = 0usize;
     let weights_ih = take_from(src, &mut cursor, ih);
     let biases_h = take_from(src, &mut cursor, bh);
@@ -279,13 +287,29 @@ fn encode_board(board: &ChessBoard, out: &mut [f32]) {
     }
     out[idx] = if board.side_to_move == 0 { 0.0 } else { 1.0 };
     idx += 1;
-    out[idx] = if board.castling_rights & 0b0001 != 0 { 1.0 } else { 0.0 };
+    out[idx] = if board.castling_rights & 0b0001 != 0 {
+        1.0
+    } else {
+        0.0
+    };
     idx += 1;
-    out[idx] = if board.castling_rights & 0b0010 != 0 { 1.0 } else { 0.0 };
+    out[idx] = if board.castling_rights & 0b0010 != 0 {
+        1.0
+    } else {
+        0.0
+    };
     idx += 1;
-    out[idx] = if board.castling_rights & 0b0100 != 0 { 1.0 } else { 0.0 };
+    out[idx] = if board.castling_rights & 0b0100 != 0 {
+        1.0
+    } else {
+        0.0
+    };
     idx += 1;
-    out[idx] = if board.castling_rights & 0b1000 != 0 { 1.0 } else { 0.0 };
+    out[idx] = if board.castling_rights & 0b1000 != 0 {
+        1.0
+    } else {
+        0.0
+    };
 }
 
 fn decode_move(outputs: &[f32], legal_moves: &[u32]) -> u32 {
@@ -294,8 +318,16 @@ fn decode_move(outputs: &[f32], legal_moves: &[u32]) -> u32 {
     for &mv in legal_moves {
         let from = ((mv >> 6) & 0x3f) as usize;
         let to = (mv & 0x3f) as usize;
-        let from_score = if from < outputs.len() { outputs[from] } else { 0.0 };
-        let to_score = if 64 + to < outputs.len() { outputs[64 + to] } else { 0.0 };
+        let from_score = if from < outputs.len() {
+            outputs[from]
+        } else {
+            0.0
+        };
+        let to_score = if 64 + to < outputs.len() {
+            outputs[64 + to]
+        } else {
+            0.0
+        };
         let score = from_score + to_score;
         if score > best_score {
             best_score = score;
