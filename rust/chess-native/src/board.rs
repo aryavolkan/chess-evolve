@@ -50,7 +50,7 @@ static KING_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
                 }
                 let nf = f + df;
                 let nr = r + dr;
-                if nf < 0 || nf > 7 || nr < 0 || nr > 7 {
+                if !(0..=7).contains(&nf) || !(0..=7).contains(&nr) {
                     continue;
                 }
                 attacks |= 1u64 << square(nf as usize, nr as usize);
@@ -68,10 +68,10 @@ static PAWN_ATTACKS_WHITE: LazyLock<[u64; 64]> = LazyLock::new(|| {
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
         let nr = r + 1;
-        if nr >= 0 && nr <= 7 {
+        if (0..=7).contains(&nr) {
             for df in [-1, 1] {
                 let nf = f + df;
-                if nf < 0 || nf > 7 {
+                if !(0..=7).contains(&nf) {
                     continue;
                 }
                 attacks |= 1u64 << square(nf as usize, nr as usize);
@@ -89,10 +89,10 @@ static PAWN_ATTACKS_BLACK: LazyLock<[u64; 64]> = LazyLock::new(|| {
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
         let nr = r - 1;
-        if nr >= 0 && nr <= 7 {
+        if (0..=7).contains(&nr) {
             for df in [-1, 1] {
                 let nf = f + df;
-                if nf < 0 || nf > 7 {
+                if !(0..=7).contains(&nf) {
                     continue;
                 }
                 attacks |= 1u64 << square(nf as usize, nr as usize);
@@ -293,9 +293,9 @@ impl ChessBoard {
         }
         self.set_piece_at(to, piece);
 
-        if abs_p == PIECE_PAWN {
-            if (self.side_to_move == 0 && rank_of(to) == 7)
-                || (self.side_to_move == 1 && rank_of(to) == 0)
+        if abs_p == PIECE_PAWN
+            && ((self.side_to_move == 0 && rank_of(to) == 7)
+                || (self.side_to_move == 1 && rank_of(to) == 0))
             {
                 self.remove_piece_at(to, piece);
                 let promo_piece = if self.side_to_move == 0 {
@@ -305,7 +305,6 @@ impl ChessBoard {
                 };
                 self.set_piece_at(to, promo_piece);
             }
-        }
 
         self.side_to_move ^= 1;
     }
@@ -382,7 +381,7 @@ impl ChessBoard {
             let r = rank_of(sq) as i32;
 
             let one_sq = sq as i32 + dir;
-            if one_sq >= 0 && one_sq < 64 && ((friendly_occ | enemy_occ) & (1u64 << one_sq)) == 0 {
+            if (0..64).contains(&one_sq) && ((friendly_occ | enemy_occ) & (1u64 << one_sq)) == 0 {
                 let flags = if rank_of(one_sq as usize) as i32 == promotion_rank {
                     MOVE_FLAG_PROMOTE
                 } else {
@@ -391,8 +390,7 @@ impl ChessBoard {
                 moves.push(encode_move(sq as u32, one_sq as u32, flags));
                 if r == start_rank {
                     let two_sq = sq as i32 + dir * 2;
-                    if two_sq >= 0
-                        && two_sq < 64
+                    if (0..64).contains(&two_sq)
                         && ((friendly_occ | enemy_occ) & (1u64 << two_sq)) == 0
                     {
                         moves.push(encode_move(sq as u32, two_sq as u32, 0));
@@ -482,53 +480,45 @@ impl ChessBoard {
                 && bit_at(occupancy, 5) == 0
                 && bit_at(occupancy, 6) == 0
                 && bit_at(self.bb[3].0, 7) == 1
-            {
-                if !self.is_square_attacked(4, 1)
+                && !self.is_square_attacked(4, 1)
                     && !self.is_square_attacked(5, 1)
                     && !self.is_square_attacked(6, 1)
                 {
                     moves.push(encode_move(4, 6, 0));
                 }
-            }
             if (self.castling_rights & 0b0010) != 0
                 && bit_at(occupancy, 3) == 0
                 && bit_at(occupancy, 2) == 0
                 && bit_at(occupancy, 1) == 0
                 && bit_at(self.bb[3].0, 0) == 1
-            {
-                if !self.is_square_attacked(4, 1)
+                && !self.is_square_attacked(4, 1)
                     && !self.is_square_attacked(3, 1)
                     && !self.is_square_attacked(2, 1)
                 {
                     moves.push(encode_move(4, 2, 0));
                 }
-            }
         } else if self.side_to_move == 1 && sq == 60 {
             if (self.castling_rights & 0b0100) != 0
                 && bit_at(occupancy, 61) == 0
                 && bit_at(occupancy, 62) == 0
                 && bit_at(self.bb[9].0, 63) == 1
-            {
-                if !self.is_square_attacked(60, 0)
+                && !self.is_square_attacked(60, 0)
                     && !self.is_square_attacked(61, 0)
                     && !self.is_square_attacked(62, 0)
                 {
                     moves.push(encode_move(60, 62, 0));
                 }
-            }
             if (self.castling_rights & 0b1000) != 0
                 && bit_at(occupancy, 59) == 0
                 && bit_at(occupancy, 58) == 0
                 && bit_at(occupancy, 57) == 0
                 && bit_at(self.bb[9].0, 56) == 1
-            {
-                if !self.is_square_attacked(60, 0)
+                && !self.is_square_attacked(60, 0)
                     && !self.is_square_attacked(59, 0)
                     && !self.is_square_attacked(58, 0)
                 {
                     moves.push(encode_move(60, 58, 0));
                 }
-            }
         }
     }
 
@@ -678,7 +668,7 @@ fn compute_ray_table(df: i32, dr: i32) -> [u64; 64] {
         let mut attacks = 0u64;
         let mut nf = f + df;
         let mut nr = r + dr;
-        while nf >= 0 && nf <= 7 && nr >= 0 && nr <= 7 {
+        while (0..=7).contains(&nf) && (0..=7).contains(&nr) {
             attacks |= 1u64 << square(nf as usize, nr as usize);
             nf += df;
             nr += dr;

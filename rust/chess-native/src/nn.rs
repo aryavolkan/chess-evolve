@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop)]
+
 pub struct DenseNetwork {
     pub input_size: usize,
     pub hidden_size: usize,

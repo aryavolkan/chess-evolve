@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop, clippy::wrong_self_convention)]
+
 use godot::prelude::*;
 
 use crate::board::ChessBoard;
@@ -347,7 +349,7 @@ fn material_score(board: &ChessBoard, color: u8) -> f32 {
         }
         let is_white = p > 0;
         if (color == 0 && is_white) || (color == 1 && !is_white) {
-            total += values[p.abs() as usize];
+            total += values[p.unsigned_abs() as usize];
         }
     }
     total
@@ -371,15 +373,15 @@ fn king_safety_score(board: &ChessBoard, color: u8) -> f32 {
     if king_sq < 0 {
         return 0.0;
     }
-    let kf = (king_sq % 8) as i32;
-    let kr = (king_sq / 8) as i32;
+    let kf = king_sq % 8 ;
+    let kr = king_sq / 8 ;
     let pawn_piece = if color == 0 { 1 } else { -1 };
     let mut safety = 0.0;
     for df in -1..=1 {
         for dr in -1..=1 {
             let nf = kf + df;
             let nr = kr + dr;
-            if nf < 0 || nf > 7 || nr < 0 || nr > 7 {
+            if !(0..=7).contains(&nf) || !(0..=7).contains(&nr) {
                 continue;
             }
             let sq = (nr * 8 + nf) as usize;
