@@ -7,7 +7,7 @@ on:
 
 jobs:
   lint:
-    runs-on: [self-hosted, macos, arm64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +30,7 @@ jobs:
         working-directory: rust/chess-native
 
   python-tests:
-    runs-on: [self-hosted, macos, arm64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -45,16 +45,29 @@ jobs:
           .venv/bin/python -m pytest tests/python -q
 
   godot-tests:
-    runs-on: [self-hosted, macos, arm64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Detect platform and set Godot path
+        id: godot
+        run: |
+          if command -v godot &> /dev/null; then
+            echo "path=$(which godot)" >> $GITHUB_OUTPUT
+          elif [ -f "/opt/homebrew/bin/godot" ]; then
+            echo "path=/opt/homebrew/bin/godot" >> $GITHUB_OUTPUT
+          elif [ -f "$HOME/.local/bin/godot" ]; then
+            echo "path=$HOME/.local/bin/godot" >> $GITHUB_OUTPUT
+          else
+            echo "path=godot" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build Rust GDExtension
         run: cargo build --release
         working-directory: rust/chess-native
 
       - name: Import assets (headless)
-        run: /opt/homebrew/bin/godot --headless --editor --quit --path . || true
+        run: ${{ steps.godot.outputs.path }} --headless --editor --quit --path . || true
 
       - name: Run tests
-        run: /opt/homebrew/bin/godot --headless --path . -s test/test_runner.gd
+        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/test_runner.gd
