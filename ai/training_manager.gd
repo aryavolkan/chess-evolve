@@ -15,6 +15,7 @@ const ChessEncoderScript = preload("res://chess/encoder.gd")
 const ChessFitnessScript = preload("res://ai/fitness.gd")
 const GameRecorderScript = preload("res://ai/game_recorder.gd")
 const MinimaxPlayerScript = preload("res://ai/minimax_player.gd")
+const ChessMapElitesScript = preload("res://ai/chess_map_elites.gd")
 
 var evolution
 var use_neat: bool = false
@@ -81,6 +82,11 @@ var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move 
 
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)
+
+# MAP-Elites configuration
+var use_map_elites: bool = false
+var map_elites_archive: ChessMapElites = null
+var map_elites_grid_size: int = 20
 
 # Opponent sampling bias configuration
 var use_fitness_weighted_sampling: bool = true
@@ -379,6 +385,11 @@ func run_generation() -> void:
 		total_games_played += games_this_gen
 	
 	evolution.evolve()
+	
+	# MAP-Elites: archive best solutions from this generation
+	if use_map_elites and map_elites_archive and evolution:
+		_update_map_elites_archive()
+	
 	var stats := get_stats()
 	metrics_logger.write_metrics(stats)
 	training_step_complete.emit(evolution.generation, stats)
@@ -902,4 +913,36 @@ func get_stats() -> Dictionary:
 		"generation_time_sec": generation_time_sec,
 		"games_per_sec": games_per_sec,
 		"moves_per_sec": moves_per_sec,
+		
+		# MAP-Elites stats
+		"use_map_elites": use_map_elites,
+		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
+		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
+		"map_elites_best": map_elites_archive.get_best_fitness() if map_elites_archive else 0.0,
 	}
+
+
+func _update_map_elites_archive() -> void:
+	## Update MAP-Elites archive with best solutions from this generation.
+	if not map_elites_archive or not evolution:
+		return
+	
+	# Archive best white and black networks
+	var white_best_idx := evolution.get_best_index(0)
+	var black_best_idx := evolution.get_best_index(1)
+	
+	# Get behavior descriptors for the best individuals
+	# For now, we use simple heuristics based on fitness
+	# In a full implementation, you'd track game stats per individual
+	
+	# White: Archive with behavior based on win rate and material
+	var white_behavior := Vector2(0.5, 50.0)  # Default: moderate aggression, average game length
+	var white_fitness := evolution.get_fitness(0, white_best_idx)
+	if white_fitness > 0:
+		map_elites_archive.add(evolution.get_network(0, white_best_idx), white_behavior, white_fitness)
+	
+	# Black
+	var black_behavior := Vector2(0.5, 50.0)
+	var black_fitness := evolution.get_fitness(1, black_best_idx)
+	if black_fitness > 0:
+		map_elites_archive.add(evolution.get_network(1, black_best_idx), black_behavior, black_fitness)
