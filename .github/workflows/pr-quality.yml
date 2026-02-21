@@ -13,23 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout shared-evolve-utils
-        uses: actions/checkout@v4
-        with:
-          repository: aryavolkan/shared-evolve-utils
-          path: shared-evolve-utils
-
       - name: Build Rust GDExtension (required for artifact tests)
         run: cargo build --release
         working-directory: rust/chess-native
 
       - name: Install Python tooling
         run: pip3 install --quiet --break-system-packages pytest ruff
-
-      - name: Install shared-evolve-utils
-        run: |
-          git clone https://github.com/aryavolkan/shared-evolve-utils.git /tmp/shared-evolve-utils
-          pip3 install --quiet --break-system-packages -e /tmp/shared-evolve-utils
 
       - name: Run Python lint and tests
         run: |
