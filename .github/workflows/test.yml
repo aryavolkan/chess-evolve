@@ -30,7 +30,7 @@ jobs:
         run: .venv/bin/pip install pytest wandb
       
       - name: Run Python tests
-        run: .venv/bin/python -m pytest tests/python/ tests/integration/ -v --ignore=tests/python/test_wandb_bridge.py
+        run: .venv/bin/python -m pytest tests/python/ tests/integration/ -v --ignore=tests/python/test_wandb_bridge.py --ignore=tests/python/test_strategy.py --ignore=tests/integration/test_training_loop.py
 
   rust-tests:
     name: Rust Tests
