@@ -27,7 +27,9 @@ jobs:
         run: pip3 install --quiet --break-system-packages pytest ruff
 
       - name: Install shared-evolve-utils
-        run: pip3 install --quiet --break-system-packages -e shared-evolve-utils
+        run: |
+          git clone https://github.com/aryavolkan/shared-evolve-utils.git /tmp/shared-evolve-utils
+          pip3 install --quiet --break-system-packages -e /tmp/shared-evolve-utils
 
       - name: Run Python lint and tests
         run: ./scripts/lint_python.sh
