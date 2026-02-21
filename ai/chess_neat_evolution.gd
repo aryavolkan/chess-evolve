@@ -31,6 +31,11 @@ var hall_of_fame: Array = []
 var black_hall_of_fame: Array = []
 const HALL_OF_FAME_SIZE := 20
 
+# Elo rating configuration for Hall of Fame
+const ELO_DEFAULT: float = 1200.0
+const ELO_K_FACTOR: float = 32.0
+const ELO_ELO_WEIGHTED: bool = true
+
 
 func _init(p_pop_size = 50, p_config: NeatConfig = null) -> void:
 	var config: NeatConfig
@@ -133,21 +138,93 @@ func _update_hall_of_fame(individual: NeatGenome, fitness: float, is_white: bool
 	var entry := {
 		"genome": individual.copy(),
 		"fitness": fitness,
-		"generation": generation
+		"elo": ELO_DEFAULT,
+		"generation": generation,
+		"games_played": 0,
+		"games_won": 0,
+		"games_drawn": 0,
+		"games_lost": 0
 	}
 	
 	hof.append(entry)
-	hof.sort_custom(func(a, b): return a.fitness > b.fitness)
+	hof.sort_custom(func(a, b): 
+		if a.elo != b.elo:
+			return a.elo > b.elo
+		return a.fitness > b.fitness
+	)
 	if hof.size() > HALL_OF_FAME_SIZE:
 		hof.resize(HALL_OF_FAME_SIZE)
 
 
-func get_hall_of_fame_opponent(color: int):
+func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: float) -> void:
+	var hof := hall_of_fame if is_white else black_hall_of_fame
+	if opponent_idx < 0 or opponent_idx >= hof.size():
+		return
+	
+	var entry: Dictionary = hof[opponent_idx]
+	entry.games_played += 1
+	if result >= 0.75:
+		entry.games_won += 1
+	elif result >= 0.25:
+		entry.games_drawn += 1
+	else:
+		entry.games_lost += 1
+	
+	hof.sort_custom(func(a, b): 
+		if a.elo != b.elo:
+			return a.elo > b.elo
+		return a.fitness > b.fitness
+	)
+
+
+func get_hall_of_fame_opponent(color: int, use_elo_weight: bool = ELO_ELO_WEIGHTED):
 	var hof := hall_of_fame if color == 0 else black_hall_of_fame
 	if hof.is_empty():
 		return null
-	var idx := randi() % hof.size()
-	return NeatNetworkScript.from_genome(hof[idx].genome)
+	
+	if use_elo_weight and hof.size() > 1:
+		var weights: Array = []
+		var min_elo: float = INF
+		for entry in hof:
+			min_elo = minf(min_elo, entry.elo)
+		
+		var total_weight: float = 0.0
+		for entry in hof:
+			var weight: float = exp((entry.elo - min_elo) / 200.0)
+			weights.append(weight)
+			total_weight += weight
+		
+		var r: float = randf() * total_weight
+		var cumsum: float = 0.0
+		for i in range(hof.size()):
+			cumsum += weights[i]
+			if r <= cumsum:
+				return NeatNetworkScript.from_genome(hof[i].genome)
+		
+		return NeatNetworkScript.from_genome(hof[hof.size() - 1].genome)
+	else:
+		var idx := randi() % hof.size()
+		return NeatNetworkScript.from_genome(hof[idx].genome)
+
+
+func get_hall_of_fame_stats(color: int) -> Dictionary:
+	var hof := hall_of_fame if color == 0 else black_hall_of_fame
+	if hof.is_empty():
+		return {"size": 0, "avg_elo": 0.0, "top_elo": 0.0, "total_games": 0}
+	
+	var total_elo: float = 0.0
+	var total_games: int = 0
+	for entry in hof:
+		total_elo += entry.elo
+		total_games += entry.games_played
+	
+	return {
+		"size": hof.size(),
+		"avg_elo": total_elo / hof.size(),
+		"top_elo": hof[0].elo,
+		"total_games": total_games,
+		"top_fitness": hof[0].fitness
+	}
 
 
 func has_hall_of_fame(color: int) -> bool:

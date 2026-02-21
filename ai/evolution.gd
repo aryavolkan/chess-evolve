@@ -50,6 +50,11 @@ var hall_of_fame: Array = []        # Best white players from past generations
 var black_hall_of_fame: Array = []  # Best black players from past generations
 const HALL_OF_FAME_SIZE := 20      # Maximum number of individuals to keep
 
+# Elo rating configuration for Hall of Fame
+const ELO_DEFAULT: float = 1200.0    # Starting Elo for new HoF members
+const ELO_K_FACTOR: float = 32.0   # K-factor for Elo updates (higher = faster changes)
+const ELO_ELO_WEIGHTED: bool = true  # Whether to weight selection by Elo
+
 
 func _init(
 	p_pop_size: int = 50,
@@ -212,34 +217,126 @@ func _update_mutation_schedule(best_fitness: float) -> void:
 
 func _update_hall_of_fame(individual, fitness: float, is_white: bool) -> void:
 	## Add a high-performing individual to the Hall of Fame.
-	## Keeps only the best HALL_OF_FAME_SIZE individuals, sorted by fitness.
+	## Keeps only the best HALL_OF_FAME_SIZE individuals, sorted by Elo (then fitness).
 	var hof := hall_of_fame if is_white else black_hall_of_fame
 	
-	# Create entry with fitness score for sorting
+	# Create entry with fitness score and Elo rating for sorting
 	var entry := {
 		"network": individual.clone(),  # Clone to freeze the weights
 		"fitness": fitness,
-		"generation": generation
+		"elo": ELO_DEFAULT,
+		"generation": generation,
+		"games_played": 0,
+		"games_won": 0,
+		"games_drawn": 0,
+		"games_lost": 0
 	}
 	
 	# Add to hall of fame
 	hof.append(entry)
 	
-	# Sort by fitness descending and keep only the best
-	hof.sort_custom(func(a, b): return a.fitness > b.fitness)
+	# Sort by Elo descending (then fitness as tiebreaker) and keep only the best
+	hof.sort_custom(func(a, b): 
+		if a.elo != b.elo:
+			return a.elo > b.elo
+		return a.fitness > b.fitness
+	)
 	if hof.size() > HALL_OF_FAME_SIZE:
 		hof.resize(HALL_OF_FAME_SIZE)
 
 
-func get_hall_of_fame_opponent(color: int):
-	## Get a random opponent from the Hall of Fame.
+func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: int) -> void:
+	## Update Elo ratings for a HoF member after a game.
+	## result: 1 = win, 0.5 = draw, 0 = loss (from the HoF member's perspective)
+	var hof := hall_of_fame if is_white else black_hall_of_fame
+	if opponent_idx < 0 or opponent_idx >= hof.size():
+		return
+	
+	var entry: Dictionary = hof[opponent_idx]
+	var expected := 1.0  # Assume playing against current generation ( Elo doesn't change)
+	
+	# Update Elo: new_elo = old_elo + K * (actual - expected)
+	# For now, we just track stats; full Elo system would need opponent ratings
+	var actual: float = result  # 1, 0.5, or 0
+	
+	# Update stats
+	entry.games_played += 1
+	if result >= 0.75:
+		entry.games_won += 1
+	elif result >= 0.25:
+		entry.games_drawn += 1
+	else:
+		entry.games_lost += 1
+	
+	# Re-sort after stats update (Elo stays same for now since we're not tracking opponent rating)
+	hof.sort_custom(func(a, b): 
+		if a.elo != b.elo:
+			return a.elo > b.elo
+		return a.fitness > b.fitness
+	)
+
+
+static func _elo_expected_score(rating_a: float, rating_b: float) -> float:
+	## Calculate expected score for player A against player B
+	return 1.0 / (1.0 + pow(10.0, (rating_b - rating_a) / 400.0))
+
+
+func get_hall_of_fame_opponent(color: int, use_elo_weight: bool = ELO_ELO_WEIGHTED):
+	## Get an opponent from the Hall of Fame.
+	## If use_elo_weight is true, weights selection by Elo (higher = more likely).
 	## Returns null if Hall of Fame is empty.
 	var hof := hall_of_fame if color == 0 else black_hall_of_fame
 	if hof.is_empty():
 		return null
 	
-	var idx := randi() % hof.size()
-	return hof[idx].network
+	if use_elo_weight and hof.size() > 1:
+		# Weight by Elo using softmax-like approach
+		var weights: Array = []
+		var min_elo: float = INF
+		for entry in hof:
+			min_elo = minf(min_elo, entry.elo)
+		
+		# Convert Elo to weights (shift so lowest is ~1, then exponential)
+		var total_weight: float = 0.0
+		for entry in hof:
+			var weight: float = exp((entry.elo - min_elo) / 200.0)  # Temperature = 200
+			weights.append(weight)
+			total_weight += weight
+		
+		# Weighted random selection
+		var r: float = randf() * total_weight
+		var cumsum: float = 0.0
+		for i in range(hof.size()):
+			cumsum += weights[i]
+			if r <= cumsum:
+				return hof[i].network
+		
+		# Fallback
+		return hof[hof.size() - 1].network
+	else:
+		var idx := randi() % hof.size()
+		return hof[idx].network
+
+
+func get_hall_of_fame_stats(color: int) -> Dictionary:
+	## Get statistics about the Hall of Fame for reporting
+	var hof := hall_of_fame if color == 0 else black_hall_of_fame
+	if hof.is_empty():
+		return {"size": 0, "avg_elo": 0.0, "top_elo": 0.0, "total_games": 0}
+	
+	var total_elo: float = 0.0
+	var total_games: int = 0
+	for entry in hof:
+		total_elo += entry.elo
+		total_games += entry.games_played
+	
+	return {
+		"size": hof.size(),
+		"avg_elo": total_elo / hof.size(),
+		"top_elo": hof[0].elo,
+		"total_games": total_games,
+		"top_fitness": hof[0].fitness
+	}
 
 
 func has_hall_of_fame(color: int) -> bool:
