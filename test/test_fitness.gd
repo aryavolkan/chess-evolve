@@ -5,45 +5,45 @@ const ChessFitnessScript = preload("res://ai/fitness.gd")
 
 
 func _run_tests() -> void:
-	var fitness = ChessFitnessScript.new()
-	_test("initial position has equal fitness", func():
-		var b := BoardStateScript.new()
-		b.setup_initial()
-		var w: float = fitness.call("evaluate", b, 0, 0)
-		var bl: float = fitness.call("evaluate", b, 1, 0)
-		# Should be roughly equal (material equal, mobility might differ since white moves first)
-		assert_true(absf(w - bl) < 2.0, "Fitness should be roughly equal at start")
-	)
+    var fitness = ChessFitnessScript.new()
+    _test("initial position has equal fitness", func():
+        var b := BoardStateScript.new()
+        b.setup_initial()
+        var w: float = fitness.call("evaluate", b, 0, 0)
+        var bl: float = fitness.call("evaluate", b, 1, 0)
+        # Should be roughly equal (material equal, mobility might differ since white moves first)
+        assert_true(absf(w - bl) < 2.0, "Fitness should be roughly equal at start")
+    )
 
-	_test("winning position has higher fitness", func():
-		var b := BoardStateScript.new()
-		b.board.fill(0)
-		b.board[4] = ChessConstants.Piece.KING
-		b.board[60] = -ChessConstants.Piece.KING
-		b.board[3] = ChessConstants.Piece.QUEEN  # White has extra queen
-		b._rebuild_piece_lists()
-		b.is_game_over = false
-		var w: float = fitness.call("evaluate", b, 0, 10)
-		var bl: float = fitness.call("evaluate", b, 1, 10)
-		assert_gt(w, bl, "White with queen should have higher fitness")
-	)
+    _test("winning position has higher fitness", func():
+        var b := BoardStateScript.new()
+        b.board.fill(0)
+        b.board[4] = ChessConstants.Piece.KING
+        b.board[60] = -ChessConstants.Piece.KING
+        b.board[3] = ChessConstants.Piece.QUEEN  # White has extra queen
+        b._rebuild_piece_lists()
+        b.is_game_over = false
+        var w: float = fitness.call("evaluate", b, 0, 10)
+        var bl: float = fitness.call("evaluate", b, 1, 10)
+        assert_gt(w, bl, "White with queen should have higher fitness")
+    )
 
-	_test("checkmate gives high fitness to winner", func():
-		var b := BoardStateScript.new()
-		b.board.fill(0)
-		b.board[4] = ChessConstants.Piece.KING
-		b.board[60] = -ChessConstants.Piece.KING
-		b._rebuild_piece_lists()
-		b.is_game_over = true
-		b.result = 1  # White wins
-		var w: float = fitness.call("evaluate", b, 0, 20)
-		assert_gt(w, 10.0, "Winner should have high fitness")
-	)
+    _test("checkmate gives high fitness to winner", func():
+        var b := BoardStateScript.new()
+        b.board.fill(0)
+        b.board[4] = ChessConstants.Piece.KING
+        b.board[60] = -ChessConstants.Piece.KING
+        b._rebuild_piece_lists()
+        b.is_game_over = true
+        b.result = 1  # White wins
+        var w: float = fitness.call("evaluate", b, 0, 20)
+        assert_gt(w, 10.0, "Winner should have high fitness")
+    )
 
-	_test("longer games give more fitness", func():
-		var b := BoardStateScript.new()
-		b.setup_initial()
-		var short: float = fitness.call("evaluate", b, 0, 5)
-		var long_game: float = fitness.call("evaluate", b, 0, 50)
-		assert_gt(long_game, short, "Longer games should give more fitness")
-	)
+    _test("longer games give more fitness", func():
+        var b := BoardStateScript.new()
+        b.setup_initial()
+        var short: float = fitness.call("evaluate", b, 0, 5)
+        var long_game: float = fitness.call("evaluate", b, 0, 50)
+        assert_gt(long_game, short, "Longer games should give more fitness")
+    )

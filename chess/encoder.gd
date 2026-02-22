@@ -22,59 +22,59 @@ const PIECE = ChessConstants.Piece
 
 
 static func encode_board(state) -> PackedFloat32Array:
-	## Encode board into neural network input vector.
-	if state is BoardState:
-		if not state._encoder_dirty and state._encoder_cache.size() == INPUT_SIZE:
-			return state._encoder_cache
+    ## Encode board into neural network input vector.
+    if state is BoardState:
+        if not state._encoder_dirty and state._encoder_cache.size() == INPUT_SIZE:
+            return state._encoder_cache
 
-	var inputs := PackedFloat32Array()
-	inputs.resize(INPUT_SIZE)
-	inputs.fill(0.0)
+    var inputs := PackedFloat32Array()
+    inputs.resize(INPUT_SIZE)
+    inputs.fill(0.0)
 
-	var idx := 0
-	# 6 piece-type planes × 64 squares (signed: +1 white, -1 black)
-	for piece_type in range(1, 7):  # PAWN through KING
-		for sq in range(64):
-			var p: int = state.board[sq]
-			if absi(p) == piece_type:
-				inputs[idx] = 1.0 if p > 0 else -1.0
-			idx += 1
+    var idx := 0
+    # 6 piece-type planes × 64 squares (signed: +1 white, -1 black)
+    for piece_type in range(1, 7):  # PAWN through KING
+        for sq in range(64):
+            var p: int = state.board[sq]
+            if absi(p) == piece_type:
+                inputs[idx] = 1.0 if p > 0 else -1.0
+            idx += 1
 
-	# Side to move
-	inputs[idx] = 0.0 if state.side_to_move == 0 else 1.0
-	idx += 1
+    # Side to move
+    inputs[idx] = 0.0 if state.side_to_move == 0 else 1.0
+    idx += 1
 
-	# Castling rights
-	inputs[idx] = 1.0 if state.castling_rights & 0b0001 else 0.0; idx += 1
-	inputs[idx] = 1.0 if state.castling_rights & 0b0010 else 0.0; idx += 1
-	inputs[idx] = 1.0 if state.castling_rights & 0b0100 else 0.0; idx += 1
-	inputs[idx] = 1.0 if state.castling_rights & 0b1000 else 0.0; idx += 1
+    # Castling rights
+    inputs[idx] = 1.0 if state.castling_rights & 0b0001 else 0.0; idx += 1
+    inputs[idx] = 1.0 if state.castling_rights & 0b0010 else 0.0; idx += 1
+    inputs[idx] = 1.0 if state.castling_rights & 0b0100 else 0.0; idx += 1
+    inputs[idx] = 1.0 if state.castling_rights & 0b1000 else 0.0; idx += 1
 
-	if state is BoardState:
-		state._encoder_cache = inputs
-		state._encoder_dirty = false
+    if state is BoardState:
+        state._encoder_cache = inputs
+        state._encoder_dirty = false
 
-	return inputs
+    return inputs
 
 
 static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Array) -> int:
-	## Decode network output into a legal move.
-	## Output is split: first 64 = from-square preferences, next 64 = to-square preferences.
-	## We score each legal move as from_score + to_score and pick the best.
-	if legal_moves.is_empty():
-		return -1
+    ## Decode network output into a legal move.
+    ## Output is split: first 64 = from-square preferences, next 64 = to-square preferences.
+    ## We score each legal move as from_score + to_score and pick the best.
+    if legal_moves.is_empty():
+        return -1
 
-	var best_move := legal_moves[0]
-	var best_score := -INF
+    var best_move := legal_moves[0]
+    var best_score := -INF
 
-	for move in legal_moves:
-		var from_sq := BoardState.move_from(move)
-		var to_sq := BoardState.move_to(move)
-		var from_score: float = outputs[from_sq] if from_sq < outputs.size() else 0.0
-		var to_score: float = outputs[64 + to_sq] if (64 + to_sq) < outputs.size() else 0.0
-		var score := from_score + to_score
-		if score > best_score:
-			best_score = score
-			best_move = move
+    for move in legal_moves:
+        var from_sq := BoardState.move_from(move)
+        var to_sq := BoardState.move_to(move)
+        var from_score: float = outputs[from_sq] if from_sq < outputs.size() else 0.0
+        var to_score: float = outputs[64 + to_sq] if (64 + to_sq) < outputs.size() else 0.0
+        var score := from_score + to_score
+        if score > best_score:
+            best_score = score
+            best_move = move
 
-	return best_move
+    return best_move

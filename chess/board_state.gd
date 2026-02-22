@@ -9,18 +9,18 @@ const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 
 # Precomputed tables — static so they're allocated once at class load, never per-call.
 static var _KNIGHT_OFFSETS: Array[Vector2i] = [
-	Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
-	Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
+    Vector2i(-2, -1), Vector2i(-2, 1), Vector2i(-1, -2), Vector2i(-1, 2),
+    Vector2i(1, -2), Vector2i(1, 2), Vector2i(2, -1), Vector2i(2, 1)
 ]
 static var _DIAG_DIRS: Array[Vector2i] = [
-	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)
+    Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1)
 ]
 static var _STRAIGHT_DIRS: Array[Vector2i] = [
-	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
+    Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
 ]
 static var _ALL_DIRS: Array[Vector2i] = [
-	Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
-	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
+    Vector2i(-1, -1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(1, 1),
+    Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
 ]
 
 var board: Array[int] = []  # 64 squares, row-major (0=a1, 63=h8)
@@ -42,552 +42,552 @@ var _encoder_dirty: bool = true
 
 
 func _init() -> void:
-	board.resize(64)
-	board.fill(0)
-	_mark_dirty()
+    board.resize(64)
+    board.fill(0)
+    _mark_dirty()
 
 
 func setup_initial() -> void:
-	## Set up the standard starting position.
-	board.fill(0)
-	# White pieces (rank 1 = indices 0-7)
-	board[0] = Piece.ROOK; board[1] = Piece.KNIGHT; board[2] = Piece.BISHOP
-	board[3] = Piece.QUEEN; board[4] = Piece.KING
-	board[5] = Piece.BISHOP; board[6] = Piece.KNIGHT; board[7] = Piece.ROOK
-	for i in range(8, 16):
-		board[i] = Piece.PAWN
-	# Black pieces (rank 8 = indices 56-63)
-	board[56] = -Piece.ROOK; board[57] = -Piece.KNIGHT; board[58] = -Piece.BISHOP
-	board[59] = -Piece.QUEEN; board[60] = -Piece.KING
-	board[61] = -Piece.BISHOP; board[62] = -Piece.KNIGHT; board[63] = -Piece.ROOK
-	for i in range(48, 56):
-		board[i] = -Piece.PAWN
-	side_to_move = 0
-	castling_rights = 0b1111
-	en_passant_square = -1
-	halfmove_clock = 0
-	fullmove_number = 1
-	is_game_over = false
-	result = 0
-	_white_king_sq = 4
-	_black_king_sq = 60
-	_mark_dirty()
+    ## Set up the standard starting position.
+    board.fill(0)
+    # White pieces (rank 1 = indices 0-7)
+    board[0] = Piece.ROOK; board[1] = Piece.KNIGHT; board[2] = Piece.BISHOP
+    board[3] = Piece.QUEEN; board[4] = Piece.KING
+    board[5] = Piece.BISHOP; board[6] = Piece.KNIGHT; board[7] = Piece.ROOK
+    for i in range(8, 16):
+        board[i] = Piece.PAWN
+    # Black pieces (rank 8 = indices 56-63)
+    board[56] = -Piece.ROOK; board[57] = -Piece.KNIGHT; board[58] = -Piece.BISHOP
+    board[59] = -Piece.QUEEN; board[60] = -Piece.KING
+    board[61] = -Piece.BISHOP; board[62] = -Piece.KNIGHT; board[63] = -Piece.ROOK
+    for i in range(48, 56):
+        board[i] = -Piece.PAWN
+    side_to_move = 0
+    castling_rights = 0b1111
+    en_passant_square = -1
+    halfmove_clock = 0
+    fullmove_number = 1
+    is_game_over = false
+    result = 0
+    _white_king_sq = 4
+    _black_king_sq = 60
+    _mark_dirty()
 
 
 func _mark_dirty() -> void:
-	_legal_moves_dirty = true
-	_encoder_dirty = true
+    _legal_moves_dirty = true
+    _encoder_dirty = true
 
 
 func get_position_key() -> String:
-	# Compact key for encoder cache: board + side + castling + ep
-	var parts := PackedStringArray()
-	parts.resize(board.size())
-	for i in board.size():
-		parts[i] = str(board[i])
-	return ",".join(parts) + "|" + str(side_to_move) + "|" + str(castling_rights) + "|" + str(en_passant_square)
+    # Compact key for encoder cache: board + side + castling + ep
+    var parts := PackedStringArray()
+    parts.resize(board.size())
+    for i in board.size():
+        parts[i] = str(board[i])
+    return ",".join(parts) + "|" + str(side_to_move) + "|" + str(castling_rights) + "|" + str(en_passant_square)
 
 
 func _rebuild_piece_lists() -> void:
-	_white_king_sq = -1
-	_black_king_sq = -1
-	for sq in range(64):
-		var p := board[sq]
-		if p == Piece.KING:
-			_white_king_sq = sq
-		elif p == -Piece.KING:
-			_black_king_sq = sq
-	_mark_dirty()
+    _white_king_sq = -1
+    _black_king_sq = -1
+    for sq in range(64):
+        var p := board[sq]
+        if p == Piece.KING:
+            _white_king_sq = sq
+        elif p == -Piece.KING:
+            _black_king_sq = sq
+    _mark_dirty()
 
 
 static func file_of(sq: int) -> int:
-	return sq % 8
+    return sq % 8
 
 static func rank_of(sq: int) -> int:
-	return sq / 8
+    return sq / 8
 
 static func square(file: int, rank: int) -> int:
-	return rank * 8 + file
+    return rank * 8 + file
 
 static func is_valid_square(sq: int) -> bool:
-	return sq >= 0 and sq < 64
+    return sq >= 0 and sq < 64
 
 
 static func encode_move(from_sq: int, to_sq: int) -> int:
-	return (from_sq << 6) | to_sq
+    return (from_sq << 6) | to_sq
 
 
 static func move_from(encoded_move: int) -> int:
-	return encoded_move >> 6
+    return encoded_move >> 6
 
 
 static func move_to(encoded_move: int) -> int:
-	return encoded_move & 0x3f
+    return encoded_move & 0x3f
 
 
 static func move_to_vec(encoded_move: int) -> Vector2i:
-	return Vector2i(move_from(encoded_move), move_to(encoded_move))
+    return Vector2i(move_from(encoded_move), move_to(encoded_move))
 
 
 func piece_at(sq: int) -> int:
-	return board[sq]
+    return board[sq]
 
 func is_white_piece(sq: int) -> bool:
-	return board[sq] > 0
+    return board[sq] > 0
 
 func is_black_piece(sq: int) -> bool:
-	return board[sq] < 0
+    return board[sq] < 0
 
 func piece_color(sq: int) -> int:
-	if board[sq] > 0: return 0
-	if board[sq] < 0: return 1
-	return -1
+    if board[sq] > 0: return 0
+    if board[sq] < 0: return 1
+    return -1
 
 func is_friendly(sq: int) -> bool:
-	if side_to_move == 0: return board[sq] > 0
-	return board[sq] < 0
+    if side_to_move == 0: return board[sq] > 0
+    return board[sq] < 0
 
 func is_enemy(sq: int) -> bool:
-	if side_to_move == 0: return board[sq] < 0
-	return board[sq] > 0
+    if side_to_move == 0: return board[sq] < 0
+    return board[sq] > 0
 
 func abs_piece(sq: int) -> int:
-	return absi(board[sq])
+    return absi(board[sq])
 
 
 func clone() -> BoardState:
-	var copy: BoardState = get_script().new()
-	copy.board = board.duplicate()
-	copy.side_to_move = side_to_move
-	copy.castling_rights = castling_rights
-	copy.en_passant_square = en_passant_square
-	copy.halfmove_clock = halfmove_clock
-	copy.fullmove_number = fullmove_number
-	copy.is_game_over = is_game_over
-	copy.result = result
-	copy._white_king_sq = _white_king_sq
-	copy._black_king_sq = _black_king_sq
-	copy.use_bitboard_movegen = use_bitboard_movegen
-	copy._legal_moves_dirty = true
-	copy._encoder_dirty = true
-	return copy
+    var copy: BoardState = get_script().new()
+    copy.board = board.duplicate()
+    copy.side_to_move = side_to_move
+    copy.castling_rights = castling_rights
+    copy.en_passant_square = en_passant_square
+    copy.halfmove_clock = halfmove_clock
+    copy.fullmove_number = fullmove_number
+    copy.is_game_over = is_game_over
+    copy.result = result
+    copy._white_king_sq = _white_king_sq
+    copy._black_king_sq = _black_king_sq
+    copy.use_bitboard_movegen = use_bitboard_movegen
+    copy._legal_moves_dirty = true
+    copy._encoder_dirty = true
+    return copy
 
 
 func generate_legal_moves() -> PackedInt32Array:
-	## Returns packed int moves: (from << 6) | to.
-	if not _legal_moves_dirty:
-		return _legal_moves_cache
+    ## Returns packed int moves: (from << 6) | to.
+    if not _legal_moves_dirty:
+        return _legal_moves_cache
 
-	var moves := PackedInt32Array()
-	if use_bitboard_movegen:
-		var bb := BitboardState.from_board_state(self)
-		var bb_moves := bb.get_legal_moves()
-		moves.resize(bb_moves.size())
-		for i in bb_moves.size():
-			moves[i] = bb_moves[i] & 0xFFF
-	else:
-		var pseudo := _generate_pseudo_legal_moves()
-		var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
-		for m in pseudo:
-			if _is_legal(m, king_sq):
-				moves.append(m)
+    var moves := PackedInt32Array()
+    if use_bitboard_movegen:
+        var bb := BitboardState.from_board_state(self)
+        var bb_moves := bb.get_legal_moves()
+        moves.resize(bb_moves.size())
+        for i in bb_moves.size():
+            moves[i] = bb_moves[i] & 0xFFF
+    else:
+        var pseudo := _generate_pseudo_legal_moves()
+        var king_sq := _find_king(side_to_move)  # Find once; re-used by every _is_legal() call.
+        for m in pseudo:
+            if _is_legal(m, king_sq):
+                moves.append(m)
 
-	_legal_moves_cache = moves
-	_legal_moves_dirty = false
-	return moves
+    _legal_moves_cache = moves
+    _legal_moves_dirty = false
+    return moves
 
 
 func benchmark_generate_legal_moves(iterations: int = 1000) -> void:
-	var state := BoardState.new()
-	state.setup_initial()
-	var start := Time.get_ticks_usec()
-	for i in iterations:
-		state.generate_legal_moves()
-	var elapsed := Time.get_ticks_usec() - start
-	print("generate_legal_moves ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
+    var state := BoardState.new()
+    state.setup_initial()
+    var start := Time.get_ticks_usec()
+    for i in iterations:
+        state.generate_legal_moves()
+    var elapsed := Time.get_ticks_usec() - start
+    print("generate_legal_moves ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
 
 
 func _generate_pseudo_legal_moves() -> PackedInt32Array:
-	var moves := PackedInt32Array()
-	for sq in range(64):
-		if (side_to_move == 0 and board[sq] > 0) or (side_to_move == 1 and board[sq] < 0):
-			_add_piece_moves(sq, moves)
-	return moves
+    var moves := PackedInt32Array()
+    for sq in range(64):
+        if (side_to_move == 0 and board[sq] > 0) or (side_to_move == 1 and board[sq] < 0):
+            _add_piece_moves(sq, moves)
+    return moves
 
 
 func _add_piece_moves(sq: int, moves: PackedInt32Array) -> void:
-	var piece := abs_piece(sq)
-	match piece:
-		Piece.PAWN: _add_pawn_moves(sq, moves)
-		Piece.KNIGHT: _add_knight_moves(sq, moves)
-		Piece.BISHOP: _add_slider_moves(sq, moves, _DIAG_DIRS)
-		Piece.ROOK: _add_slider_moves(sq, moves, _STRAIGHT_DIRS)
-		Piece.QUEEN: _add_slider_moves(sq, moves, _ALL_DIRS)
-		Piece.KING: _add_king_moves(sq, moves)
+    var piece := abs_piece(sq)
+    match piece:
+        Piece.PAWN: _add_pawn_moves(sq, moves)
+        Piece.KNIGHT: _add_knight_moves(sq, moves)
+        Piece.BISHOP: _add_slider_moves(sq, moves, _DIAG_DIRS)
+        Piece.ROOK: _add_slider_moves(sq, moves, _STRAIGHT_DIRS)
+        Piece.QUEEN: _add_slider_moves(sq, moves, _ALL_DIRS)
+        Piece.KING: _add_king_moves(sq, moves)
 
 
 func _add_pawn_moves(sq: int, moves: PackedInt32Array) -> void:
-	var dir := 1 if side_to_move == 0 else -1
-	var start_rank := 1 if side_to_move == 0 else 6
-	var f := file_of(sq)
-	var r := rank_of(sq)
+    var dir := 1 if side_to_move == 0 else -1
+    var start_rank := 1 if side_to_move == 0 else 6
+    var f := file_of(sq)
+    var r := rank_of(sq)
 
-	# Forward one
-	var fwd := square(f, r + dir)
-	if is_valid_square(fwd) and board[fwd] == 0:
-		moves.append(encode_move(sq, fwd))
-		# Forward two from starting rank
-		if r == start_rank:
-			var fwd2 := square(f, r + 2 * dir)
-			if board[fwd2] == 0:
-				moves.append(encode_move(sq, fwd2))
+    # Forward one
+    var fwd := square(f, r + dir)
+    if is_valid_square(fwd) and board[fwd] == 0:
+        moves.append(encode_move(sq, fwd))
+        # Forward two from starting rank
+        if r == start_rank:
+            var fwd2 := square(f, r + 2 * dir)
+            if board[fwd2] == 0:
+                moves.append(encode_move(sq, fwd2))
 
-	# Captures
-	for df in [-1, 1]:
-		var nf: int = f + df
-		if nf < 0 or nf > 7: continue
-		var cap_sq := square(nf, r + dir)
-		if not is_valid_square(cap_sq): continue
-		if is_enemy(cap_sq):
-			moves.append(encode_move(sq, cap_sq))
-		elif cap_sq == en_passant_square:
-			moves.append(encode_move(sq, cap_sq))
+    # Captures
+    for df in [-1, 1]:
+        var nf: int = f + df
+        if nf < 0 or nf > 7: continue
+        var cap_sq := square(nf, r + dir)
+        if not is_valid_square(cap_sq): continue
+        if is_enemy(cap_sq):
+            moves.append(encode_move(sq, cap_sq))
+        elif cap_sq == en_passant_square:
+            moves.append(encode_move(sq, cap_sq))
 
 
 func _add_knight_moves(sq: int, moves: PackedInt32Array) -> void:
-	var f := file_of(sq)
-	var r := rank_of(sq)
-	for off in _KNIGHT_OFFSETS:
-		var nf: int = f + off.x
-		var nr: int = r + off.y
-		if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
-		var target := square(nf, nr)
-		if not is_friendly(target):
-			moves.append(encode_move(sq, target))
+    var f := file_of(sq)
+    var r := rank_of(sq)
+    for off in _KNIGHT_OFFSETS:
+        var nf: int = f + off.x
+        var nr: int = r + off.y
+        if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
+        var target := square(nf, nr)
+        if not is_friendly(target):
+            moves.append(encode_move(sq, target))
 
 
 func _add_slider_moves(sq: int, moves: PackedInt32Array, directions: Array) -> void:
-	var f := file_of(sq)
-	var r := rank_of(sq)
-	var side_sign := 1 if side_to_move == 0 else -1
-	for dir: Vector2i in directions:
-		var nf := f + dir.x
-		var nr := r + dir.y
-		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-			var target := square(nf, nr)
-			var p := board[target]
-			if p == 0:
-				moves.append(encode_move(sq, target))
-			elif p * side_sign > 0:
-				break
-			else:
-				moves.append(encode_move(sq, target))
-				break
-			nf += dir.x
-			nr += dir.y
+    var f := file_of(sq)
+    var r := rank_of(sq)
+    var side_sign := 1 if side_to_move == 0 else -1
+    for dir: Vector2i in directions:
+        var nf := f + dir.x
+        var nr := r + dir.y
+        while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+            var target := square(nf, nr)
+            var p := board[target]
+            if p == 0:
+                moves.append(encode_move(sq, target))
+            elif p * side_sign > 0:
+                break
+            else:
+                moves.append(encode_move(sq, target))
+                break
+            nf += dir.x
+            nr += dir.y
 
 
 func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
-	var f := file_of(sq)
-	var r := rank_of(sq)
-	for df in [-1, 0, 1]:
-		for dr in [-1, 0, 1]:
-			if df == 0 and dr == 0: continue
-			var nf: int = f + df
-			var nr: int = r + dr
-			if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
-			var target := square(nf, nr)
-			if not is_friendly(target):
-				moves.append(encode_move(sq, target))
+    var f := file_of(sq)
+    var r := rank_of(sq)
+    for df in [-1, 0, 1]:
+        for dr in [-1, 0, 1]:
+            if df == 0 and dr == 0: continue
+            var nf: int = f + df
+            var nr: int = r + dr
+            if nf < 0 or nf > 7 or nr < 0 or nr > 7: continue
+            var target := square(nf, nr)
+            if not is_friendly(target):
+                moves.append(encode_move(sq, target))
 
-	# Castling
-	if side_to_move == 0 and sq == 4:
-		if (
-			castling_rights & 0b0001
-			and board[5] == 0
-			and board[6] == 0
-			and board[7] == Piece.ROOK
-		):
-			if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
-				moves.append(encode_move(4, 6))
-		if (
-			castling_rights & 0b0010
-			and board[3] == 0
-			and board[2] == 0
-			and board[1] == 0
-			and board[0] == Piece.ROOK
-		):
-			if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
-				moves.append(encode_move(4, 2))
-	elif side_to_move == 1 and sq == 60:
-		if (
-			castling_rights & 0b0100
-			and board[61] == 0
-			and board[62] == 0
-			and board[63] == -Piece.ROOK
-		):
-			if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
-				moves.append(encode_move(60, 62))
-		if (
-			castling_rights & 0b1000
-			and board[59] == 0
-			and board[58] == 0
-			and board[57] == 0
-			and board[56] == -Piece.ROOK
-		):
-			if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
-				moves.append(encode_move(60, 58))
+    # Castling
+    if side_to_move == 0 and sq == 4:
+        if (
+            castling_rights & 0b0001
+            and board[5] == 0
+            and board[6] == 0
+            and board[7] == Piece.ROOK
+        ):
+            if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
+                moves.append(encode_move(4, 6))
+        if (
+            castling_rights & 0b0010
+            and board[3] == 0
+            and board[2] == 0
+            and board[1] == 0
+            and board[0] == Piece.ROOK
+        ):
+            if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
+                moves.append(encode_move(4, 2))
+    elif side_to_move == 1 and sq == 60:
+        if (
+            castling_rights & 0b0100
+            and board[61] == 0
+            and board[62] == 0
+            and board[63] == -Piece.ROOK
+        ):
+            if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
+                moves.append(encode_move(60, 62))
+        if (
+            castling_rights & 0b1000
+            and board[59] == 0
+            and board[58] == 0
+            and board[57] == 0
+            and board[56] == -Piece.ROOK
+        ):
+            if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
+                moves.append(encode_move(60, 58))
 
 
 func _is_legal(move: int, king_sq: int) -> bool:
-	## Check legality via in-place make/unmake — avoids cloning the entire board.
-	## Equivalent to the original clone-based approach but allocates nothing.
-	var from := move_from(move)
-	var to := move_to(move)
-	var piece := board[from]
-	var abs_p := absi(piece)
-	var captured := board[to]
+    ## Check legality via in-place make/unmake — avoids cloning the entire board.
+    ## Equivalent to the original clone-based approach but allocates nothing.
+    var from := move_from(move)
+    var to := move_to(move)
+    var piece := board[from]
+    var abs_p := absi(piece)
+    var captured := board[to]
 
-	# Handle en passant capture.
-	var ep_sq := -1
-	var ep_captured := 0
-	if abs_p == Piece.PAWN and to == en_passant_square:
-		ep_sq = to + (-8 if side_to_move == 0 else 8)
-		ep_captured = board[ep_sq]
-		board[ep_sq] = 0
+    # Handle en passant capture.
+    var ep_sq := -1
+    var ep_captured := 0
+    if abs_p == Piece.PAWN and to == en_passant_square:
+        ep_sq = to + (-8 if side_to_move == 0 else 8)
+        ep_captured = board[ep_sq]
+        board[ep_sq] = 0
 
-	# Handle castling: temporarily move the rook.
-	var rook_from := -1
-	var rook_to_sq := -1
-	var rook_piece := 0
-	if abs_p == Piece.KING:
-		if to - from == 2:       # Kingside
-			rook_from = to + 1; rook_to_sq = to - 1
-		elif from - to == 2:     # Queenside
-			rook_from = to - 2; rook_to_sq = to + 1
-		if rook_from != -1:
-			rook_piece = board[rook_from]
-			board[rook_to_sq] = rook_piece
-			board[rook_from] = 0
+    # Handle castling: temporarily move the rook.
+    var rook_from := -1
+    var rook_to_sq := -1
+    var rook_piece := 0
+    if abs_p == Piece.KING:
+        if to - from == 2:       # Kingside
+            rook_from = to + 1; rook_to_sq = to - 1
+        elif from - to == 2:     # Queenside
+            rook_from = to - 2; rook_to_sq = to + 1
+        if rook_from != -1:
+            rook_piece = board[rook_from]
+            board[rook_to_sq] = rook_piece
+            board[rook_from] = 0
 
-	# Apply piece move (with pawn promotion to queen for attack purposes).
-	board[to] = piece
-	board[from] = 0
-	if abs_p == Piece.PAWN:
-		if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
-			board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+    # Apply piece move (with pawn promotion to queen for attack purposes).
+    board[to] = piece
+    board[from] = 0
+    if abs_p == Piece.PAWN:
+        if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
+            board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
 
-	# The king is on `to` if it just moved, otherwise it stays at king_sq.
-	var actual_king_sq := to if abs_p == Piece.KING else king_sq
-	var legal := actual_king_sq != -1 and not _is_square_attacked(actual_king_sq, 1 - side_to_move)
+    # The king is on `to` if it just moved, otherwise it stays at king_sq.
+    var actual_king_sq := to if abs_p == Piece.KING else king_sq
+    var legal := actual_king_sq != -1 and not _is_square_attacked(actual_king_sq, 1 - side_to_move)
 
-	# Undo all board changes.
-	board[from] = piece
-	board[to] = captured
-	if ep_sq != -1:
-		board[ep_sq] = ep_captured
-	if rook_from != -1:
-		board[rook_from] = rook_piece
-		board[rook_to_sq] = 0
+    # Undo all board changes.
+    board[from] = piece
+    board[to] = captured
+    if ep_sq != -1:
+        board[ep_sq] = ep_captured
+    if rook_from != -1:
+        board[rook_from] = rook_piece
+        board[rook_to_sq] = 0
 
-	return legal
+    return legal
 
 
 func _find_king(color: int) -> int:
-	return _white_king_sq if color == 0 else _black_king_sq
+    return _white_king_sq if color == 0 else _black_king_sq
 
 
 func _is_square_attacked(sq: int, by_color: int) -> bool:
-	## Check if 'sq' is attacked by any piece of 'by_color'.
-	var sign := 1 if by_color == 0 else -1
-	var f := file_of(sq)
-	var r := rank_of(sq)
+    ## Check if 'sq' is attacked by any piece of 'by_color'.
+    var sign := 1 if by_color == 0 else -1
+    var f := file_of(sq)
+    var r := rank_of(sq)
 
-	# Knight attacks
-	for off in _KNIGHT_OFFSETS:
-		var nf: int = f + off.x
-		var nr: int = r + off.y
-		if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-			if board[square(nf, nr)] == sign * Piece.KNIGHT: return true
+    # Knight attacks
+    for off in _KNIGHT_OFFSETS:
+        var nf: int = f + off.x
+        var nr: int = r + off.y
+        if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+            if board[square(nf, nr)] == sign * Piece.KNIGHT: return true
 
-	# Pawn attacks
-	var pawn_dir := -1 if by_color == 0 else 1  # Pawns attack from behind
-	for df in [-1, 1]:
-		var nf: int = f + df
-		var nr: int = r + pawn_dir
-		if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-			if board[square(nf, nr)] == sign * Piece.PAWN: return true
+    # Pawn attacks
+    var pawn_dir := -1 if by_color == 0 else 1  # Pawns attack from behind
+    for df in [-1, 1]:
+        var nf: int = f + df
+        var nr: int = r + pawn_dir
+        if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+            if board[square(nf, nr)] == sign * Piece.PAWN: return true
 
-	# King attacks
-	for df in [-1, 0, 1]:
-		for dr in [-1, 0, 1]:
-			if df == 0 and dr == 0: continue
-			var nf: int = f + df
-			var nr: int = r + dr
-			if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-				if board[square(nf, nr)] == sign * Piece.KING: return true
+    # King attacks
+    for df in [-1, 0, 1]:
+        for dr in [-1, 0, 1]:
+            if df == 0 and dr == 0: continue
+            var nf: int = f + df
+            var nr: int = r + dr
+            if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+                if board[square(nf, nr)] == sign * Piece.KING: return true
 
-	# Slider attacks (bishop/queen diagonals, rook/queen straights)
-	for dir in _DIAG_DIRS:
-		var nf: int = f + dir.x
-		var nr: int = r + dir.y
-		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-			var p := board[square(nf, nr)]
-			if p != 0:
-				if p == sign * Piece.BISHOP or p == sign * Piece.QUEEN: return true
-				break
-			nf += dir.x; nr += dir.y
+    # Slider attacks (bishop/queen diagonals, rook/queen straights)
+    for dir in _DIAG_DIRS:
+        var nf: int = f + dir.x
+        var nr: int = r + dir.y
+        while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+            var p := board[square(nf, nr)]
+            if p != 0:
+                if p == sign * Piece.BISHOP or p == sign * Piece.QUEEN: return true
+                break
+            nf += dir.x; nr += dir.y
 
-	for dir in _STRAIGHT_DIRS:
-		var nf: int = f + dir.x
-		var nr: int = r + dir.y
-		while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-			var p := board[square(nf, nr)]
-			if p != 0:
-				if p == sign * Piece.ROOK or p == sign * Piece.QUEEN: return true
-				break
-			nf += dir.x; nr += dir.y
+    for dir in _STRAIGHT_DIRS:
+        var nf: int = f + dir.x
+        var nr: int = r + dir.y
+        while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+            var p := board[square(nf, nr)]
+            if p != 0:
+                if p == sign * Piece.ROOK or p == sign * Piece.QUEEN: return true
+                break
+            nf += dir.x; nr += dir.y
 
-	return false
+    return false
 
 
 func make_move(move) -> void:
-	## Apply a legal move and update game state.
-	_apply_move_unchecked(move)
-	side_to_move = 1 - side_to_move
-	if side_to_move == 0:
-		fullmove_number += 1
-	_check_game_over()
+    ## Apply a legal move and update game state.
+    _apply_move_unchecked(move)
+    side_to_move = 1 - side_to_move
+    if side_to_move == 0:
+        fullmove_number += 1
+    _check_game_over()
 
 
 func _apply_move_unchecked(move) -> void:
-	var from: int = move_from(move) if typeof(move) == TYPE_INT else move.x
-	var to: int = move_to(move) if typeof(move) == TYPE_INT else move.y
-	var piece := board[from]
-	var abs_p := absi(piece)
-	var captured := board[to]
+    var from: int = move_from(move) if typeof(move) == TYPE_INT else move.x
+    var to: int = move_to(move) if typeof(move) == TYPE_INT else move.y
+    var piece := board[from]
+    var abs_p := absi(piece)
+    var captured := board[to]
 
-	# En passant capture
-	if abs_p == Piece.PAWN and to == en_passant_square:
-		var ep_captured_sq := to + (-8 if side_to_move == 0 else 8)
-		board[ep_captured_sq] = 0
+    # En passant capture
+    if abs_p == Piece.PAWN and to == en_passant_square:
+        var ep_captured_sq := to + (-8 if side_to_move == 0 else 8)
+        board[ep_captured_sq] = 0
 
-	# Update halfmove clock
-	if abs_p == Piece.PAWN or captured != 0:
-		halfmove_clock = 0
-	else:
-		halfmove_clock += 1
+    # Update halfmove clock
+    if abs_p == Piece.PAWN or captured != 0:
+        halfmove_clock = 0
+    else:
+        halfmove_clock += 1
 
-	# En passant square
-	en_passant_square = -1
-	if abs_p == Piece.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
-		en_passant_square = square(file_of(from), (rank_of(from) + rank_of(to)) / 2)
+    # En passant square
+    en_passant_square = -1
+    if abs_p == Piece.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
+        en_passant_square = square(file_of(from), (rank_of(from) + rank_of(to)) / 2)
 
-	# Castling: move rook
-	if abs_p == Piece.KING:
-		if to - from == 2:  # Kingside
-			board[to - 1] = board[to + 1]; board[to + 1] = 0
-		elif from - to == 2:  # Queenside
-			board[to + 1] = board[to - 2]; board[to - 2] = 0
+    # Castling: move rook
+    if abs_p == Piece.KING:
+        if to - from == 2:  # Kingside
+            board[to - 1] = board[to + 1]; board[to + 1] = 0
+        elif from - to == 2:  # Queenside
+            board[to + 1] = board[to - 2]; board[to - 2] = 0
 
-	# Update castling rights
-	if abs_p == Piece.KING:
-		if side_to_move == 0: castling_rights &= 0b1100
-		else: castling_rights &= 0b0011
-	if from == 0 or to == 0: castling_rights &= ~0b0010
-	if from == 7 or to == 7: castling_rights &= ~0b0001
-	if from == 56 or to == 56: castling_rights &= ~0b1000
-	if from == 63 or to == 63: castling_rights &= ~0b0100
+    # Update castling rights
+    if abs_p == Piece.KING:
+        if side_to_move == 0: castling_rights &= 0b1100
+        else: castling_rights &= 0b0011
+    if from == 0 or to == 0: castling_rights &= ~0b0010
+    if from == 7 or to == 7: castling_rights &= ~0b0001
+    if from == 56 or to == 56: castling_rights &= ~0b1000
+    if from == 63 or to == 63: castling_rights &= ~0b0100
 
-	# Move piece
-	board[to] = piece
-	board[from] = 0
+    # Move piece
+    board[to] = piece
+    board[from] = 0
 
-	# Update king position cache
-	if abs_p == Piece.KING:
-		if side_to_move == 0:
-			_white_king_sq = to
-		else:
-			_black_king_sq = to
+    # Update king position cache
+    if abs_p == Piece.KING:
+        if side_to_move == 0:
+            _white_king_sq = to
+        else:
+            _black_king_sq = to
 
-	# Pawn promotion (auto-queen)
-	if abs_p == Piece.PAWN:
-		if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
-			board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+    # Pawn promotion (auto-queen)
+    if abs_p == Piece.PAWN:
+        if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
+            board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
 
-	_mark_dirty()
+    _mark_dirty()
 
 
 func _check_game_over() -> void:
-	# Check 50-move rule first — avoids the expensive generate_legal_moves() call.
-	if halfmove_clock >= 100:
-		is_game_over = true
-		result = 2  # 50-move rule draw
-		return
-	var moves := generate_legal_moves()
-	if moves.is_empty():
-		is_game_over = true
-		if is_in_check():
-			result = 1 if side_to_move == 1 else -1  # Checkmate
-		else:
-			result = 2  # Stalemate
+    # Check 50-move rule first — avoids the expensive generate_legal_moves() call.
+    if halfmove_clock >= 100:
+        is_game_over = true
+        result = 2  # 50-move rule draw
+        return
+    var moves := generate_legal_moves()
+    if moves.is_empty():
+        is_game_over = true
+        if is_in_check():
+            result = 1 if side_to_move == 1 else -1  # Checkmate
+        else:
+            result = 2  # Stalemate
 
 
 func is_in_check() -> bool:
-	var king_sq := _find_king(side_to_move)
-	if king_sq == -1: return false
-	return _is_square_attacked(king_sq, 1 - side_to_move)
+    var king_sq := _find_king(side_to_move)
+    if king_sq == -1: return false
+    return _is_square_attacked(king_sq, 1 - side_to_move)
 
 
 func material_score(color: int) -> float:
-	## Sum material value for given color.
-	var total := 0.0
-	for sq in range(64):
-		var p: int = board[sq]
-		if (color == 0 and p > 0) or (color == 1 and p < 0):
-			total += ChessConstants.PIECE_VALUES_ARRAY[absi(p)]
-	return total
+    ## Sum material value for given color.
+    var total := 0.0
+    for sq in range(64):
+        var p: int = board[sq]
+        if (color == 0 and p > 0) or (color == 1 and p < 0):
+            total += ChessConstants.PIECE_VALUES_ARRAY[absi(p)]
+    return total
 
 
 func mobility_score(color: int) -> int:
-	## Count number of legal moves for a color.
-	var saved_side := side_to_move
-	side_to_move = color
-	var moves := generate_legal_moves()
-	side_to_move = saved_side
-	return moves.size()
+    ## Count number of legal moves for a color.
+    var saved_side := side_to_move
+    side_to_move = color
+    var moves := generate_legal_moves()
+    side_to_move = saved_side
+    return moves.size()
 
 
 func king_safety_score(color: int) -> float:
-	## Simple king safety: count friendly pawns near king.
-	var king_sq := _find_king(color)
-	if king_sq == -1: return 0.0
-	var kf := file_of(king_sq)
-	var kr := rank_of(king_sq)
-	var safety := 0.0
-	var sign := 1 if color == 0 else -1
-	for df in [-1, 0, 1]:
-		for dr in [-1, 0, 1]:
-			var nf: int = kf + df
-			var nr: int = kr + dr
-			if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-				var p := board[square(nf, nr)]
-				if p == sign * Piece.PAWN:
-					safety += 1.0
-	return safety
+    ## Simple king safety: count friendly pawns near king.
+    var king_sq := _find_king(color)
+    if king_sq == -1: return 0.0
+    var kf := file_of(king_sq)
+    var kr := rank_of(king_sq)
+    var safety := 0.0
+    var sign := 1 if color == 0 else -1
+    for df in [-1, 0, 1]:
+        for dr in [-1, 0, 1]:
+            var nf: int = kf + df
+            var nr: int = kr + dr
+            if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
+                var p := board[square(nf, nr)]
+                if p == sign * Piece.PAWN:
+                    safety += 1.0
+    return safety
 
 
 func to_string_board() -> String:
-	var s := ""
-	for r in range(7, -1, -1):
-		s += str(r + 1) + " "
-		for f in range(8):
-			var p := board[square(f, r)]
-			if p == 0:
-				s += ". "
-			else:
-				var sym: String = ChessConstants.PIECE_SYMBOLS.get(absi(p), "?")
-				s += sym.to_lower() + " " if p < 0 else sym + " "
-		s += "\n"
-	s += "  a b c d e f g h"
-	return s
+    var s := ""
+    for r in range(7, -1, -1):
+        s += str(r + 1) + " "
+        for f in range(8):
+            var p := board[square(f, r)]
+            if p == 0:
+                s += ". "
+            else:
+                var sym: String = ChessConstants.PIECE_SYMBOLS.get(absi(p), "?")
+                s += sym.to_lower() + " " if p < 0 else sym + " "
+        s += "\n"
+    s += "  a b c d e f g h"
+    return s
