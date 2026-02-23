@@ -401,6 +401,10 @@ func _run_auto_train() -> void:
             training_manager.games_per_individual, max_generations
         ])
 
+    # --- Global Elite: seed hall of fame from shared pool ---
+    if not use_neat:
+        _load_global_elite(worker_id, evo)
+
     # Run training loop
     var total_games := 0
     print("Starting training loop for %d generations" % max_generations)
@@ -416,5 +420,39 @@ func _run_auto_train() -> void:
                 stats["black_best"], stats["black_avg"]
             ])
 
+    # --- Global Elite: contribute this run's best genomes to the shared pool ---
+    if not use_neat:
+        evo.write_elite_contrib(worker_id)
+
     print("Auto-train complete!")
     get_tree().quit()
+
+
+func _load_global_elite(worker_id: String, evo: ChessEvolution) -> void:
+    ## Read the pre-computed global elite seed file written by Python and inject
+    ## the genomes into the hall of fame so this run competes against the best
+    ## genomes from all previous parallel runs.
+    var path := "user://global_elite_%s.json" % worker_id
+    if worker_id.is_empty():
+        path = "user://global_elite_default.json"
+
+    if not FileAccess.file_exists(path):
+        return
+
+    var file := FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        return
+
+    var json := JSON.new()
+    if json.parse(file.get_as_text()) != OK:
+        file.close()
+        push_warning("GlobalElite: failed to parse %s" % path)
+        return
+    file.close()
+
+    var elite_pool: Array = json.get_data().get("elites", [])
+    if elite_pool.is_empty():
+        return
+
+    var seeded := evo.seed_from_global_elite(elite_pool)
+    print("GlobalElite: seeded %d genome(s) from %s" % [seeded, path])

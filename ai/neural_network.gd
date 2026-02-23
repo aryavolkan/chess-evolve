@@ -193,3 +193,25 @@ func _crossover_segment(
     for i in a.size():
         var gi := offset + i
         dst[i] = b[i] if (gi >= p1 and gi < p2) else a[i]
+
+
+func to_dict() -> Dictionary:
+    ## Serialise this network to a JSON-compatible dictionary.
+    ## Used by the global-elite pool to persist genomes across training runs.
+    return {
+        "input_size": input_size,
+        "hidden_size": hidden_size,
+        "output_size": output_size,
+        "weights_ih": Array(weights_ih),
+        "bias_h": Array(bias_h),
+        "weights_ho": Array(weights_ho),
+        "bias_o": Array(bias_o),
+    }
+
+
+func load_from_dict(data: Dictionary) -> void:
+    ## Restore weights from a dictionary produced by to_dict().
+    weights_ih = PackedFloat32Array(data["weights_ih"])
+    bias_h = PackedFloat32Array(data["bias_h"])
+    weights_ho = PackedFloat32Array(data["weights_ho"])
+    bias_o = PackedFloat32Array(data["bias_o"])
