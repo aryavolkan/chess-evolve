@@ -13,7 +13,7 @@ const PIECE_KING: i8 = 6;
 
 static KNIGHT_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
     let mut table = [0u64; 64];
-    for sq in 0..64 {
+    for (sq, val) in table.iter_mut().enumerate() {
         let bb = 1u64 << sq;
         let mut attacks = 0u64;
         if sq % 8 > 1 {
@@ -32,14 +32,14 @@ static KNIGHT_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
             attacks |= bb >> 6;
             attacks |= bb << 10;
         }
-        table[sq] = attacks;
+        *val = attacks;
     }
     table
 });
 
 static KING_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
     let mut table = [0u64; 64];
-    for sq in 0..64 {
+    for (sq, val) in table.iter_mut().enumerate() {
         let f = file_of(sq) as i32;
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
@@ -56,14 +56,14 @@ static KING_ATTACKS: LazyLock<[u64; 64]> = LazyLock::new(|| {
                 attacks |= 1u64 << square(nf as usize, nr as usize);
             }
         }
-        table[sq] = attacks;
+        *val = attacks;
     }
     table
 });
 
 static PAWN_ATTACKS_WHITE: LazyLock<[u64; 64]> = LazyLock::new(|| {
     let mut table = [0u64; 64];
-    for sq in 0..64 {
+    for (sq, val) in table.iter_mut().enumerate() {
         let f = file_of(sq) as i32;
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
@@ -77,14 +77,14 @@ static PAWN_ATTACKS_WHITE: LazyLock<[u64; 64]> = LazyLock::new(|| {
                 attacks |= 1u64 << square(nf as usize, nr as usize);
             }
         }
-        table[sq] = attacks;
+        *val = attacks;
     }
     table
 });
 
 static PAWN_ATTACKS_BLACK: LazyLock<[u64; 64]> = LazyLock::new(|| {
     let mut table = [0u64; 64];
-    for sq in 0..64 {
+    for (sq, val) in table.iter_mut().enumerate() {
         let f = file_of(sq) as i32;
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
@@ -98,7 +98,7 @@ static PAWN_ATTACKS_BLACK: LazyLock<[u64; 64]> = LazyLock::new(|| {
                 attacks |= 1u64 << square(nf as usize, nr as usize);
             }
         }
-        table[sq] = attacks;
+        *val = attacks;
     }
     table
 });
@@ -157,32 +157,32 @@ impl ChessBoard {
         ];
 
         let mut pieces = [PIECE_NONE; 64];
-        for sq in 0..64 {
+        for (sq, val) in pieces.iter_mut().enumerate() {
             let mask = 1u64 << sq;
             if bb[0].0 & mask != 0 {
-                pieces[sq] = PIECE_PAWN;
+                *val = PIECE_PAWN;
             } else if bb[1].0 & mask != 0 {
-                pieces[sq] = PIECE_KNIGHT;
+                *val = PIECE_KNIGHT;
             } else if bb[2].0 & mask != 0 {
-                pieces[sq] = PIECE_BISHOP;
+                *val = PIECE_BISHOP;
             } else if bb[3].0 & mask != 0 {
-                pieces[sq] = PIECE_ROOK;
+                *val = PIECE_ROOK;
             } else if bb[4].0 & mask != 0 {
-                pieces[sq] = PIECE_QUEEN;
+                *val = PIECE_QUEEN;
             } else if bb[5].0 & mask != 0 {
-                pieces[sq] = PIECE_KING;
+                *val = PIECE_KING;
             } else if bb[6].0 & mask != 0 {
-                pieces[sq] = -PIECE_PAWN;
+                *val = -PIECE_PAWN;
             } else if bb[7].0 & mask != 0 {
-                pieces[sq] = -PIECE_KNIGHT;
+                *val = -PIECE_KNIGHT;
             } else if bb[8].0 & mask != 0 {
-                pieces[sq] = -PIECE_BISHOP;
+                *val = -PIECE_BISHOP;
             } else if bb[9].0 & mask != 0 {
-                pieces[sq] = -PIECE_ROOK;
+                *val = -PIECE_ROOK;
             } else if bb[10].0 & mask != 0 {
-                pieces[sq] = -PIECE_QUEEN;
+                *val = -PIECE_QUEEN;
             } else if bb[11].0 & mask != 0 {
-                pieces[sq] = -PIECE_KING;
+                *val = -PIECE_KING;
             }
         }
 
@@ -662,7 +662,7 @@ fn square(file: usize, rank: usize) -> usize {
 
 fn compute_ray_table(df: i32, dr: i32) -> [u64; 64] {
     let mut table = [0u64; 64];
-    for sq in 0..64 {
+    for (sq, val) in table.iter_mut().enumerate() {
         let f = file_of(sq) as i32;
         let r = rank_of(sq) as i32;
         let mut attacks = 0u64;
@@ -673,7 +673,7 @@ fn compute_ray_table(df: i32, dr: i32) -> [u64; 64] {
             nf += df;
             nr += dr;
         }
-        table[sq] = attacks;
+        *val = attacks;
     }
     table
 }
