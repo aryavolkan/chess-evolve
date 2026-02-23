@@ -373,8 +373,8 @@ fn king_safety_score(board: &ChessBoard, color: u8) -> f32 {
     if king_sq < 0 {
         return 0.0;
     }
-    let kf = king_sq % 8 ;
-    let kr = king_sq / 8 ;
+    let kf = king_sq % 8;
+    let kr = king_sq / 8;
     let pawn_piece = if color == 0 { 1 } else { -1 };
     let mut safety = 0.0;
     for df in -1..=1 {

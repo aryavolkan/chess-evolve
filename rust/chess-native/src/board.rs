@@ -296,15 +296,15 @@ impl ChessBoard {
         if abs_p == PIECE_PAWN
             && ((self.side_to_move == 0 && rank_of(to) == 7)
                 || (self.side_to_move == 1 && rank_of(to) == 0))
-            {
-                self.remove_piece_at(to, piece);
-                let promo_piece = if self.side_to_move == 0 {
-                    PIECE_QUEEN
-                } else {
-                    -PIECE_QUEEN
-                };
-                self.set_piece_at(to, promo_piece);
-            }
+        {
+            self.remove_piece_at(to, piece);
+            let promo_piece = if self.side_to_move == 0 {
+                PIECE_QUEEN
+            } else {
+                -PIECE_QUEEN
+            };
+            self.set_piece_at(to, promo_piece);
+        }
 
         self.side_to_move ^= 1;
     }
@@ -481,44 +481,44 @@ impl ChessBoard {
                 && bit_at(occupancy, 6) == 0
                 && bit_at(self.bb[3].0, 7) == 1
                 && !self.is_square_attacked(4, 1)
-                    && !self.is_square_attacked(5, 1)
-                    && !self.is_square_attacked(6, 1)
-                {
-                    moves.push(encode_move(4, 6, 0));
-                }
+                && !self.is_square_attacked(5, 1)
+                && !self.is_square_attacked(6, 1)
+            {
+                moves.push(encode_move(4, 6, 0));
+            }
             if (self.castling_rights & 0b0010) != 0
                 && bit_at(occupancy, 3) == 0
                 && bit_at(occupancy, 2) == 0
                 && bit_at(occupancy, 1) == 0
                 && bit_at(self.bb[3].0, 0) == 1
                 && !self.is_square_attacked(4, 1)
-                    && !self.is_square_attacked(3, 1)
-                    && !self.is_square_attacked(2, 1)
-                {
-                    moves.push(encode_move(4, 2, 0));
-                }
+                && !self.is_square_attacked(3, 1)
+                && !self.is_square_attacked(2, 1)
+            {
+                moves.push(encode_move(4, 2, 0));
+            }
         } else if self.side_to_move == 1 && sq == 60 {
             if (self.castling_rights & 0b0100) != 0
                 && bit_at(occupancy, 61) == 0
                 && bit_at(occupancy, 62) == 0
                 && bit_at(self.bb[9].0, 63) == 1
                 && !self.is_square_attacked(60, 0)
-                    && !self.is_square_attacked(61, 0)
-                    && !self.is_square_attacked(62, 0)
-                {
-                    moves.push(encode_move(60, 62, 0));
-                }
+                && !self.is_square_attacked(61, 0)
+                && !self.is_square_attacked(62, 0)
+            {
+                moves.push(encode_move(60, 62, 0));
+            }
             if (self.castling_rights & 0b1000) != 0
                 && bit_at(occupancy, 59) == 0
                 && bit_at(occupancy, 58) == 0
                 && bit_at(occupancy, 57) == 0
                 && bit_at(self.bb[9].0, 56) == 1
                 && !self.is_square_attacked(60, 0)
-                    && !self.is_square_attacked(59, 0)
-                    && !self.is_square_attacked(58, 0)
-                {
-                    moves.push(encode_move(60, 58, 0));
-                }
+                && !self.is_square_attacked(59, 0)
+                && !self.is_square_attacked(58, 0)
+            {
+                moves.push(encode_move(60, 58, 0));
+            }
         }
     }
 
