@@ -5,7 +5,6 @@ Run this while Chess Evolve training is active (UI or headless). The script poll
 `metrics.json`, logs new generations to W&B, and prints a concise console summary.
 """
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
