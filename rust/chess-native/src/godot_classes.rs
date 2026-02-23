@@ -362,7 +362,11 @@ fn mobility_score(board: &ChessBoard, color: u8) -> i32 {
 
 fn king_safety_score(board: &ChessBoard, color: u8) -> f32 {
     // Use bitboard to find king in O(1) instead of scanning all 64 squares.
-    let king_bb = if color == 0 { board.bb[5].0 } else { board.bb[11].0 };
+    let king_bb = if color == 0 {
+        board.bb[5].0
+    } else {
+        board.bb[11].0
+    };
     if king_bb == 0 {
         return 0.0;
     }
