@@ -31,24 +31,24 @@ static func encode_board(state) -> PackedFloat32Array:
     inputs.resize(INPUT_SIZE)
     inputs.fill(0.0)
 
-    var idx := 0
-    # 6 piece-type planes × 64 squares (signed: +1 white, -1 black)
-    for piece_type in range(1, 7):  # PAWN through KING
-        for sq in range(64):
-            var p: int = state.board[sq]
-            if absi(p) == piece_type:
-                inputs[idx] = 1.0 if p > 0 else -1.0
-            idx += 1
+    # Single-pass encoding: iterate board squares once, write to the correct
+    # piece-type plane offset. This is O(64) instead of O(6*64) for the
+    # original nested-loop approach — 6x fewer iterations.
+    var board: Array[int] = state.board
+    for sq in range(64):
+        var p: int = board[sq]
+        if p != 0:
+            var plane := (absi(p) - 1) * 64  # piece_type - 1 maps to plane index
+            inputs[plane + sq] = 1.0 if p > 0 else -1.0
 
-    # Side to move
-    inputs[idx] = 0.0 if state.side_to_move == 0 else 1.0
-    idx += 1
+    # Side to move (index 384)
+    inputs[384] = 0.0 if state.side_to_move == 0 else 1.0
 
-    # Castling rights
-    inputs[idx] = 1.0 if state.castling_rights & 0b0001 else 0.0; idx += 1
-    inputs[idx] = 1.0 if state.castling_rights & 0b0010 else 0.0; idx += 1
-    inputs[idx] = 1.0 if state.castling_rights & 0b0100 else 0.0; idx += 1
-    inputs[idx] = 1.0 if state.castling_rights & 0b1000 else 0.0; idx += 1
+    # Castling rights (indices 385-388)
+    inputs[385] = 1.0 if state.castling_rights & 0b0001 else 0.0
+    inputs[386] = 1.0 if state.castling_rights & 0b0010 else 0.0
+    inputs[387] = 1.0 if state.castling_rights & 0b0100 else 0.0
+    inputs[388] = 1.0 if state.castling_rights & 0b1000 else 0.0
 
     if state is BoardState:
         state._encoder_cache = inputs

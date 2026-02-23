@@ -517,24 +517,40 @@ func _find_king(color: int) -> int:
 
 
 static func _bit_scan_forward(bb: int) -> int:
-    for i in range(64):
-        if bb & (1 << i):
-            return i
-    return -1
+    ## O(log n) forward scan using binary search on the isolated lowest bit.
+    if bb == 0:
+        return -1
+    bb = bb & (-bb)  # isolate lowest set bit
+    var n := 0
+    if bb & 0xFFFFFFFF00000000: n += 32
+    if bb & 0xFFFF0000FFFF0000: n += 16
+    if bb & 0xFF00FF00FF00FF00: n += 8
+    if bb & 0xF0F0F0F0F0F0F0F0: n += 4
+    if bb & 0xCCCCCCCCCCCCCCCC: n += 2
+    if bb & 0xAAAAAAAAAAAAAAAA: n += 1
+    return n
 
 
 static func _bit_scan_reverse(bb: int) -> int:
-    for i in range(63, -1, -1):
-        if bb & (1 << i):
-            return i
-    return -1
+    ## O(log n) reverse scan using binary search.
+    if bb == 0:
+        return -1
+    var n := 0
+    if bb & 0xFFFFFFFF00000000: n += 32; bb >>= 32
+    if bb & 0x00000000FFFF0000: n += 16; bb >>= 16
+    if bb & 0x000000000000FF00: n += 8; bb >>= 8
+    if bb & 0x00000000000000F0: n += 4; bb >>= 4
+    if bb & 0x000000000000000C: n += 2; bb >>= 2
+    if bb & 0x0000000000000002: n += 1
+    return n
 
 
 static func _popcount(bb: int) -> int:
+    ## Kernighan's algorithm: O(k) where k = number of set bits.
     var count := 0
-    for i in range(64):
-        if (bb >> i) & 1:
-            count += 1
+    while bb != 0:
+        bb &= bb - 1
+        count += 1
     return count
 
 

@@ -139,7 +139,8 @@ impl RustDenseNetwork {
             &mut self.scratch_output,
         );
 
-        self.scratch_output.iter().cloned().collect()
+        // Build PackedFloat32Array from slice — single allocation
+        PackedFloat32Array::from(self.scratch_output.as_slice())
     }
 }
 
@@ -187,9 +188,11 @@ impl RustBatchSimulator {
         let mut hidden = vec![0.0f32; hidden_size];
         let mut output = vec![0.0f32; output_size];
         let mut inputs = vec![0.0f32; 6 * 64 + 1 + 4];
+        // Reuse pseudo-move buffer across iterations to avoid repeated allocation
+        let mut pseudo_buf = Vec::with_capacity(256);
 
         while move_count < max_moves {
-            let legal_moves = board.get_legal_moves();
+            let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
             if legal_moves.is_empty() {
                 if board.is_in_check(board.side_to_move) {
                     result = if board.side_to_move == 0 { -1 } else { 1 };
@@ -340,17 +343,12 @@ fn decode_move(outputs: &[f32], legal_moves: &[u32]) -> u32 {
 }
 
 fn material_score(board: &ChessBoard, color: u8) -> f32 {
-    let values: [f32; 7] = [0.0, 1.0, 3.0, 3.25, 5.0, 9.0, 0.0];
-    let mut total = 0.0;
-    for sq in 0..64 {
-        let p = board.piece_at(sq);
-        if p == 0 {
-            continue;
-        }
-        let is_white = p > 0;
-        if (color == 0 && is_white) || (color == 1 && !is_white) {
-            total += values[p.unsigned_abs() as usize];
-        }
+    // Use bitboard popcount instead of scanning all 64 squares — O(6) vs O(64).
+    let values: [f32; 6] = [1.0, 3.0, 3.25, 5.0, 9.0, 0.0];
+    let offset = if color == 0 { 0 } else { 6 };
+    let mut total = 0.0f32;
+    for i in 0..6 {
+        total += board.bb[offset + i].0.count_ones() as f32 * values[i];
     }
     total
 }
@@ -358,19 +356,18 @@ fn material_score(board: &ChessBoard, color: u8) -> f32 {
 fn mobility_score(board: &ChessBoard, color: u8) -> i32 {
     let mut copy = *board;
     copy.side_to_move = color;
-    copy.get_legal_moves().len() as i32
+    let mut buf = Vec::with_capacity(256);
+    copy.get_legal_moves_with_buf(&mut buf).len() as i32
 }
 
 fn king_safety_score(board: &ChessBoard, color: u8) -> f32 {
-    let king_piece = if color == 0 { 6 } else { -6 };
-    let mut king_sq: i32 = -1;
-    for sq in 0..64 {
-        if board.piece_at(sq) == king_piece {
-            king_sq = sq as i32;
-            break;
-        }
+    // Use bitboard to find king in O(1) instead of scanning all 64 squares.
+    let king_bb = if color == 0 { board.bb[5].0 } else { board.bb[11].0 };
+    if king_bb == 0 {
+        return 0.0;
     }
-    if king_sq < 0 {
+    let king_sq = king_bb.trailing_zeros() as i32;
+    if king_sq >= 64 {
         return 0.0;
     }
     let kf = king_sq % 8;
