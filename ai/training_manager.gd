@@ -924,8 +924,8 @@ func _update_map_elites_archive() -> void:
         return
 
     # Archive best white and black networks
-    var white_best_idx := evolution.get_best_index(0)
-    var black_best_idx := evolution.get_best_index(1)
+    var white_best_idx: int = evolution.get_best_index(0)
+    var black_best_idx: int = evolution.get_best_index(1)
 
     # Get behavior descriptors for the best individuals
     # For now, we use simple heuristics based on fitness
@@ -933,12 +933,12 @@ func _update_map_elites_archive() -> void:
 
     # White: Archive with behavior based on win rate and material
     var white_behavior := Vector2(0.5, 50.0)  # Default: moderate aggression, average game length
-    var white_fitness := evolution.get_fitness(0, white_best_idx)
+    var white_fitness: float = evolution.get_fitness(0, white_best_idx)
     if white_fitness > 0:
         map_elites_archive.add(evolution.get_network(0, white_best_idx), white_behavior, white_fitness)
 
     # Black
     var black_behavior := Vector2(0.5, 50.0)
-    var black_fitness := evolution.get_fitness(1, black_best_idx)
+    var black_fitness: float = evolution.get_fitness(1, black_best_idx)
     if black_fitness > 0:
         map_elites_archive.add(evolution.get_network(1, black_best_idx), black_behavior, black_fitness)
