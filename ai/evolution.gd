@@ -60,7 +60,7 @@ func _init(
     p_pop_size: int = 50,
     p_input_size: int = 389,
     p_hidden_size: int = 64,
-    p_output_size: int = 128,
+    p_output_size: int = 4096,
     p_elite_count: int = 5,
     p_mutation_rate: float = 0.15,
     p_mutation_strength: float = 0.2,

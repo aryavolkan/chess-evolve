@@ -91,10 +91,8 @@ func _run_tests() -> void:
             net.bias_h.fill(0.0)
             net.weights_ho.fill(0.0)
             net.bias_o.fill(0.0)
-            net.bias_o[12] = 2.0
-            net.bias_o[64 + 28] = 2.0
-            net.bias_o[52] = 2.0
-            net.bias_o[64 + 36] = 2.0
+            net.bias_o[12 * 64 + 28] = 2.0
+            net.bias_o[52 * 64 + 36] = 2.0
             var weights := net.get_weights()
             var rust_sim := RustBatchSimulator.new()
             var rust_stats: Dictionary = rust_sim.simulate_game(

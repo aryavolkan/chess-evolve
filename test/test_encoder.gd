@@ -3,7 +3,7 @@ extends "res://test/test_base.gd"
 const BoardStateScript = preload("res://chess/board_state.gd")
 const ChessEncoderScript = preload("res://chess/encoder.gd")
 const INPUT_SIZE := 389
-const MOVE_OUTPUT_SIZE := 128
+const MOVE_OUTPUT_SIZE := 4096
 
 
 func _run_tests() -> void:
@@ -40,7 +40,7 @@ func _run_tests() -> void:
 
     _test("decode with empty moves returns -1", func():
         var outputs := PackedFloat32Array()
-        outputs.resize(128)
+        outputs.resize(4096)
         var empty := PackedInt32Array()
         var move: int = encoder.call("decode_move", outputs, empty)
         assert_eq(move, -1)

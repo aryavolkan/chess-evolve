@@ -59,7 +59,7 @@ func _ready() -> void:
             config.get("population_size", 30),
             config.get("input_size", 389),
             config.get("hidden_size", 32),
-            config.get("output_size", 128),
+            config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE),
             config.get("elite_count", 3)
         )
     training_manager = TrainingManager.new(
@@ -346,7 +346,7 @@ func _run_auto_train() -> void:
             config.get("population_size", 30),
             config.get("input_size", 389),
             config.get("hidden_size", 64),
-            config.get("output_size", 128),
+            config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE),
             config.get("elite_count", 3)
         )
 

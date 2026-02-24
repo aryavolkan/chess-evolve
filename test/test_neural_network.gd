@@ -62,9 +62,9 @@ func _run_tests() -> void:
     )
 
     _test("weight count matches expected", func():
-        var nn = NNScript.new(389, 64, 128)
-        # ih: 389*64 = 24896, bh: 64, ho: 64*128 = 8192, bo: 128
-        var expected := 389 * 64 + 64 + 64 * 128 + 128
+        var nn = NNScript.new(389, 64, 4096)
+        # ih: 389*64 = 24896, bh: 64, ho: 64*4096 = 262144, bo: 4096
+        var expected := 389 * 64 + 64 + 64 * 4096 + 4096
         assert_eq(nn.get_weight_count(), expected)
     )
 

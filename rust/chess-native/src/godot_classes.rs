@@ -323,17 +323,8 @@ fn decode_move(outputs: &[f32], legal_moves: &[u32]) -> u32 {
     for &mv in legal_moves {
         let from = ((mv >> 6) & 0x3f) as usize;
         let to = (mv & 0x3f) as usize;
-        let from_score = if from < outputs.len() {
-            outputs[from]
-        } else {
-            0.0
-        };
-        let to_score = if 64 + to < outputs.len() {
-            outputs[64 + to]
-        } else {
-            0.0
-        };
-        let score = from_score + to_score;
+        let idx = from * 64 + to;
+        let score = if idx < outputs.len() { outputs[idx] } else { 0.0 };
         if score > best_score {
             best_score = score;
             best = mv;

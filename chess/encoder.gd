@@ -16,7 +16,7 @@ extends RefCounted
 ##   - Extra features not needed for MVP
 
 const INPUT_SIZE := 389
-const MOVE_OUTPUT_SIZE := 128  # from_square(64) + to_square(64)
+const MOVE_OUTPUT_SIZE := 4096  # 64 from-squares × 64 to-squares
 
 const PIECE = ChessConstants.Piece
 
@@ -59,8 +59,7 @@ static func encode_board(state) -> PackedFloat32Array:
 
 static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Array) -> int:
     ## Decode network output into a legal move.
-    ## Output is split: first 64 = from-square preferences, next 64 = to-square preferences.
-    ## We score each legal move as from_score + to_score and pick the best.
+    ## Each from-to pair has a unique output: index = from_sq * 64 + to_sq.
     if legal_moves.is_empty():
         return -1
 
@@ -70,9 +69,8 @@ static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Arr
     for move in legal_moves:
         var from_sq := BoardState.move_from(move)
         var to_sq := BoardState.move_to(move)
-        var from_score: float = outputs[from_sq] if from_sq < outputs.size() else 0.0
-        var to_score: float = outputs[64 + to_sq] if (64 + to_sq) < outputs.size() else 0.0
-        var score := from_score + to_score
+        var idx := from_sq * 64 + to_sq
+        var score: float = outputs[idx] if idx < outputs.size() else 0.0
         if score > best_score:
             best_score = score
             best_move = move

@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
     "max_generations": 50,
     "max_moves_per_game": 40,
     "input_size": 389,
-    "output_size": 128,
+    "output_size": 4096,
     "use_minimax": False,
     "use_tournament": True,
     "tournament_opponents": 2,

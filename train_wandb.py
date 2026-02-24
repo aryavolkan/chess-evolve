@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
     "max_generations": 50,
     "max_moves_per_game": 40,    # capped for GDScript performance
     "input_size": 389,
-    "output_size": 128,
+    "output_size": 4096,
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
     "use_tournament": True,
     "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
