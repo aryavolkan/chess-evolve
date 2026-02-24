@@ -581,15 +581,15 @@ impl ChessBoard {
     fn slider_attacks(&self, sq: usize, occupancy: u64, diagonal: bool) -> u64 {
         let mut attacks = 0u64;
         if diagonal {
-            attacks |= ray_attacks(sq, occupancy, &*RAY_NE, true);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_NW, true);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_SE, false);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_SW, false);
+            attacks |= ray_attacks(sq, occupancy, &RAY_NE, true);
+            attacks |= ray_attacks(sq, occupancy, &RAY_NW, true);
+            attacks |= ray_attacks(sq, occupancy, &RAY_SE, false);
+            attacks |= ray_attacks(sq, occupancy, &RAY_SW, false);
         } else {
-            attacks |= ray_attacks(sq, occupancy, &*RAY_N, true);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_E, true);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_S, false);
-            attacks |= ray_attacks(sq, occupancy, &*RAY_W, false);
+            attacks |= ray_attacks(sq, occupancy, &RAY_N, true);
+            attacks |= ray_attacks(sq, occupancy, &RAY_E, true);
+            attacks |= ray_attacks(sq, occupancy, &RAY_S, false);
+            attacks |= ray_attacks(sq, occupancy, &RAY_W, false);
         }
         attacks
     }
