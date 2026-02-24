@@ -44,8 +44,8 @@ PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT
 APP_NAME = os.environ.get("CHESS_EVOLVE_APP_NAME", "Chess Evolve")
 _GODOT_PATH_DEFAULT = next(
     (p for p in [
-        os.path.expanduser("~/.local/bin/godot"),
         "/usr/local/bin/godot",
+        os.path.expanduser("~/.local/bin/godot"),
         "/opt/homebrew/bin/godot",
     ] if os.path.isfile(p)),
     "godot",  # fallback: hope it's on PATH

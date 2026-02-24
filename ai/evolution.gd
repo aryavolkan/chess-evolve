@@ -108,6 +108,14 @@ func get_network(color: int, index: int):
     return white_pop[index] if color == 0 else black_pop[index]
 
 
+func get_best_index(color: int) -> int:
+    return _best_index(white_fitness if color == 0 else black_fitness)
+
+
+func get_fitness(color: int, index: int) -> float:
+    return white_fitness[index] if color == 0 else black_fitness[index]
+
+
 func evolve() -> void:
     ## Evolve both populations independently based on their fitness.
     white_pop = _evolve_population(white_pop, white_fitness)
