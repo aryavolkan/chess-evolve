@@ -31,9 +31,26 @@ from godot_wandb import (  # noqa: E402
 )
 from global_elite import GlobalElitePool  # noqa: E402
 
-PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/chess-evolve"))
+_PROJECT_PATH_DEFAULT = next(
+    (p for p in [
+        os.path.expanduser("~/projects/chess-evolve"),
+        os.path.expanduser("~/Projects/chess-evolve"),
+        os.path.expanduser("~/chess-evolve"),
+        str(Path(__file__).parent.parent),
+    ] if os.path.isdir(p)),
+    str(Path(__file__).parent.parent),
+)
+PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT)
 APP_NAME = os.environ.get("CHESS_EVOLVE_APP_NAME", "Chess Evolve")
-GODOT_PATH = os.environ.get("GODOT_PATH", "/opt/homebrew/bin/godot")
+_GODOT_PATH_DEFAULT = next(
+    (p for p in [
+        os.path.expanduser("~/.local/bin/godot"),
+        "/usr/local/bin/godot",
+        "/opt/homebrew/bin/godot",
+    ] if os.path.isfile(p)),
+    "godot",  # fallback: hope it's on PATH
+)
+GODOT_PATH = os.environ.get("GODOT_PATH", _GODOT_PATH_DEFAULT)
 
 DEFAULT_CONFIG = {
     "population_size": 20,
