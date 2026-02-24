@@ -268,7 +268,7 @@ func _calculate_tournament_scores() -> Dictionary:
 
     for key in tournament_results:
         var parts: PackedStringArray = key.split("_")
-        if parts.size() == 2:
+        if parts.size() >= 2:
             var idx := int(parts[0])
             var result: int = tournament_results[key]
 
@@ -292,7 +292,7 @@ func _update_fitness_from_tournament() -> void:
 
     for key in tournament_results:
         var parts: PackedStringArray = key.split("_")
-        if parts.size() == 2:
+        if parts.size() >= 2:
             var idx := int(parts[0])
             var result: int = tournament_results[key]
 
@@ -426,17 +426,18 @@ func _track_game_metrics(game_result: Dictionary) -> void:
 
 func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> void:
     ## Record tournament result for scoring.
+    ## Keys include opponent index so multiple games per individual are preserved.
     _track_game_metrics(game_result)
 
     if game_result["result"] == 2:  # Draw
-        tournament_results[str(white_idx) + "_white"] = 0
-        tournament_results[str(black_idx) + "_black"] = 0
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = 0
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = 0
     elif game_result["result"] == 1:  # White wins
-        tournament_results[str(white_idx) + "_white"] = 1
-        tournament_results[str(black_idx) + "_black"] = -1
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = 1
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = -1
     else:  # Black wins
-        tournament_results[str(white_idx) + "_white"] = -1
-        tournament_results[str(black_idx) + "_black"] = 1
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = -1
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = 1
 
 
 func run_one_game_step() -> bool:

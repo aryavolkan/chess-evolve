@@ -261,11 +261,11 @@ func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: int) -> 
         return
 
     var entry: Dictionary = hof[opponent_idx]
-    var expected := 1.0  # Assume playing against current generation ( Elo doesn't change)
-
-    # Update Elo: new_elo = old_elo + K * (actual - expected)
-    # For now, we just track stats; full Elo system would need opponent ratings
+    var expected: float = _elo_expected_score(entry.elo, ELO_DEFAULT)
     var actual: float = result  # 1, 0.5, or 0
+
+    # Update Elo rating
+    entry.elo += ELO_K_FACTOR * (actual - expected)
 
     # Update stats
     entry.games_played += 1
@@ -276,7 +276,7 @@ func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: int) -> 
     else:
         entry.games_lost += 1
 
-    # Re-sort after stats update (Elo stays same for now since we're not tracking opponent rating)
+    # Re-sort after Elo update
     hof.sort_custom(func(a, b):
         if a.elo != b.elo:
             return a.elo > b.elo
