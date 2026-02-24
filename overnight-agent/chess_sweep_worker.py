@@ -165,8 +165,19 @@ def run_training_once(
     timeout_minutes: float | None,
     worker_id: str | None = None,
 ) -> None:
+    # config may be None when called from wandb.agent (config is only accessible
+    # after wandb.init() in wandb >= 0.15).  We init first, then read wandb.config.
+    run = wandb.init(
+        project=project,
+        entity=entity,
+        config=DEFAULT_CONFIG,
+        tags=["chess-evolve", "sweep"],
+    )
     merged = DEFAULT_CONFIG.copy()
-    merged.update(config or {})
+    if config:
+        merged.update(config)
+    elif run is not None:
+        merged.update(dict(wandb.config))
 
     user_dir = godot_user_dir(APP_NAME)
     worker = SweepWorker(user_dir, worker_id=worker_id)
@@ -188,16 +199,9 @@ def run_training_once(
     else:
         print("🧬 No global elites found; starting fresh")
 
-    run = None
     process = None
 
     try:
-        run = wandb.init(
-            project=project,
-            entity=entity,
-            config=merged,
-            tags=["chess-evolve", "sweep"],
-        )
         define_step_metric()
         if run is not None:
             print(f"🔗 W&B run: {run.url}")
@@ -289,7 +293,7 @@ def main() -> int:
     def train_fn():
         try:
             run_training_once(
-                dict(wandb.config),
+                None,  # wandb.config read inside after wandb.init()
                 project=args.project,
                 entity=args.entity,
                 visible=args.visible,
