@@ -17,7 +17,15 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, os.path.expanduser("~/projects/shared-evolve-utils"))
+_SHARED = next(
+    p for p in [
+        os.path.expanduser("~/projects/shared-evolve-utils"),
+        os.path.expanduser("~/Projects/shared-evolve-utils"),
+        os.path.expanduser("~/shared-evolve-utils"),
+    ]
+    if os.path.isdir(p)
+)
+sys.path.insert(0, _SHARED)
 from godot_wandb import godot_user_dir  # noqa: E402
 from worker_monitor import WorkerConfig, add_monitor_args, monitor_once  # noqa: E402
 
