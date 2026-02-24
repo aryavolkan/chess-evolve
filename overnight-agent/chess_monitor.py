@@ -31,6 +31,19 @@ WANDB_PROJECT = os.environ.get("CHESS_EVOLVE_WANDB_PROJECT", "chess-evolve")
 _HERE = Path(__file__).parent
 
 
+PYTHON_BIN = os.environ.get(
+    "CHESS_EVOLVE_PYTHON",
+    next(
+        (p for p in [
+            os.path.expanduser("~/projects/evolve/.venv/bin/python"),
+            os.path.expanduser("~/evolve/.venv/bin/python"),
+            sys.executable,
+        ] if os.path.isfile(p)),
+        sys.executable,
+    ),
+)
+
+
 def _make_config() -> WorkerConfig:
     return WorkerConfig(
         godot_data_dir=godot_user_dir(APP_NAME),
@@ -40,6 +53,7 @@ def _make_config() -> WorkerConfig:
         wandb_project=WANDB_PROJECT,
         sweep_flag="--sweep-id",
         display_name="Chess-Evolve",
+        python_bin=PYTHON_BIN,
     )
 
 
