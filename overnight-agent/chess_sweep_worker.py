@@ -10,14 +10,15 @@ import time
 from pathlib import Path
 
 _SHARED = next(
-    p for p in [
+    (p for p in [
         os.path.expanduser("~/projects/shared-evolve-utils"),
         os.path.expanduser("~/Projects/shared-evolve-utils"),
         os.path.expanduser("~/shared-evolve-utils"),
-    ]
-    if os.path.isdir(p)
+    ] if os.path.isdir(p)),
+    "",
 )
-sys.path.insert(0, _SHARED)
+if _SHARED:
+    sys.path.insert(0, _SHARED)
 import wandb  # noqa: E402
 from godot_wandb import (  # noqa: E402
     SweepWorker,
