@@ -71,10 +71,16 @@ def test_chess_sweep_worker_imports() -> None:
         wait_for_metrics=lambda *a, **k: True,
     )
 
+    dummy_global_elite = types.SimpleNamespace(
+        GlobalElitePool=object,
+    )
+
     original_wandb = sys.modules.get("wandb")
     original_godot = sys.modules.get("godot_wandb")
+    original_global_elite = sys.modules.get("global_elite")
     sys.modules["wandb"] = dummy_wandb
     sys.modules["godot_wandb"] = dummy_godot
+    sys.modules["global_elite"] = dummy_global_elite
     try:
         _load("overnight-agent/chess_sweep_worker.py")
     finally:
@@ -86,3 +92,7 @@ def test_chess_sweep_worker_imports() -> None:
             sys.modules["godot_wandb"] = original_godot
         else:
             sys.modules.pop("godot_wandb", None)
+        if original_global_elite is not None:
+            sys.modules["global_elite"] = original_global_elite
+        else:
+            sys.modules.pop("global_elite", None)

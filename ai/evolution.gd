@@ -343,3 +343,124 @@ func has_hall_of_fame(color: int) -> bool:
     ## Check if Hall of Fame has any members for the given color.
     var hof := hall_of_fame if color == 0 else black_hall_of_fame
     return not hof.is_empty()
+
+
+func seed_from_global_elite(elite_pool: Array) -> int:
+    ## Seed the Hall of Fame with genomes from the global elite pool.
+    ##
+    ## Each entry in elite_pool must be a Dictionary with keys:
+    ##   weights_ih, bias_h, weights_ho, bias_o  — Array[float]
+    ##   fitness     — float
+    ##   color       — "white" | "black"  (optional, defaults to both)
+    ##   elo         — float              (optional, defaults to ELO_DEFAULT)
+    ##
+    ## Returns the number of genomes successfully seeded.
+    var seeded := 0
+    for entry in elite_pool:
+        if not _is_valid_elite_entry(entry):
+            continue
+
+        # Build the network
+        var e_input := int(entry.get("input_size", input_size))
+        var e_hidden := int(entry.get("hidden_size", hidden_size))
+        var e_output := int(entry.get("output_size", output_size))
+
+        # Skip if architecture doesn't match (can't play in this run)
+        if e_input != input_size or e_hidden != hidden_size or e_output != output_size:
+            push_warning("GlobalElite: skipping genome with mismatched architecture (%d/%d/%d vs %d/%d/%d)" % [
+                e_input, e_hidden, e_output, input_size, hidden_size, output_size
+            ])
+            continue
+
+        var nn = NeuralNetworkScript.new(input_size, hidden_size, output_size, false)
+        nn.load_from_dict(entry)
+
+        var fitness := float(entry.get("fitness", 0.0))
+        var elo := float(entry.get("elo", ELO_DEFAULT))
+        var color: String = entry.get("color", "both")
+
+        if color == "black":
+            _seed_hall_of_fame(nn, fitness, elo, false)
+        elif color == "white":
+            _seed_hall_of_fame(nn, fitness, elo, true)
+        else:
+            # Unknown or "both": add to both sides
+            _seed_hall_of_fame(nn, fitness, elo, true)
+            _seed_hall_of_fame(nn.clone(), fitness, elo, false)
+
+        seeded += 1
+
+    if seeded > 0:
+        print("GlobalElite: seeded %d genome(s) into hall of fame (white=%d, black=%d)" % [
+            seeded, hall_of_fame.size(), black_hall_of_fame.size()
+        ])
+    return seeded
+
+
+func _seed_hall_of_fame(network, fitness: float, elo: float, is_white: bool) -> void:
+    ## Insert a pre-built network into the hall of fame.
+    var hof := hall_of_fame if is_white else black_hall_of_fame
+    hof.append({
+        "network": network,
+        "fitness": fitness,
+        "elo": elo,
+        "generation": -1,
+        "games_played": 0,
+        "games_won": 0,
+        "games_drawn": 0,
+        "games_lost": 0,
+    })
+    hof.sort_custom(func(a, b):
+        if a.elo != b.elo:
+            return a.elo > b.elo
+        return a.fitness > b.fitness
+    )
+    if hof.size() > HALL_OF_FAME_SIZE:
+        hof.resize(HALL_OF_FAME_SIZE)
+
+
+static func _is_valid_elite_entry(entry) -> bool:
+    if not entry is Dictionary:
+        return false
+    for key in ["weights_ih", "bias_h", "weights_ho", "bias_o", "fitness"]:
+        if not entry.has(key):
+            return false
+    return true
+
+
+func write_elite_contrib(worker_id: String) -> void:
+    ## Serialize top hall-of-fame members to user://elite_contrib_{worker_id}.json
+    ## so the Python layer can merge them into the global elite pool.
+    var path := "user://elite_contrib_%s.json" % worker_id
+    if worker_id.is_empty():
+        path = "user://elite_contrib_default.json"
+
+    var entries: Array = []
+
+    for color_flag in [true, false]:
+        var hof := hall_of_fame if color_flag else black_hall_of_fame
+        var color_str := "white" if color_flag else "black"
+        # Contribute up to 5 entries per color
+        for i in mini(5, hof.size()):
+            var hof_entry: Dictionary = hof[i]
+            var genome: Dictionary = hof_entry["network"].to_dict()
+            genome["fitness"] = hof_entry["fitness"]
+            genome["elo"] = hof_entry["elo"]
+            genome["color"] = color_str
+            genome["generation"] = hof_entry["generation"]
+            genome["source_run"] = worker_id
+            entries.append(genome)
+
+    var file := FileAccess.open(path, FileAccess.WRITE)
+    if file == null:
+        push_warning("GlobalElite: failed to write contrib file %s" % path)
+        return
+
+    var payload := {
+        "elites": entries,
+        "worker_id": worker_id,
+        "updated_at": Time.get_unix_time_from_system(),
+    }
+    file.store_string(JSON.new().stringify(payload, "\t"))
+    file.close()
+    print("GlobalElite: wrote %d elite genome(s) to %s" % [entries.size(), path])

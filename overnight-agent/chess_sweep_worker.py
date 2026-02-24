@@ -21,6 +21,7 @@ from godot_wandb import (  # noqa: E402
     run_sweep_agent,
     wait_for_metrics,
 )
+from global_elite import GlobalElitePool  # noqa: E402
 
 PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/chess-evolve"))
 APP_NAME = os.environ.get("CHESS_EVOLVE_APP_NAME", "Chess Evolve")
@@ -165,6 +166,21 @@ def run_training_once(
     worker.write_config(merged)
     worker.clear_metrics()
 
+    elite_pool = GlobalElitePool(user_dir)
+
+    # --- Global Elite: write seed file for Godot to read at startup ---
+    seed_path = elite_pool.write_seed_file(worker.worker_id)
+    if seed_path:
+        pool_stats = elite_pool.stats()
+        print(
+            f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
+            f"{pool_stats['contributor_count']} run(s), "
+            f"top fitness={pool_stats['top_fitness']:.2f}"
+        )
+        print(f"🧬 Seeding {min(5, pool_stats['total_elites'])} elite genome(s) into this run")
+    else:
+        print("🧬 No global elites found; starting fresh")
+
     run = None
     process = None
 
@@ -178,6 +194,12 @@ def run_training_once(
         define_step_metric()
         if run is not None:
             print(f"🔗 W&B run: {run.url}")
+            # Log elite pool stats to W&B so we can track cross-run improvement
+            if seed_path:
+                run.log({"global_elite/pool_size": pool_stats["total_elites"],
+                         "global_elite/top_fitness": pool_stats["top_fitness"],
+                         "global_elite/avg_fitness": pool_stats["avg_fitness"],
+                         "global_elite/contributors": pool_stats["contributor_count"]})
 
         process = launch_godot(
             PROJECT_PATH,
@@ -225,6 +247,22 @@ def run_training_once(
                 process.wait(timeout=10)
             except Exception:
                 process.kill()
+
+        # --- Global Elite: harvest this run's best genomes ---
+        contrib_path = Path(user_dir) / f"elite_contrib_{worker.worker_id}.json"
+        if contrib_path.exists():
+            try:
+                new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
+                if new_genomes:
+                    kept = elite_pool.update_contrib(worker.worker_id, new_genomes)
+                    print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
+                contrib_path.unlink()
+            except (json.JSONDecodeError, OSError) as exc:
+                print(f"⚠️  Could not harvest elite contributions: {exc}")
+
+        # Clean up the seed file so stale genomes aren't re-read next time.
+        elite_pool.cleanup_seed_file(worker.worker_id)
+
         worker.cleanup()
 
 
