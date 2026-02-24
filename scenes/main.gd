@@ -25,9 +25,6 @@ var _current_state: RefCounted = null
 var _pending_moves: Array = []  # Queue of individual moves to display
 var _game_display_idx := 0  # Which board to update next
 var _time_since_last_update := 0.0
-var score_mgr: ScoreManager = ScoreManager.new()
-var score: float = 0.0
-var player: CharacterBody2D = null  # Set when an active training episode provides a player node
 
 
 func _ready() -> void:
@@ -192,11 +189,6 @@ func _process(delta: float) -> void:
             var board_idx := _game_display_idx % board_viewers.size()
             board_viewers[board_idx].set_state(move_state)
             _game_display_idx += 1
-
-    if player != null:
-        # Dense shaping rewards (see score_manager.gd for design notes)
-        score += score_mgr.calculate_exploration_bonus(delta, player)
-        score += score_mgr.calculate_engagement_bonus(delta, player, self)
 
 
 func _on_game_complete(_white_idx: int, _black_idx: int, _result: int) -> void:
