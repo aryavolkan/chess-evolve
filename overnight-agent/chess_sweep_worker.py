@@ -285,6 +285,9 @@ def run_training_once(
                     process.kill()
 
         # --- Global Elite: harvest this run's best genomes ---
+        # Godot writes elite_contrib_{worker_id}.json with this run's best genomes.
+        # update_contrib() merges them into the same file (atomic rename) so it
+        # persists across runs and seeds future workers.  Do NOT unlink it.
         contrib_path = Path(user_dir) / f"elite_contrib_{worker.worker_id}.json"
         if contrib_path.exists():
             try:
@@ -292,7 +295,6 @@ def run_training_once(
                 if new_genomes:
                     kept = elite_pool.update_contrib(worker.worker_id, new_genomes)
                     print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
-                contrib_path.unlink()
             except (json.JSONDecodeError, OSError) as exc:
                 print(f"⚠️  Could not harvest elite contributions: {exc}")
 
