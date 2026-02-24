@@ -37,7 +37,7 @@ _PROJECT_PATH_DEFAULT = next(
         os.path.expanduser("~/Projects/chess-evolve"),
         os.path.expanduser("~/chess-evolve"),
         str(Path(__file__).parent.parent),
-    ] if os.path.isdir(p)),
+    ] if os.path.isfile(os.path.join(p, "project.godot"))),
     str(Path(__file__).parent.parent),
 )
 PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT)
