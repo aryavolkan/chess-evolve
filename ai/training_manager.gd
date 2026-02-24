@@ -543,25 +543,27 @@ func _run_all_games() -> int:
 
 
 func _weighted_sample_index(fitness: PackedFloat32Array, target: float, temperature: float) -> int:
+    ## Weighted random selection — compute weights once and scan once.
     if fitness.is_empty():
         return 0
     var denom: float = maxf(0.001, temperature)
+    var n := fitness.size()
+    var weights := PackedFloat32Array()
+    weights.resize(n)
     var total: float = 0.0
-    for i in fitness.size():
-        var diff: float = absf(fitness[i] - target)
-        var w: float = 1.0 / (1.0 + (diff / denom))
+    for i in n:
+        var w: float = 1.0 / (1.0 + (absf(fitness[i] - target) / denom))
+        weights[i] = w
         total += w
     if total <= 0.0:
-        return randi() % fitness.size()
+        return randi() % n
     var r: float = randf() * total
     var acc: float = 0.0
-    for i in fitness.size():
-        var diff: float = absf(fitness[i] - target)
-        var w: float = 1.0 / (1.0 + (diff / denom))
-        acc += w
+    for i in n:
+        acc += weights[i]
         if r <= acc:
             return i
-    return fitness.size() - 1
+    return n - 1
 
 
 func _apply_curriculum() -> void:
@@ -609,21 +611,18 @@ func _play_game_with_hof(white_idx: int, black_idx: int, idx_is_hof: bool = fals
 
 func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, black_is_hof: bool = false):
     ## Play a single game between two networks, return final board state.
-    print("_play_game: white_idx=%d, black_idx=%d" % [white_idx, black_idx])
     var state := BoardStateScript.new()
     state.use_bitboard_movegen = use_bitboard_movegen
     state.setup_initial()
-    print("Board initialized")
 
     # Track game history for visualization (every 5th move to reduce memory)
+    # Skip initial clone — only clone on 5th-move intervals below
     var game_history: Array = []
-    game_history.append(state.clone())
 
     # Get networks (either from current population or Hall of Fame)
     var white_net = null
     var black_net = null
 
-    print("Getting networks...")
     if white_is_hof:
         white_net = evolution.get_hall_of_fame_opponent(0)
         if white_net == null:
@@ -639,8 +638,6 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
             return {"result": 2, "move_count": 0, "state": null}  # Return draw on error
     else:
         black_net = evolution.get_network(1, black_idx)
-
-    print("Networks retrieved: white=%s, black=%s" % [white_net != null, black_net != null])
 
     if use_rust_batch_sim and not use_neat and not use_minimax and ClassDB.class_exists(&"RustBatchSimulator"):
         if _rust_batch_sim == null:
@@ -702,10 +699,8 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
     var white_player = null
     var black_player = null
     if use_minimax:
-        print("Creating minimax players with depth=%d" % minimax_depth)
         white_player = MinimaxPlayerScript.new(white_net, minimax_depth)
         black_player = MinimaxPlayerScript.new(black_net, minimax_depth)
-        print("Minimax players created")
 
     # Set up game recorder if enabled
     var recorder: GameRecorderScript = null
@@ -718,7 +713,6 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
         })
 
     var move_count := 0
-    print("Starting game loop, max_moves=%d" % max_moves_per_game)
     while not state.is_game_over and move_count < max_moves_per_game:
         var chosen := -1
 
@@ -729,9 +723,7 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
         if use_minimax:
             # Use minimax search to choose move
             var player = white_player if state.side_to_move == 0 else black_player
-            print("Using minimax to choose move for %s" % ("white" if state.side_to_move == 0 else "black"))
             chosen = player.choose_move(state)
-            print("Minimax chose: %s" % chosen)
         else:
             # Use direct network output (original behavior)
             var net = white_net if state.side_to_move == 0 else black_net

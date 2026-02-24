@@ -198,9 +198,15 @@ impl ChessBoard {
 
     pub fn get_legal_moves(&self) -> Vec<u32> {
         let mut pseudo = Vec::with_capacity(256);
-        self.generate_pseudo_legal_moves_into(&mut pseudo);
+        self.get_legal_moves_with_buf(&mut pseudo)
+    }
+
+    /// Like get_legal_moves but reuses the provided buffer for pseudo-legal moves,
+    /// avoiding repeated heap allocation in hot loops.
+    pub fn get_legal_moves_with_buf(&self, pseudo: &mut Vec<u32>) -> Vec<u32> {
+        self.generate_pseudo_legal_moves_into(pseudo);
         let mut legal = Vec::with_capacity(pseudo.len());
-        for mv in pseudo {
+        for &mv in pseudo.iter() {
             let mut copy = *self;
             copy.make_move_unchecked(mv);
             if !copy.is_in_check(1 - copy.side_to_move) {
@@ -678,7 +684,7 @@ fn compute_ray_table(df: i32, dr: i32) -> [u64; 64] {
     table
 }
 
-fn ray_attacks(sq: usize, occupancy: u64, ray_table: &LazyLock<[u64; 64]>, positive: bool) -> u64 {
+fn ray_attacks(sq: usize, occupancy: u64, ray_table: &[u64; 64], positive: bool) -> u64 {
     let mut attacks = ray_table[sq];
     let blockers = attacks & occupancy;
     if blockers != 0 {

@@ -55,6 +55,8 @@ impl DenseNetwork {
         }
     }
 
+    /// Convenience wrapper that allocates output buffers. For hot loops,
+    /// prefer `forward_into()` with pre-allocated scratch buffers.
     pub fn forward(&self, inputs: &[f32]) -> Vec<f32> {
         let mut hidden = vec![0.0f32; self.hidden_size];
         let mut output = vec![0.0f32; self.output_size];
