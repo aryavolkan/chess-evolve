@@ -56,7 +56,7 @@ static func evaluate(state, color: int, move_count: int) -> float:
     # Reward for longer games (encourages learning to play)
     fitness += move_count * move_count_bonus
 
-    return maxf(fitness, 0.0)
+    return fitness
 
 
 static func evaluate_from_metrics(
@@ -84,4 +84,4 @@ static func evaluate_from_metrics(
         fitness += my_mobility * mobility_weight
     fitness += my_king_safety * king_safety_weight
     fitness += move_count * move_count_bonus
-    return maxf(fitness, 0.0)
+    return fitness

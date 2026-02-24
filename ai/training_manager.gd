@@ -283,23 +283,29 @@ func _calculate_tournament_scores() -> Dictionary:
 
 func _update_fitness_from_tournament() -> void:
     ## Update fitness based on tournament results instead of accumulated game fitness.
-    var white_scores := _calculate_tournament_scores()
+    var white_scores := {}
     var black_scores := {}
 
-    # Calculate black tournament scores
     for i in evolution.population_size:
+        white_scores[i] = 0.0
         black_scores[i] = 0.0
 
     for key in tournament_results:
         var parts: PackedStringArray = key.split("_")
-        if parts.size() == 2 and parts[1] == "black":
+        if parts.size() == 2:
             var idx := int(parts[0])
             var result: int = tournament_results[key]
 
-            if result == 1:  # Win
-                black_scores[idx] += 1.0
-            elif result == 0:  # Draw
-                black_scores[idx] += 0.5
+            if parts[1] == "white":
+                if result == 1:
+                    white_scores[idx] += 1.0
+                elif result == 0:
+                    white_scores[idx] += 0.5
+            elif parts[1] == "black":
+                if result == 1:
+                    black_scores[idx] += 1.0
+                elif result == 0:
+                    black_scores[idx] += 0.5
 
     # Store tournament scores for metrics
     _white_tournament_scores.clear()
