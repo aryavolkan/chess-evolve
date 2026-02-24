@@ -6,7 +6,6 @@
 
 use pyo3::prelude::*;
 use rand::seq::SliceRandom;
-use rand::Rng;
 
 /// Perform migration between islands.
 ///
