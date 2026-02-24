@@ -8,7 +8,15 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.expanduser("~/Projects/shared-evolve-utils"))
+_SHARED = next(
+    p for p in [
+        os.path.expanduser("~/projects/shared-evolve-utils"),
+        os.path.expanduser("~/Projects/shared-evolve-utils"),
+        os.path.expanduser("~/shared-evolve-utils"),
+    ]
+    if os.path.isdir(p)
+)
+sys.path.insert(0, _SHARED)
 import wandb  # noqa: E402
 from godot_wandb import run_training  # noqa: E402
 
@@ -34,7 +42,16 @@ DEFAULT_CONFIG = {
     "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
 }
 
-PROJECT_PATH = os.path.expanduser("~/Projects/chess-evolve")
+_PROJECT_PATH_DEFAULT = next(
+    (p for p in [
+        os.path.expanduser("~/projects/chess-evolve"),
+        os.path.expanduser("~/Projects/chess-evolve"),
+        os.path.expanduser("~/chess-evolve"),
+        os.path.dirname(os.path.abspath(__file__)),
+    ] if os.path.isfile(os.path.join(p, "project.godot"))),
+    os.path.dirname(os.path.abspath(__file__)),
+)
+PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT)
 
 CHESS_LOG_KEYS = [
     "generation",
