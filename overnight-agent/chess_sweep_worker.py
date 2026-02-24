@@ -263,6 +263,40 @@ def run_training_once(
         elif status == "stale":
             print("❌ Training stalled (no new metrics)")
 
+        # Wait for Godot to exit gracefully — it writes elite contrib in its quit handler
+        if process is not None:
+            try:
+                process.wait(timeout=20)
+            except Exception:
+                try:
+                    process.terminate()
+                    process.wait(timeout=10)
+                except Exception:
+                    process.kill()
+            process = None  # mark as handled
+
+        # --- Global Elite: harvest this run's best genomes ---
+        contrib_path = Path(user_dir) / f"elite_contrib_{worker.worker_id}.json"
+        if contrib_path.exists():
+            try:
+                new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
+                if new_genomes:
+                    kept = elite_pool.update_contrib(worker.worker_id, new_genomes)
+                    print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
+                    # Upload as wandb artifact for persistence and tracking
+                    if run is not None:
+                        artifact = wandb.Artifact(
+                            f"elite-population-{worker.worker_id}",
+                            type="elite-population",
+                            description=f"Elite genomes from worker {worker.worker_id}",
+                        )
+                        artifact.add_file(str(contrib_path))
+                        run.log_artifact(artifact)
+            except (json.JSONDecodeError, OSError) as exc:
+                print(f"⚠️  Could not harvest elite contributions: {exc}")
+
+        elite_pool.cleanup_seed_file(worker.worker_id)
+
         log_final_summary(run, final)
         run.finish(exit_code=0 if status == "complete" else 1)
     except Exception as exc:
@@ -272,36 +306,15 @@ def run_training_once(
         raise
     finally:
         if process is not None:
-            # After a complete run Godot writes the elite contrib file then calls
-            # get_tree().quit() — give it up to 20s to exit naturally so the
-            # contrib file is fully written before we harvest it.  If it doesn't
-            # exit (stale/timeout/crash), fall back to terminate/kill.
             try:
-                process.wait(timeout=20)
+                process.terminate()
+                process.wait(timeout=10)
             except Exception:
                 try:
-                    process.terminate()
-                    process.wait(timeout=10)
-                except Exception:
                     process.kill()
-
-        # --- Global Elite: harvest this run's best genomes ---
-        # Godot writes elite_contrib_{worker_id}.json with this run's best genomes.
-        # update_contrib() merges them into the same file (atomic rename) so it
-        # persists across runs and seeds future workers.  Do NOT unlink it.
-        contrib_path = Path(user_dir) / f"elite_contrib_{worker.worker_id}.json"
-        if contrib_path.exists():
-            try:
-                new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
-                if new_genomes:
-                    kept = elite_pool.update_contrib(worker.worker_id, new_genomes)
-                    print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
-            except (json.JSONDecodeError, OSError) as exc:
-                print(f"⚠️  Could not harvest elite contributions: {exc}")
-
-        # Clean up the seed file so stale genomes aren't re-read next time.
+                except Exception:
+                    pass
         elite_pool.cleanup_seed_file(worker.worker_id)
-
         worker.cleanup()
 
 
