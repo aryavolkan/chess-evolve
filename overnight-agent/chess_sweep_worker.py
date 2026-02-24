@@ -13,6 +13,7 @@ _SHARED = next(
     p for p in [
         os.path.expanduser("~/projects/shared-evolve-utils"),
         os.path.expanduser("~/Projects/shared-evolve-utils"),
+        os.path.expanduser("~/shared-evolve-utils"),
     ]
     if os.path.isdir(p)
 )
