@@ -271,11 +271,18 @@ def run_training_once(
         raise
     finally:
         if process is not None:
+            # After a complete run Godot writes the elite contrib file then calls
+            # get_tree().quit() — give it up to 20s to exit naturally so the
+            # contrib file is fully written before we harvest it.  If it doesn't
+            # exit (stale/timeout/crash), fall back to terminate/kill.
             try:
-                process.terminate()
-                process.wait(timeout=10)
+                process.wait(timeout=20)
             except Exception:
-                process.kill()
+                try:
+                    process.terminate()
+                    process.wait(timeout=10)
+                except Exception:
+                    process.kill()
 
         # --- Global Elite: harvest this run's best genomes ---
         contrib_path = Path(user_dir) / f"elite_contrib_{worker.worker_id}.json"
