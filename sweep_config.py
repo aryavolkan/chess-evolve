@@ -4,7 +4,7 @@
 #   - elite_count=2 strongly favors breakout runs
 #   - hidden_size 128 clustered in mediocre zone
 #   - tournament_opponents=5 slight edge
-#   - max_generations reduced from 100→25 (convergence by gen 9)
+#   - max_generations reduced to 10 (convergence by gen 9, no improvement after)
 
 sweep_config = {
     'method': 'bayes',
@@ -27,7 +27,7 @@ sweep_config = {
         'hidden_size': {'values': [32, 64]},
 
         # Training parameters
-        'max_generations': {'value': 25},
+        'max_generations': {'value': 10},
         'games_per_individual': {'values': [2, 3]},
         'tournament_opponents': {'value': 5},
         'use_tournament': {'value': True},
@@ -52,7 +52,7 @@ sweep_config_quick = {
         'mutation_strength': {'values': [0.10, 0.15]},
         'crossover_rate': {'values': [0.70]},
         'hidden_size': {'values': [32, 64]},
-        'max_generations': {'value': 15},
+        'max_generations': {'value': 10},
         'games_per_individual': {'value': 2},
         'tournament_opponents': {'value': 5},
         'use_tournament': {'value': True},
@@ -75,7 +75,7 @@ sweep_config_deep = {
         'mutation_strength': {'distribution': 'uniform', 'min': 0.03, 'max': 0.25},
         'crossover_rate': {'distribution': 'uniform', 'min': 0.50, 'max': 0.90},
         'hidden_size': {'values': [32, 64, 96]},
-        'max_generations': {'value': 50},
+        'max_generations': {'value': 25},
         'games_per_individual': {'values': [2, 3, 4]},
         'tournament_opponents': {'values': [4, 5, 6]},
         'use_tournament': {'value': True},
