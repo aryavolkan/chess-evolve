@@ -522,12 +522,13 @@ static func _bit_scan_forward(bb: int) -> int:
         return -1
     bb = bb & (-bb)  # isolate lowest set bit
     var n := 0
-    if bb & 0xFFFFFFFF00000000: n += 32
-    if bb & 0xFFFF0000FFFF0000: n += 16
-    if bb & 0xFF00FF00FF00FF00: n += 8
-    if bb & 0xF0F0F0F0F0F0F0F0: n += 4
-    if bb & 0xCCCCCCCCCCCCCCCC: n += 2
-    if bb & 0xAAAAAAAAAAAAAAAA: n += 1
+    # Use ~complement to avoid hex_to_int overflow for values > 0x7FFFFFFFFFFFFFFF
+    if bb & ~0xFFFFFFFF: n += 32
+    if bb & ~0x0000FFFF0000FFFF: n += 16
+    if bb & ~0x00FF00FF00FF00FF: n += 8
+    if bb & ~0x0F0F0F0F0F0F0F0F: n += 4
+    if bb & ~0x3333333333333333: n += 2
+    if bb & ~0x5555555555555555: n += 1
     return n
 
 
@@ -536,7 +537,7 @@ static func _bit_scan_reverse(bb: int) -> int:
     if bb == 0:
         return -1
     var n := 0
-    if bb & 0xFFFFFFFF00000000: n += 32; bb >>= 32
+    if bb & ~0xFFFFFFFF: n += 32; bb >>= 32
     if bb & 0x00000000FFFF0000: n += 16; bb >>= 16
     if bb & 0x000000000000FF00: n += 8; bb >>= 8
     if bb & 0x00000000000000F0: n += 4; bb >>= 4
