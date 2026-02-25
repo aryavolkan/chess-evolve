@@ -357,6 +357,8 @@ func _run_auto_train() -> void:
             evo.mutation_strength = config["mutation_strength"]
         if config.has("crossover_rate"):
             evo.crossover_rate = config["crossover_rate"]
+        if config.has("immigration_rate"):
+            evo.immigration_rate = config["immigration_rate"]
 
     # Determine metrics path based on worker ID
     var metrics_path := "user://metrics.json"

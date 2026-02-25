@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
     "use_tournament": True,
     "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
+    "immigration_rate": 0.1,     # fraction of population replaced with random individuals each gen
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -96,7 +97,16 @@ CHESS_LOG_KEYS = [
     "white_material_avg",
     "black_material_avg",
     "generation_time_sec",
+    "combined_best",
 ]
+
+
+def _chess_metric_transform(log_data: dict) -> dict:
+    """Add combined_best = min(white_best, black_best) for balanced optimization."""
+    wb = log_data.get("white_best", 0)
+    bb = log_data.get("black_best", 0)
+    log_data["combined_best"] = min(wb, bb)
+    return log_data
 
 
 def do_training(config=None, visible=False):
@@ -179,7 +189,7 @@ def sweep_train_fn():
             _worker.cleanup()
             return
 
-        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS)
+        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform)
 
         # Wait for Godot to exit gracefully — it writes elite contrib in its quit handler
         try:

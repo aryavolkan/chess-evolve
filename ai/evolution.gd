@@ -19,6 +19,7 @@ var elite_count: int
 var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
+var immigration_rate: float = 0.1  # fraction of population replaced with random individuals
 
 # Adaptive mutation configuration
 var adaptive_mutation: bool = true
@@ -159,9 +160,16 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
         indices.append(i)
     indices.sort_custom(func(a, b): return fitness[a] > fitness[b])
 
-    # Elitism
+    # Elitism: preserve top individuals unchanged
     for i in mini(elite_count, pop.size()):
         new_pop.append(pop[indices[i]].clone())
+
+    # Immigration: inject random individuals to maintain genetic diversity
+    var immigrant_count := maxi(1, ceili(population_size * immigration_rate))
+    for _i in immigrant_count:
+        if new_pop.size() >= population_size:
+            break
+        new_pop.append(NeuralNetworkScript.new(input_size, hidden_size, output_size))
 
     # Fill rest with tournament selection + crossover/mutation
     while new_pop.size() < population_size:
