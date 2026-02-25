@@ -20,6 +20,7 @@ _SHARED = next(
 if _SHARED:
     sys.path.insert(0, _SHARED)
 import wandb  # noqa: E402
+from global_elite import GlobalElitePool  # noqa: E402
 from godot_wandb import (  # noqa: E402
     SweepWorker,
     define_step_metric,
@@ -30,7 +31,6 @@ from godot_wandb import (  # noqa: E402
     run_sweep_agent,
     wait_for_metrics,
 )
-from global_elite import GlobalElitePool  # noqa: E402
 
 _PROJECT_PATH_DEFAULT = next(
     (p for p in [

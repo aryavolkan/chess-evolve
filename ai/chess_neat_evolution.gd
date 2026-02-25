@@ -5,6 +5,13 @@ extends RefCounted
 
 signal generation_complete(gen: int, white_best: float, black_best: float)
 
+const HALL_OF_FAME_SIZE := 20
+
+# Elo rating configuration for Hall of Fame
+const ELO_DEFAULT: float = 1200.0
+const ELO_K_FACTOR: float = 32.0
+const ELO_ELO_WEIGHTED: bool = true
+
 const NeatEvolutionScript = preload("res://ai/neat_evolution.gd")
 const NeatConfigScript = preload("res://ai/neat_config.gd")
 const NeatNetworkScript = preload("res://ai/neat_network.gd")
@@ -29,12 +36,6 @@ var _fitness_cleared: bool = true
 
 var hall_of_fame: Array = []
 var black_hall_of_fame: Array = []
-const HALL_OF_FAME_SIZE := 20
-
-# Elo rating configuration for Hall of Fame
-const ELO_DEFAULT: float = 1200.0
-const ELO_K_FACTOR: float = 32.0
-const ELO_ELO_WEIGHTED: bool = true
 
 
 func _init(p_pop_size = 50, p_config: NeatConfig = null) -> void:

@@ -1,9 +1,10 @@
-extends RefCounted
 class_name NeatEvolution
+extends RefCounted
 
 ## NEAT evolution manager for a single population.
 
-signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
+signal generation_complete(
+        generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
 
 var config: NeatConfig
 var innovation_tracker: NeatInnovation
@@ -17,11 +18,14 @@ var best_genome: NeatGenome = null
 var all_time_best_fitness: float = -INF
 var all_time_best_genome: NeatGenome = null
 
+var _next_species_id: int = 0
+
 
 func _init(p_config: NeatConfig) -> void:
     config = p_config
     population_size = config.population_size
-    innovation_tracker = NeatInnovation.new(config.input_count + config.output_count + int(config.use_bias))
+    var node_count := config.input_count + config.output_count + int(config.use_bias)
+    innovation_tracker = NeatInnovation.new(node_count)
     _initialize_population()
 
 
@@ -48,7 +52,8 @@ func set_fitness(index: int, fitness: float) -> void:
 
 
 func evolve() -> void:
-    var spec_result: Dictionary = NeatSpecies.speciate(population, species_list, config, _get_next_species_id())
+    var spec_result: Dictionary = NeatSpecies.speciate(
+            population, species_list, config, _get_next_species_id())
     species_list = spec_result.species
     _set_next_species_id(spec_result.next_id)
 
@@ -113,7 +118,10 @@ func evolve() -> void:
                 var parent_b: NeatGenome
                 if randf() < config.interspecies_crossover_rate and species_list.size() > 1:
                     var other_species = species_list[randi() % species_list.size()]
-                    parent_b = other_species.members[randi() % other_species.members.size()] if not other_species.members.is_empty() else pool[randi() % pool.size()]
+                    if not other_species.members.is_empty():
+                        parent_b = other_species.members[randi() % other_species.members.size()]
+                    else:
+                        parent_b = pool[randi() % pool.size()]
                 else:
                     parent_b = pool[randi() % pool.size()]
                 child = NeatGenome.crossover(parent_a, parent_b)
@@ -169,8 +177,6 @@ func _cull_stagnant_species() -> void:
 
     species_list = surviving
 
-
-var _next_species_id: int = 0
 
 func _get_next_species_id() -> int:
     return _next_species_id

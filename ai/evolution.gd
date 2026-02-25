@@ -6,7 +6,16 @@ extends RefCounted
 
 signal generation_complete(gen: int, white_best: float, black_best: float)
 
-var NeuralNetworkScript = preload("res://ai/neural_network.gd")
+const NeuralNetworkScript = preload("res://ai/neural_network.gd")
+
+# Hall of Fame: Maintain a persistent collection of past best individuals
+# to prevent cycling in coevolution and ensure diverse opponents
+const HALL_OF_FAME_SIZE := 20      # Maximum number of individuals to keep
+
+# Elo rating configuration for Hall of Fame
+const ELO_DEFAULT: float = 1200.0    # Starting Elo for new HoF members
+const ELO_K_FACTOR: float = 32.0   # K-factor for Elo updates (higher = faster changes)
+const ELO_ELO_WEIGHTED: bool = true  # Whether to weight selection by Elo
 
 var population_size: int
 var white_pop: Array = []
@@ -51,16 +60,8 @@ var last_white_avg: float = 0.0
 var last_black_avg: float = 0.0
 var _fitness_cleared: bool = true
 
-# Hall of Fame: Maintain a persistent collection of past best individuals
-# to prevent cycling in coevolution and ensure diverse opponents
 var hall_of_fame: Array = []        # Best white players from past generations
 var black_hall_of_fame: Array = []  # Best black players from past generations
-const HALL_OF_FAME_SIZE := 20      # Maximum number of individuals to keep
-
-# Elo rating configuration for Hall of Fame
-const ELO_DEFAULT: float = 1200.0    # Starting Elo for new HoF members
-const ELO_K_FACTOR: float = 32.0   # K-factor for Elo updates (higher = faster changes)
-const ELO_ELO_WEIGHTED: bool = true  # Whether to weight selection by Elo
 
 
 func _init(
