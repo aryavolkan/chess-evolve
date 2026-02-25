@@ -2,12 +2,12 @@
 """
 Chess-Evolve W&B-tracked training with hyperparameter sweeps.
 Uses shared Godot+W&B utilities for the launch→poll→log pipeline.
+Supports multiple backends: Rust CPU, PyTorch GPU/CPU, Godot.
 """
 import argparse
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 _SHARED = next(
@@ -23,6 +23,7 @@ if _SHARED:
 _OVERNIGHT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overnight-agent")
 sys.path.insert(0, _OVERNIGHT)
 import wandb  # noqa: E402
+from global_elite import GlobalElitePool  # noqa: E402
 from godot_wandb import (  # noqa: E402
     SweepWorker,
     define_step_metric,
@@ -33,7 +34,6 @@ from godot_wandb import (  # noqa: E402
     run_training,
     wait_for_metrics,
 )
-from global_elite import GlobalElitePool  # noqa: E402
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -140,6 +140,169 @@ USER_DIR = godot_user_dir("Chess Evolve")
 _worker: SweepWorker = None
 
 
+# --- Backend detection (lightweight, no heavy imports) ---
+
+def _detect_rust() -> bool:
+    """Check if Rust CPU training crates (chess_cpu + evolve_ga) are available."""
+    try:
+        import importlib.util
+        return (importlib.util.find_spec("chess_cpu") is not None
+                and importlib.util.find_spec("evolve_ga") is not None
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cpu_trainer.py")))
+    except Exception:
+        return False
+
+
+def _detect_pytorch() -> bool:
+    """Check if PyTorch + python-chess + gpu_trainer are importable."""
+    try:
+        import importlib.util
+        for mod in ("torch", "chess"):
+            if importlib.util.find_spec(mod) is None:
+                return False
+        return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gpu_trainer.py"))
+    except Exception:
+        return False
+
+
+_USE_RUST = _detect_rust()
+_USE_PYTORCH = _detect_pytorch()
+
+
+# --- Training backends ---
+
+def _run_rust_training(run, config, max_gens, elite_pool):
+    """Run training via Rust CPU trainer (chess_cpu + evolve_ga)."""
+    from cpu_trainer import CPUTrainer
+
+    print("🦀 Rust CPU training mode")
+
+    trainer = CPUTrainer(config, _worker.metrics_path)
+
+    def on_generation(metrics):
+        log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}
+        log_data = _chess_metric_transform(log_data)
+        run.log(log_data)
+        gen = metrics.get("generation", 0)
+        t = metrics.get("generation_time_sec", 0)
+        gps = metrics.get("games_per_sec", 0)
+        wb = metrics.get("white_best", 0)
+        bb = metrics.get("black_best", 0)
+        print(f"  gen {gen}: w_best={wb:.2f} b_best={bb:.2f} {t:.2f}s ({gps:.0f} games/s)")
+
+    final = trainer.train(max_generations=max_gens, on_generation=on_generation)
+
+    _harvest_elites(run, elite_pool)
+    log_final_summary(run, final)
+    print(f"✅ Worker {_worker.worker_id}: Rust CPU training complete!")
+    run.finish(exit_code=0)
+
+
+def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
+    """Run training via PyTorch trainer (GPU or CPU, no Godot)."""
+    from gpu_trainer import GPUTrainer
+
+    print(f"🚀 PyTorch training mode (device: {device})")
+
+    trainer = GPUTrainer(config, _worker.metrics_path, device=device)
+
+    def on_generation(metrics):
+        log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}
+        log_data = _chess_metric_transform(log_data)
+        run.log(log_data)
+        gen = metrics.get("generation", 0)
+        t = metrics.get("generation_time_sec", 0)
+        gps = metrics.get("games_per_sec", 0)
+        wb = metrics.get("white_best", 0)
+        bb = metrics.get("black_best", 0)
+        print(f"  gen {gen}: w_best={wb:.2f} b_best={bb:.2f} {t:.2f}s ({gps:.0f} games/s)")
+
+    final = trainer.train(max_generations=max_gens, on_generation=on_generation)
+
+    _harvest_elites(run, elite_pool)
+    log_final_summary(run, final)
+    print(f"✅ Worker {_worker.worker_id}: PyTorch training complete!")
+    run.finish(exit_code=0)
+
+
+def _run_godot_training(run, config, max_gens, elite_pool):
+    """Run training via Godot subprocess (original path)."""
+    proc = launch_godot(
+        PROJECT_PATH,
+        godot_path=GODOT_PATH,
+        visible=False,
+        metrics_path=_worker.metrics_path,
+        worker_id=_worker.worker_id,
+    )
+
+    try:
+        if not wait_for_metrics(_worker.metrics_path, timeout=120.0):
+            print("❌ Metrics file never appeared; terminating run")
+            proc.kill()
+            run.finish(exit_code=1)
+            _worker.cleanup()
+            return
+
+        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform)
+
+        # Wait for Godot to exit gracefully
+        try:
+            proc.wait(timeout=20)
+        except Exception:
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception:
+                proc.kill()
+        proc = None
+
+        _harvest_elites(run, elite_pool)
+        log_final_summary(run, final)
+        print(f"✅ Worker {_worker.worker_id}: training complete!")
+        run.finish(exit_code=0)
+
+    except KeyboardInterrupt:
+        print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
+        if proc is not None:
+            proc.kill()
+        run.finish(exit_code=130)
+    except Exception as e:
+        print(f"\n❌ Worker {_worker.worker_id}: error: {e}")
+        if proc is not None:
+            proc.kill()
+        run.finish(exit_code=1)
+    finally:
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+
+def _harvest_elites(run, elite_pool):
+    """Harvest elite contributions from this run and upload to W&B."""
+    contrib_path = Path(USER_DIR) / f"elite_contrib_{_worker.worker_id}.json"
+    if contrib_path.exists():
+        try:
+            new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
+            if new_genomes:
+                kept = elite_pool.update_contrib(_worker.worker_id, new_genomes)
+                print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
+                artifact = wandb.Artifact(
+                    f"elite-population-{_worker.worker_id}",
+                    type="elite-population",
+                    description=f"Elite genomes from worker {_worker.worker_id}",
+                )
+                artifact.add_file(str(contrib_path))
+                run.log_artifact(artifact)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"⚠️  Could not harvest elite contributions: {exc}")
+
+
 def sweep_train_fn():
     """Run one sweep trial with per-worker isolation."""
     global _worker
@@ -175,79 +338,35 @@ def sweep_train_fn():
 
     print(f"\n🎮 Worker {_worker.worker_id}: pop={config.get('population_size')}, gens={max_gens}")
 
-    proc = launch_godot(
-        PROJECT_PATH,
-        godot_path=GODOT_PATH,
-        visible=False,
-        metrics_path=_worker.metrics_path,
-        worker_id=_worker.worker_id,
-    )
+    # Determine backend: Rust > PyTorch GPU > PyTorch CPU > Godot
+    # Skip torch import when CUDA disabled (saves ~3GB RSS for Rust/Godot workers)
+    _has_cuda = False
+    if _USE_PYTORCH and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
+        try:
+            import torch
+            _has_cuda = torch.cuda.is_available()
+        except ImportError:
+            pass
 
     try:
-        if not wait_for_metrics(_worker.metrics_path, timeout=120.0):
-            print("❌ Metrics file never appeared; terminating run")
-            proc.kill()
-            run.finish(exit_code=1)
-            _worker.cleanup()
-            return
-
-        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform)
-
-        # Wait for Godot to exit gracefully — it writes elite contrib in its quit handler
-        try:
-            proc.wait(timeout=20)
-        except Exception:
-            try:
-                proc.terminate()
-                proc.wait(timeout=10)
-            except Exception:
-                proc.kill()
-        proc = None  # mark as handled
-
-        # --- Global Elite: harvest this run's best genomes ---
-        contrib_path = Path(USER_DIR) / f"elite_contrib_{_worker.worker_id}.json"
-        if contrib_path.exists():
-            try:
-                new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
-                if new_genomes:
-                    kept = elite_pool.update_contrib(_worker.worker_id, new_genomes)
-                    print(f"🧬 Contributed {len(new_genomes)} genome(s) to global elite pool (total stored: {kept})")
-                    artifact = wandb.Artifact(
-                        f"elite-population-{_worker.worker_id}",
-                        type="elite-population",
-                        description=f"Elite genomes from worker {_worker.worker_id}",
-                    )
-                    artifact.add_file(str(contrib_path))
-                    run.log_artifact(artifact)
-            except (json.JSONDecodeError, OSError) as exc:
-                print(f"⚠️  Could not harvest elite contributions: {exc}")
-
-        elite_pool.cleanup_seed_file(_worker.worker_id)
-
-        log_final_summary(run, final)
-        print(f"✅ Worker {_worker.worker_id}: training complete!")
-        run.finish(exit_code=0)
-
+        if _has_cuda:
+            _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda")
+        elif _USE_RUST:
+            _run_rust_training(run, config, max_gens, elite_pool)
+        elif _USE_PYTORCH:
+            _run_pytorch_training(run, config, max_gens, elite_pool, device="cpu")
+        else:
+            print("⚙️  Godot training mode")
+            _run_godot_training(run, config, max_gens, elite_pool)
     except KeyboardInterrupt:
         print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
-        if proc is not None:
-            proc.kill()
         run.finish(exit_code=130)
     except Exception as e:
         print(f"\n❌ Worker {_worker.worker_id}: error: {e}")
-        if proc is not None:
-            proc.kill()
+        import traceback
+        traceback.print_exc()
         run.finish(exit_code=1)
     finally:
-        if proc is not None:
-            try:
-                proc.terminate()
-                proc.wait(timeout=10)
-            except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
         elite_pool.cleanup_seed_file(_worker.worker_id)
         _worker.cleanup()
 

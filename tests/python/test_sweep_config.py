@@ -8,7 +8,7 @@ def test_root_sweep_config_has_expected_shape() -> None:
     sweep_config = module["sweep_config"]
 
     assert REQUIRED_TOP_LEVEL_KEYS.issubset(sweep_config)
-    assert sweep_config["metric"]["name"] == "white_best"
+    assert sweep_config["metric"]["name"] == "combined_best"
 
 
 def test_scripts_sweep_config_has_expected_shape() -> None:
