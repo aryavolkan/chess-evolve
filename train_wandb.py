@@ -56,7 +56,7 @@ DEFAULT_CONFIG = {
     "use_tournament": True,
     "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
     "immigration_rate": 0.1,     # fraction of population replaced with random individuals each gen
-    "fitness_sharing_sigma": 25.0, # genetic distance threshold for fitness sharing
+    "fitness_sharing_sigma": 0.08, # RMS genetic distance threshold for fitness sharing
     "tournament_k": 2,           # tournament selection size (2 = less pressure than 3)
 }
 

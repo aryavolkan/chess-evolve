@@ -20,7 +20,7 @@ var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
 var immigration_rate: float = 0.1  # fraction of population replaced with random individuals
-var fitness_sharing_sigma: float = 25.0  # genetic distance threshold for fitness sharing (0 = disabled)
+var fitness_sharing_sigma: float = 0.08  # RMS genetic distance threshold for fitness sharing (0 = disabled)
 var tournament_k: int = 2  # tournament selection size (lower = less selection pressure)
 
 # Indices of immigrants from the previous generation (protected from culling)
@@ -250,12 +250,12 @@ func _apply_fitness_sharing(pop: Array, fitness: PackedFloat32Array) -> PackedFl
 
 
 static func _genetic_distance(a: PackedFloat32Array, b: PackedFloat32Array) -> float:
-    ## Euclidean distance between two weight vectors.
+    ## RMS distance between two weight vectors (architecture-independent).
     var sum_sq: float = 0.0
     for i in a.size():
         var d: float = a[i] - b[i]
         sum_sq += d * d
-    return sqrt(sum_sq)
+    return sqrt(sum_sq / maxf(a.size(), 1.0))
 
 
 func _protect_immigrants(fitness: PackedFloat32Array, immigrant_indices: PackedInt32Array) -> void:

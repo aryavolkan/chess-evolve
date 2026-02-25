@@ -36,7 +36,7 @@ sweep_config = {
 
         # Diversity: immigration, fitness sharing, reduced selection pressure
         'immigration_rate': {'distribution': 'uniform', 'min': 0.05, 'max': 0.20},
-        'fitness_sharing_sigma': {'distribution': 'uniform', 'min': 10.0, 'max': 50.0},
+        'fitness_sharing_sigma': {'distribution': 'uniform', 'min': 0.03, 'max': 0.15},
         'tournament_k': {'value': 2},  # k=2 reduces selection pressure vs default k=3
     }
 }
@@ -59,7 +59,7 @@ sweep_config_quick = {
         'tournament_mode': {'value': 'round_robin'},
         'max_moves_per_game': {'value': 100},
         'immigration_rate': {'values': [0.10, 0.15]},
-        'fitness_sharing_sigma': {'values': [20.0, 35.0]},
+        'fitness_sharing_sigma': {'values': [0.05, 0.10]},
         'tournament_k': {'value': 2},
     }
 }
@@ -82,7 +82,7 @@ sweep_config_deep = {
         'tournament_mode': {'values': ['round_robin', 'swiss']},
         'max_moves_per_game': {'value': 150},
         'immigration_rate': {'distribution': 'uniform', 'min': 0.05, 'max': 0.25},
-        'fitness_sharing_sigma': {'distribution': 'uniform', 'min': 5.0, 'max': 60.0},
+        'fitness_sharing_sigma': {'distribution': 'uniform', 'min': 0.02, 'max': 0.20},
         'tournament_k': {'values': [2, 3]},
     }
 }
