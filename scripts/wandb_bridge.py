@@ -47,6 +47,7 @@ CHESS_LOG_KEYS = [
     "white_material_avg",
     "black_material_avg",
     "generation_time_sec",
+    "combined_best",
 ]
 
 

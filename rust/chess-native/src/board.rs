@@ -855,17 +855,27 @@ mod tests {
 
     #[test]
     fn fen_startpos_matches_startpos() {
-        let from_fen = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
+        let from_fen =
+            ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+                .unwrap();
         let startpos = ChessBoard::startpos();
         assert_eq!(from_fen.side_to_move, startpos.side_to_move);
         assert_eq!(from_fen.castling_rights, startpos.castling_rights);
         assert_eq!(from_fen.en_passant_sq, startpos.en_passant_sq);
         assert_eq!(from_fen.halfmove_clock, startpos.halfmove_clock);
         for i in 0..12 {
-            assert_eq!(from_fen.bb[i].0, startpos.bb[i].0, "bitboard {} mismatch", i);
+            assert_eq!(
+                from_fen.bb[i].0, startpos.bb[i].0,
+                "bitboard {} mismatch",
+                i
+            );
         }
         for i in 0..64 {
-            assert_eq!(from_fen.pieces[i], startpos.pieces[i], "piece at sq {} mismatch", i);
+            assert_eq!(
+                from_fen.pieces[i], startpos.pieces[i],
+                "piece at sq {} mismatch",
+                i
+            );
         }
         assert_eq!(from_fen.get_legal_moves().len(), 20);
     }
@@ -873,7 +883,9 @@ mod tests {
     #[test]
     fn fen_midgame_position() {
         // After 1. e4 e5 2. Nf3
-        let board = ChessBoard::from_fen("rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2").unwrap();
+        let board =
+            ChessBoard::from_fen("rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2")
+                .unwrap();
         assert_eq!(board.side_to_move, 1);
         assert_eq!(board.castling_rights, 0b1111);
         assert_eq!(board.halfmove_clock, 1);
@@ -888,7 +900,9 @@ mod tests {
     #[test]
     fn fen_en_passant() {
         // Position with en passant possible on d6
-        let board = ChessBoard::from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3").unwrap();
+        let board =
+            ChessBoard::from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3")
+                .unwrap();
         // d6 = square(3, 5) = 43
         assert_eq!(board.en_passant_sq, 43);
         let moves = board.get_legal_moves();
@@ -898,7 +912,8 @@ mod tests {
 
     #[test]
     fn fen_no_castling() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1").unwrap();
+        let board =
+            ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1").unwrap();
         assert_eq!(board.castling_rights, 0);
     }
 
@@ -913,8 +928,9 @@ mod tests {
     fn fen_perft_kiwipete() {
         // Kiwipete position - well-known perft test
         let board = ChessBoard::from_fen(
-            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
-        ).unwrap();
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        )
+        .unwrap();
         assert_eq!(perft(&board, 1), 48);
     }
 
