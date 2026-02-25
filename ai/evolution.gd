@@ -20,6 +20,12 @@ var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
 var immigration_rate: float = 0.1  # fraction of population replaced with random individuals
+var fitness_sharing_sigma: float = 25.0  # genetic distance threshold for fitness sharing (0 = disabled)
+var tournament_k: int = 2  # tournament selection size (lower = less selection pressure)
+
+# Indices of immigrants from the previous generation (protected from culling)
+var _white_immigrant_indices: PackedInt32Array = []
+var _black_immigrant_indices: PackedInt32Array = []
 
 # Adaptive mutation configuration
 var adaptive_mutation: bool = true
@@ -119,15 +125,23 @@ func get_fitness(color: int, index: int) -> float:
 
 func evolve() -> void:
     ## Evolve both populations independently based on their fitness.
-    white_pop = _evolve_population(white_pop, white_fitness)
-    black_pop = _evolve_population(black_pop, black_fitness)
 
-    # Track bests
+    # Track bests BEFORE fitness sharing modifies the scores
     var w_best_idx := _best_index(white_fitness)
     var b_best_idx := _best_index(black_fitness)
     best_white_fitness = white_fitness[w_best_idx]
     best_black_fitness = black_fitness[b_best_idx]
 
+    # Apply fitness sharing to reward genetic diversity during selection
+    var w_shared := _apply_fitness_sharing(white_pop, white_fitness)
+    var b_shared := _apply_fitness_sharing(black_pop, black_fitness)
+
+    # Protect immigrants: give them the population median fitness so they
+    # survive at least one round of selection instead of being instantly culled
+    _protect_immigrants(w_shared, _white_immigrant_indices)
+    _protect_immigrants(b_shared, _black_immigrant_indices)
+
+    # Snapshot best individuals BEFORE evolving (population is about to change)
     if all_time_best_white == null or best_white_fitness > all_time_best_white_fitness:
         all_time_best_white = white_pop[w_best_idx].clone()
         all_time_best_white_fitness = best_white_fitness
@@ -135,9 +149,17 @@ func evolve() -> void:
         all_time_best_black = black_pop[b_best_idx].clone()
         all_time_best_black_fitness = best_black_fitness
 
-    # Add best individuals to Hall of Fame
+    # Add best individuals to Hall of Fame BEFORE evolving
     _update_hall_of_fame(white_pop[w_best_idx], best_white_fitness, true)
     _update_hall_of_fame(black_pop[b_best_idx], best_black_fitness, false)
+
+    var result_w := _evolve_population(white_pop, w_shared)
+    white_pop = result_w[0]
+    _white_immigrant_indices = result_w[1]
+
+    var result_b := _evolve_population(black_pop, b_shared)
+    black_pop = result_b[0]
+    _black_immigrant_indices = result_b[1]
 
     # Cache average fitness before clearing arrays
     last_white_avg = get_avg_fitness(0)
@@ -152,7 +174,9 @@ func evolve() -> void:
 
 
 func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
+    ## Returns [new_pop: Array, immigrant_indices: PackedInt32Array]
     var new_pop: Array = []
+    var immigrant_idx: PackedInt32Array = []
 
     # Sort by fitness descending
     var indices := []
@@ -169,6 +193,7 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
     for _i in immigrant_count:
         if new_pop.size() >= population_size:
             break
+        immigrant_idx.append(new_pop.size())
         new_pop.append(NeuralNetworkScript.new(input_size, hidden_size, output_size))
 
     # Fill rest with tournament selection + crossover/mutation
@@ -184,16 +209,71 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
             child.mutate(mutation_rate, mutation_strength)
             new_pop.append(child)
 
-    return new_pop
+    return [new_pop, immigrant_idx]
 
 
-func _tournament_select(pop: Array, fitness: PackedFloat32Array, k: int = 3):
+func _tournament_select(pop: Array, fitness: PackedFloat32Array):
     var best_idx := randi() % pop.size()
-    for _i in range(1, k):
+    for _i in range(1, tournament_k):
         var idx := randi() % pop.size()
         if fitness[idx] > fitness[best_idx]:
             best_idx = idx
     return pop[best_idx]
+
+
+func _apply_fitness_sharing(pop: Array, fitness: PackedFloat32Array) -> PackedFloat32Array:
+    ## Fitness sharing: divide each individual's fitness by a niche count based
+    ## on how many neighbors are within genetic distance sigma. This penalizes
+    ## clusters of identical genotypes and rewards unique strategies.
+    ## Returns a new fitness array (does not modify the original).
+    if fitness_sharing_sigma <= 0.0 or pop.size() < 2:
+        return fitness.duplicate()
+
+    var shared := fitness.duplicate()
+    var n := pop.size()
+
+    # Precompute weight vectors (use only hidden biases for speed — they are
+    # compact and sufficient to distinguish genotypes)
+    var signatures: Array[PackedFloat32Array] = []
+    for i in n:
+        signatures.append(pop[i].bias_h)
+
+    for i in n:
+        var niche_count: float = 0.0
+        for j in n:
+            var dist := _genetic_distance(signatures[i], signatures[j])
+            if dist < fitness_sharing_sigma:
+                niche_count += 1.0 - (dist / fitness_sharing_sigma)
+        if niche_count > 0.0:
+            shared[i] = fitness[i] / niche_count
+    return shared
+
+
+static func _genetic_distance(a: PackedFloat32Array, b: PackedFloat32Array) -> float:
+    ## Euclidean distance between two weight vectors.
+    var sum_sq: float = 0.0
+    for i in a.size():
+        var d: float = a[i] - b[i]
+        sum_sq += d * d
+    return sqrt(sum_sq)
+
+
+func _protect_immigrants(fitness: PackedFloat32Array, immigrant_indices: PackedInt32Array) -> void:
+    ## Give immigrants from the previous generation a fitness floor equal to
+    ## the population median, so they survive at least one round of selection.
+    if immigrant_indices.is_empty() or fitness.is_empty():
+        return
+
+    # Compute median fitness
+    var sorted_f: Array = []
+    for v in fitness:
+        sorted_f.append(v)
+    sorted_f.sort()
+    var median: float = sorted_f[sorted_f.size() / 2]
+
+    for idx in immigrant_indices:
+        if idx < fitness.size() and fitness[idx] < median:
+            fitness[idx] = median
 
 
 func _best_index(fitness: PackedFloat32Array) -> int:

@@ -359,6 +359,10 @@ func _run_auto_train() -> void:
             evo.crossover_rate = config["crossover_rate"]
         if config.has("immigration_rate"):
             evo.immigration_rate = config["immigration_rate"]
+        if config.has("fitness_sharing_sigma"):
+            evo.fitness_sharing_sigma = config["fitness_sharing_sigma"]
+        if config.has("tournament_k"):
+            evo.tournament_k = int(config["tournament_k"])
 
     # Determine metrics path based on worker ID
     var metrics_path := "user://metrics.json"
