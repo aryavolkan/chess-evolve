@@ -126,6 +126,95 @@ pub struct ChessBoard {
 }
 
 impl ChessBoard {
+    pub fn from_fen(fen: &str) -> Option<Self> {
+        let parts: Vec<&str> = fen.split_whitespace().collect();
+        if parts.len() < 4 {
+            return None;
+        }
+
+        let mut board = ChessBoard {
+            bb: [BitBoard(0); 12],
+            pieces: [PIECE_NONE; 64],
+            side_to_move: 0,
+            castling_rights: 0,
+            en_passant_sq: -1,
+            halfmove_clock: 0,
+        };
+
+        // Piece placement (rank 8 down to rank 1)
+        let ranks: Vec<&str> = parts[0].split('/').collect();
+        if ranks.len() != 8 {
+            return None;
+        }
+        for (rank_idx, rank_str) in ranks.iter().enumerate() {
+            let rank = 7 - rank_idx; // FEN rank 8 = internal rank 7
+            let mut file = 0usize;
+            for ch in rank_str.chars() {
+                if let Some(skip) = ch.to_digit(10) {
+                    file += skip as usize;
+                } else {
+                    let piece = match ch {
+                        'P' => PIECE_PAWN,
+                        'N' => PIECE_KNIGHT,
+                        'B' => PIECE_BISHOP,
+                        'R' => PIECE_ROOK,
+                        'Q' => PIECE_QUEEN,
+                        'K' => PIECE_KING,
+                        'p' => -PIECE_PAWN,
+                        'n' => -PIECE_KNIGHT,
+                        'b' => -PIECE_BISHOP,
+                        'r' => -PIECE_ROOK,
+                        'q' => -PIECE_QUEEN,
+                        'k' => -PIECE_KING,
+                        _ => return None,
+                    };
+                    let sq = rank * 8 + file;
+                    board.set_piece_at(sq, piece);
+                    file += 1;
+                }
+            }
+        }
+
+        // Side to move
+        board.side_to_move = match parts[1] {
+            "w" => 0,
+            "b" => 1,
+            _ => return None,
+        };
+
+        // Castling rights
+        if parts[2] != "-" {
+            for ch in parts[2].chars() {
+                match ch {
+                    'K' => board.castling_rights |= 0b0001,
+                    'Q' => board.castling_rights |= 0b0010,
+                    'k' => board.castling_rights |= 0b0100,
+                    'q' => board.castling_rights |= 0b1000,
+                    _ => return None,
+                }
+            }
+        }
+
+        // En passant
+        if parts[3] != "-" {
+            let ep_bytes = parts[3].as_bytes();
+            if ep_bytes.len() == 2 {
+                let ep_file = (ep_bytes[0] - b'a') as usize;
+                let ep_rank = (ep_bytes[1] - b'1') as usize;
+                if ep_file < 8 && ep_rank < 8 {
+                    board.en_passant_sq = (ep_rank * 8 + ep_file) as i8;
+                }
+            }
+        }
+
+        // Halfmove clock
+        if parts.len() > 4 {
+            board.halfmove_clock = parts[4].parse().unwrap_or(0);
+        }
+
+        Some(board)
+    }
+
     pub fn startpos() -> Self {
         let w_pawns = 0x0000_0000_0000_ff00u64;
         let w_rooks = 0x0000_0000_0000_0081u64;
@@ -762,6 +851,71 @@ mod tests {
         board = board.make_move(encode_move(sq('a', 5), sq('a', 4), 0));
         let moves = board.get_legal_moves();
         assert!(moves.contains(&encode_move(4, 6, 0)));
+    }
+
+    #[test]
+    fn fen_startpos_matches_startpos() {
+        let from_fen = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
+        let startpos = ChessBoard::startpos();
+        assert_eq!(from_fen.side_to_move, startpos.side_to_move);
+        assert_eq!(from_fen.castling_rights, startpos.castling_rights);
+        assert_eq!(from_fen.en_passant_sq, startpos.en_passant_sq);
+        assert_eq!(from_fen.halfmove_clock, startpos.halfmove_clock);
+        for i in 0..12 {
+            assert_eq!(from_fen.bb[i].0, startpos.bb[i].0, "bitboard {} mismatch", i);
+        }
+        for i in 0..64 {
+            assert_eq!(from_fen.pieces[i], startpos.pieces[i], "piece at sq {} mismatch", i);
+        }
+        assert_eq!(from_fen.get_legal_moves().len(), 20);
+    }
+
+    #[test]
+    fn fen_midgame_position() {
+        // After 1. e4 e5 2. Nf3
+        let board = ChessBoard::from_fen("rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2").unwrap();
+        assert_eq!(board.side_to_move, 1);
+        assert_eq!(board.castling_rights, 0b1111);
+        assert_eq!(board.halfmove_clock, 1);
+        // Knight on f3 = square(5, 2) = 21
+        assert_eq!(board.piece_at(21), PIECE_KNIGHT);
+        // Black pawn on e5 = square(4, 4) = 36
+        assert_eq!(board.piece_at(36), -PIECE_PAWN);
+        // White pawn on e4 = square(4, 3) = 28
+        assert_eq!(board.piece_at(28), PIECE_PAWN);
+    }
+
+    #[test]
+    fn fen_en_passant() {
+        // Position with en passant possible on d6
+        let board = ChessBoard::from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3").unwrap();
+        // d6 = square(3, 5) = 43
+        assert_eq!(board.en_passant_sq, 43);
+        let moves = board.get_legal_moves();
+        let ep_move = encode_move(sq('e', 5), sq('d', 6), MOVE_FLAG_EN_PASSANT);
+        assert!(moves.contains(&ep_move));
+    }
+
+    #[test]
+    fn fen_no_castling() {
+        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1").unwrap();
+        assert_eq!(board.castling_rights, 0);
+    }
+
+    #[test]
+    fn fen_invalid_returns_none() {
+        assert!(ChessBoard::from_fen("invalid").is_none());
+        assert!(ChessBoard::from_fen("").is_none());
+        assert!(ChessBoard::from_fen("8/8/8 w").is_none()); // not enough ranks
+    }
+
+    #[test]
+    fn fen_perft_kiwipete() {
+        // Kiwipete position - well-known perft test
+        let board = ChessBoard::from_fen(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+        ).unwrap();
+        assert_eq!(perft(&board, 1), 48);
     }
 
     #[test]

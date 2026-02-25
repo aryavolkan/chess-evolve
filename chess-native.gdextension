@@ -5,3 +5,5 @@ compatibility_minimum = "4.1"
 [libraries]
 macos.debug = "res://rust/chess-native/target/release/libchess_native.dylib"
 macos.release = "res://rust/chess-native/target/release/libchess_native.dylib"
+linux.debug = "res://rust/chess-native/target/release/libchess_native.so"
+linux.release = "res://rust/chess-native/target/release/libchess_native.so"

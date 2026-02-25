@@ -25,8 +25,13 @@ impl IRefCounted for RustChessBoard {
 #[godot_api]
 impl RustChessBoard {
     #[func]
-    pub fn from_fen(&mut self, _fen: GString) {
-        self.board = ChessBoard::startpos();
+    pub fn from_fen(&mut self, fen: GString) {
+        if let Some(board) = ChessBoard::from_fen(&fen.to_string()) {
+            self.board = board;
+        } else {
+            godot_warn!("Invalid FEN string, falling back to startpos");
+            self.board = ChessBoard::startpos();
+        }
     }
 
     #[func]

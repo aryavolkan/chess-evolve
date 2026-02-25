@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-godot = { git = "https://github.com/godot-rust/gdext", features = ["api-4-5"] }
+godot = { git = "https://github.com/godot-rust/gdext", features = ["api-4-2"] }
 
 [profile.release]
 opt-level = 3
