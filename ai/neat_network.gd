@@ -16,34 +16,36 @@ var _cached_outputs: PackedFloat32Array
 
 static func from_genome(genome: NeatGenome) -> NeatNetwork:
     var net := NeatNetwork.new()
+    net.build(genome)
+    return net
 
+
+func build(genome: NeatGenome) -> void:
     for node in genome.node_genes:
-        net._biases[node.id] = node.bias
-        net._incoming[node.id] = []
+        _biases[node.id] = node.bias
+        _incoming[node.id] = []
         if node.type == 0:
-            net._input_ids.append(node.id)
-            net._is_input[node.id] = true
+            _input_ids.append(node.id)
+            _is_input[node.id] = true
         elif node.type == 2:
-            net._output_ids.append(node.id)
+            _output_ids.append(node.id)
 
     for conn in genome.connection_genes:
         if conn.enabled:
-            net._connections.append({
+            _connections.append({
                 "in_id": conn.in_id,
                 "out_id": conn.out_id,
                 "weight": conn.weight,
             })
-            if net._incoming.has(conn.out_id):
-                net._incoming[conn.out_id].append({"in_id": conn.in_id, "weight": conn.weight})
+            if _incoming.has(conn.out_id):
+                _incoming[conn.out_id].append({"in_id": conn.in_id, "weight": conn.weight})
 
-    net._node_order = net._topological_sort(genome)
+    _node_order = _topological_sort(genome)
 
     for node in genome.node_genes:
-        net._activations[node.id] = 0.0
+        _activations[node.id] = 0.0
 
-    net._cached_outputs.resize(net._output_ids.size())
-
-    return net
+    _cached_outputs.resize(_output_ids.size())
 
 
 func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:

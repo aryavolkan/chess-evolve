@@ -23,7 +23,9 @@ func _bench_board_state(state: BoardStateScript, iterations: int) -> void:
     for i in iterations:
         state.generate_legal_moves()
     var elapsed := Time.get_ticks_usec() - start
-    print("BoardState generate_legal_moves:", float(elapsed) / float(iterations), " usec/call (", elapsed, " usec total)")
+    print("BoardState generate_legal_moves:",
+        float(elapsed) / float(iterations), 
+        " usec/call (", elapsed, " usec total)")
 
 
 func _bench_bitboard_state(state: BitboardStateScript, iterations: int) -> void:
@@ -31,4 +33,6 @@ func _bench_bitboard_state(state: BitboardStateScript, iterations: int) -> void:
     for i in iterations:
         state.get_legal_moves()
     var elapsed := Time.get_ticks_usec() - start
-    print("BitboardState get_legal_moves:", float(elapsed) / float(iterations), " usec/call (", elapsed, " usec total)")
+    print("BitboardState get_legal_moves:",
+        float(elapsed) / float(iterations),
+        " usec/call (", elapsed, " usec total)")

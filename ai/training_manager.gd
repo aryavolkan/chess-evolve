@@ -16,6 +16,7 @@ const ChessFitnessScript = preload("res://ai/fitness.gd")
 const GameRecorderScript = preload("res://ai/game_recorder.gd")
 const MinimaxPlayerScript = preload("res://ai/minimax_player.gd")
 const ChessMapElitesScript = preload("res://ai/chess_map_elites.gd")
+const OpeningBookScript = preload("res://chess/opening_book.gd")
 
 var evolution
 var use_neat: bool = false
@@ -34,6 +35,10 @@ var use_minimax: bool = false  # Use minimax search instead of direct network ou
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
 # Curriculum configuration
+# Opening book configuration
+var use_opening_book: bool = false
+var opening_book_depth: int = 6  # Max half-moves to use from book
+
 var use_curriculum: bool = true
 var curriculum_stages: Array = [
     {
@@ -131,7 +136,10 @@ var _black_material_total: float = 0.0
 var _white_tournament_scores: Array = []
 var _black_tournament_scores: Array = []
 
-func _init(p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150, p_metrics_path: String = "", p_use_neat: bool = false) -> void:
+func _init(
+    p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150,
+    p_metrics_path: String = "", p_use_neat: bool = false
+) -> void:
     if p_evolution:
         evolution = p_evolution
         use_neat = p_use_neat or p_evolution is ChessNeatEvolutionScript
@@ -193,7 +201,9 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
         while selected_opponents.size() < opponents_needed and quintile_idx < groups.size():
             var group = groups[quintile_idx]
             # Find an opponent in this quintile that isn't self
-            var candidates: Array = group.filter(func(idx): return idx != i and idx not in selected_opponents)
+            var candidates: Array = group.filter(
+                func(idx): return idx != i and idx not in selected_opponents
+            )
             if not candidates.is_empty():
                 selected_opponents.append(candidates[randi() % candidates.size()])
             quintile_idx += 1
@@ -322,7 +332,8 @@ func _update_fitness_from_tournament() -> void:
         _black_tournament_scores.append(black_tournament_score)
 
         # Add small bonus based on material/position from accumulated fitness
-        var white_bonus: float = evolution.white_fitness[i] * 0.1  # 10% weight for material/position
+        # 10% weight for material/position
+        var white_bonus: float = evolution.white_fitness[i] * 0.1
         var black_bonus: float = evolution.black_fitness[i] * 0.1
 
         evolution.set_fitness(0, i, white_tournament_score + white_bonus)
@@ -469,39 +480,38 @@ func run_one_game_step() -> bool:
             # For simplicity, we'll fall back to batch processing in run_generation
             push_warning("Swiss tournament mode not supported in incremental mode")
             return false
-        else:
-            # Round-robin: play next game from pairings
-            var found_game := false
-            var w_idx := _current_white_idx
-            var b_idx := -1
+        # Round-robin: play next game from pairings
+        var found_game := false
+        var w_idx := _current_white_idx
+        var b_idx := -1
 
-            while w_idx < evolution.population_size and not found_game:
-                var opponents = _tournament_pairings.get(w_idx, [])
-                if _current_game_idx < opponents.size():
-                    b_idx = opponents[_current_game_idx]
-                    found_game = true
-                else:
-                    w_idx += 1
-                    _current_game_idx = 0
-                    _current_white_idx = w_idx
-
-            if found_game:
-                var result = _play_game(w_idx, b_idx)
-                _record_tournament_result(w_idx, b_idx, result)
-                game_complete.emit(w_idx, b_idx, result["result"])
-                total_games_played += 1
-
-                # Advance to next game
-                _current_game_idx += 1
+        while w_idx < evolution.population_size and not found_game:
+            var opponents = _tournament_pairings.get(w_idx, [])
+            if _current_game_idx < opponents.size():
+                b_idx = opponents[_current_game_idx]
+                found_game = true
             else:
-                # All games played, update fitness and evolve
-                _update_fitness_from_tournament()
-                evolution.evolve()
-                var stats := get_stats()
-                metrics_logger.write_metrics(stats)
-                training_step_complete.emit(evolution.generation, stats)
-                _generation_in_progress = false
-                return true
+                w_idx += 1
+                _current_game_idx = 0
+                _current_white_idx = w_idx
+
+        if found_game:
+            var result = _play_game(w_idx, b_idx)
+            _record_tournament_result(w_idx, b_idx, result)
+            game_complete.emit(w_idx, b_idx, result["result"])
+            total_games_played += 1
+
+            # Advance to next game
+            _current_game_idx += 1
+        else:
+            # All games played, update fitness and evolve
+            _update_fitness_from_tournament()
+            evolution.evolve()
+            var stats := get_stats()
+            metrics_logger.write_metrics(stats)
+            training_step_complete.emit(evolution.generation, stats)
+            _generation_in_progress = false
+            return true
     else:
         # Original random opponent selection
         var opp := _select_black_opponent(_current_white_idx)
@@ -536,7 +546,7 @@ func _run_all_games() -> int:
     ## Opponents are selected from current population or Hall of Fame based on ratio.
     var games_played := 0
     for w_idx in evolution.population_size:
-        for _g in games_per_individual:
+        for game_n in games_per_individual:
             var opp := _select_black_opponent(w_idx)
             var b_idx: int = opp["idx"]
             var use_hof: bool = opp["use_hof"]
@@ -592,7 +602,8 @@ func _select_black_opponent(white_idx: int) -> Dictionary:
         use_hof = true
         b_idx = -1
     else:
-        if use_fitness_weighted_sampling and evolution.black_fitness.size() == evolution.population_size:
+        var has_fitness: bool = evolution.black_fitness.size() == evolution.population_size
+        if use_fitness_weighted_sampling and has_fitness:
             var target := 0.0
             if evolution.white_fitness.size() == evolution.population_size:
                 target = evolution.white_fitness[white_idx]
@@ -616,7 +627,10 @@ func _play_game_with_hof(white_idx: int, black_idx: int, idx_is_hof: bool = fals
 
     return _play_game(white_idx, black_idx, white_is_hof, black_is_hof)
 
-func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, black_is_hof: bool = false):
+func _play_game(
+    white_idx: int, black_idx: int,
+    white_is_hof: bool = false, black_is_hof: bool = false
+):
     ## Play a single game between two networks, return final board state.
     var state := BoardStateScript.new()
     state.use_bitboard_movegen = use_bitboard_movegen
@@ -630,11 +644,12 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
     var white_net = null
     var black_net = null
 
+    var draw_result := {"result": 2, "move_count": 0, "state": null}
     if white_is_hof:
         white_net = evolution.get_hall_of_fame_opponent(0)
         if white_net == null:
             push_error("Hall of Fame requested but empty for white")
-            return {"result": 2, "move_count": 0, "state": null}  # Return draw on error
+            return draw_result
     else:
         white_net = evolution.get_network(0, white_idx)
 
@@ -642,11 +657,12 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
         black_net = evolution.get_hall_of_fame_opponent(1)
         if black_net == null:
             push_error("Hall of Fame requested but empty for black")
-            return {"result": 2, "move_count": 0, "state": null}  # Return draw on error
+            return draw_result
     else:
         black_net = evolution.get_network(1, black_idx)
 
-    if use_rust_batch_sim and not use_neat and not use_minimax and ClassDB.class_exists(&"RustBatchSimulator"):
+    var has_rust_sim := ClassDB.class_exists(&"RustBatchSimulator")
+    if use_rust_batch_sim and not use_neat and not use_minimax and has_rust_sim:
         if _rust_batch_sim == null:
             _rust_batch_sim = ClassDB.instantiate("RustBatchSimulator")
         var w_weights: PackedFloat32Array = white_net.get_weights()
@@ -727,28 +743,35 @@ func _play_game(white_idx: int, black_idx: int, white_is_hof: bool = false, blac
         if legal_moves.is_empty():
             break
 
-        if use_minimax:
-            # Use minimax search to choose move
-            var player = white_player if state.side_to_move == 0 else black_player
-            chosen = player.choose_move(state)
-        else:
-            # Use direct network output (original behavior)
-            var net = white_net if state.side_to_move == 0 else black_net
-            var outputs: PackedFloat32Array
-            if use_encoder_cache:
-                var cache_key := state.get_position_key()
-                if _encoder_cache.has(cache_key):
-                    outputs = _encoder_cache[cache_key]
-                else:
-                    var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(state)
-                    outputs = net.forward(inputs)
-                    _encoder_cache[cache_key] = outputs
-                    if _encoder_cache.size() > encoder_cache_max:
-                        _encoder_cache.clear()
+        # Opening book lookup
+        if use_opening_book and move_count < opening_book_depth:
+            var book_move := OpeningBookScript.lookup(state)
+            if book_move != -1 and legal_moves.has(book_move):
+                chosen = book_move
+
+        if chosen == -1:
+            if use_minimax:
+                # Use minimax search to choose move
+                var player = white_player if state.side_to_move == 0 else black_player
+                chosen = player.choose_move(state)
             else:
-                var inputs2: PackedFloat32Array = ChessEncoderScript.encode_board(state)
-                outputs = net.forward(inputs2)
-            chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
+                # Use direct network output (original behavior)
+                var net = white_net if state.side_to_move == 0 else black_net
+                var outputs: PackedFloat32Array
+                if use_encoder_cache:
+                    var cache_key := state.get_position_key()
+                    if _encoder_cache.has(cache_key):
+                        outputs = _encoder_cache[cache_key]
+                    else:
+                        var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(state)
+                        outputs = net.forward(inputs)
+                        _encoder_cache[cache_key] = outputs
+                        if _encoder_cache.size() > encoder_cache_max:
+                            _encoder_cache.clear()
+                else:
+                    var inputs2: PackedFloat32Array = ChessEncoderScript.encode_board(state)
+                    outputs = net.forward(inputs2)
+                chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
 
         if chosen == -1:
             break  # Invalid move
@@ -905,6 +928,19 @@ func get_stats() -> Dictionary:
         "black_hof_avg_elo": evolution.get_hall_of_fame_stats(1).get("avg_elo", 0.0),
         "white_hof_top_elo": evolution.get_hall_of_fame_stats(0).get("top_elo", 0.0),
         "black_hof_top_elo": evolution.get_hall_of_fame_stats(1).get("top_elo", 0.0),
+
+        # Elo distribution
+        "white_elo_min": _get_elo_distribution(evolution.hall_of_fame).min_elo,
+        "white_elo_p25": _get_elo_distribution(evolution.hall_of_fame).p25,
+        "white_elo_median": _get_elo_distribution(evolution.hall_of_fame).median,
+        "white_elo_p75": _get_elo_distribution(evolution.hall_of_fame).p75,
+        "white_elo_max": _get_elo_distribution(evolution.hall_of_fame).max_elo,
+        "black_elo_min": _get_elo_distribution(evolution.black_hall_of_fame).min_elo,
+        "black_elo_p25": _get_elo_distribution(evolution.black_hall_of_fame).p25,
+        "black_elo_median": _get_elo_distribution(evolution.black_hall_of_fame).median,
+        "black_elo_p75": _get_elo_distribution(evolution.black_hall_of_fame).p75,
+        "black_elo_max": _get_elo_distribution(evolution.black_hall_of_fame).max_elo,
+
         "white_tournament_score_best": white_tournament_best,
         "white_tournament_score_avg": white_tournament_avg,
         "black_tournament_score_best": black_tournament_best,
@@ -919,9 +955,35 @@ func get_stats() -> Dictionary:
 
         # MAP-Elites stats
         "use_map_elites": use_map_elites,
-        "map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
-        "map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
-        "map_elites_best": map_elites_archive.get_best_fitness() if map_elites_archive else 0.0,
+        "map_elites_occupied": (
+            map_elites_archive.get_occupied_count()
+            if map_elites_archive else 0
+        ),
+        "map_elites_coverage": (
+            map_elites_archive.get_coverage()
+            if map_elites_archive else 0.0
+        ),
+        "map_elites_best": (
+            map_elites_archive.get_best_fitness()
+            if map_elites_archive else 0.0
+        ),
+    }
+
+
+func _get_elo_distribution(hof: Array) -> Dictionary:
+    if hof.is_empty():
+        return {"min_elo": 0.0, "p25": 0.0, "median": 0.0, "p75": 0.0, "max_elo": 0.0}
+    var elos: Array[float] = []
+    for entry in hof:
+        elos.append(float(entry.get("elo", 1200.0)))
+    elos.sort()
+    var n := elos.size()
+    return {
+        "min_elo": elos[0],
+        "p25": elos[n / 4],
+        "median": elos[n / 2],
+        "p75": elos[3 * n / 4],
+        "max_elo": elos[n - 1],
     }
 
 

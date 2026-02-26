@@ -29,7 +29,8 @@ var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
 var immigration_rate: float = 0.1  # fraction of population replaced with random individuals
-var fitness_sharing_sigma: float = 0.08  # RMS genetic distance threshold for fitness sharing (0 = disabled)
+## RMS genetic distance threshold for fitness sharing (0 = disabled)
+var fitness_sharing_sigma: float = 0.08
 var tournament_k: int = 2  # tournament selection size (lower = less selection pressure)
 
 # Indices of immigrants from the previous generation (protected from culling)
@@ -191,7 +192,7 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
 
     # Immigration: inject random individuals to maintain genetic diversity
     var immigrant_count := maxi(1, ceili(population_size * immigration_rate))
-    for _i in immigrant_count:
+    for _n in immigrant_count:
         if new_pop.size() >= population_size:
             break
         immigrant_idx.append(new_pop.size())
@@ -215,7 +216,7 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
 
 func _tournament_select(pop: Array, fitness: PackedFloat32Array):
     var best_idx := randi() % pop.size()
-    for _i in range(1, tournament_k):
+    for _k in range(1, tournament_k):
         var idx := randi() % pop.size()
         if fitness[idx] > fitness[best_idx]:
             best_idx = idx

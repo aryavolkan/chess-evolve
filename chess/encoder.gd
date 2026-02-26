@@ -24,7 +24,7 @@ const PIECE = ChessConstants.Piece
 static func encode_board(state) -> PackedFloat32Array:
     ## Encode board into neural network input vector.
     if state is BoardState:
-        if not state._encoder_dirty and state._encoder_cache.size() == INPUT_SIZE:
+        if not state.encoder_dirty and state._encoder_cache.size() == INPUT_SIZE:
             return state._encoder_cache
 
     var inputs := PackedFloat32Array()
@@ -52,7 +52,7 @@ static func encode_board(state) -> PackedFloat32Array:
 
     if state is BoardState:
         state._encoder_cache = inputs
-        state._encoder_dirty = false
+        state.encoder_dirty = false
 
     return inputs
 

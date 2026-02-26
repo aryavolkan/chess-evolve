@@ -6,19 +6,19 @@ const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
 const MOVE_FLAG_PROMOTE := 1 << 12
 const MOVE_FLAG_EN_PASSANT := 1 << 13
 
-static var KNIGHT_ATTACKS: Array[int] = []
-static var KING_ATTACKS: Array[int] = []
-static var PAWN_ATTACKS_W: Array[int] = []
-static var PAWN_ATTACKS_B: Array[int] = []
+static var knight_attacks: Array[int] = []
+static var king_attacks: Array[int] = []
+static var pawn_attacks_w: Array[int] = []
+static var pawn_attacks_b: Array[int] = []
 
-static var RAY_N: Array[int] = []
-static var RAY_S: Array[int] = []
-static var RAY_E: Array[int] = []
-static var RAY_W: Array[int] = []
-static var RAY_NE: Array[int] = []
-static var RAY_NW: Array[int] = []
-static var RAY_SE: Array[int] = []
-static var RAY_SW: Array[int] = []
+static var ray_n: Array[int] = []
+static var ray_s: Array[int] = []
+static var ray_e: Array[int] = []
+static var ray_w: Array[int] = []
+static var ray_ne: Array[int] = []
+static var ray_nw: Array[int] = []
+static var ray_se: Array[int] = []
+static var ray_sw: Array[int] = []
 
 var bb_w_pawns: int = 0
 var bb_w_knights: int = 0
@@ -42,37 +42,37 @@ var fullmove_number: int = 1
 var is_game_over: bool = false
 var result: int = 0
 
-var _white_king_sq: int = -1
-var _black_king_sq: int = -1
+var white_king_sq: int = -1
+var black_king_sq: int = -1
 
 
 static func _static_init() -> void:
-    KNIGHT_ATTACKS.resize(64)
-    KING_ATTACKS.resize(64)
-    PAWN_ATTACKS_W.resize(64)
-    PAWN_ATTACKS_B.resize(64)
-    RAY_N.resize(64)
-    RAY_S.resize(64)
-    RAY_E.resize(64)
-    RAY_W.resize(64)
-    RAY_NE.resize(64)
-    RAY_NW.resize(64)
-    RAY_SE.resize(64)
-    RAY_SW.resize(64)
+    knight_attacks.resize(64)
+    king_attacks.resize(64)
+    pawn_attacks_w.resize(64)
+    pawn_attacks_b.resize(64)
+    ray_n.resize(64)
+    ray_s.resize(64)
+    ray_e.resize(64)
+    ray_w.resize(64)
+    ray_ne.resize(64)
+    ray_nw.resize(64)
+    ray_se.resize(64)
+    ray_sw.resize(64)
 
     for sq in range(64):
-        KNIGHT_ATTACKS[sq] = _compute_knight_attacks(sq)
-        KING_ATTACKS[sq] = _compute_king_attacks(sq)
-        PAWN_ATTACKS_W[sq] = _compute_pawn_attacks(sq, 0)
-        PAWN_ATTACKS_B[sq] = _compute_pawn_attacks(sq, 1)
-        RAY_N[sq] = _compute_ray(sq, 0, 1)
-        RAY_S[sq] = _compute_ray(sq, 0, -1)
-        RAY_E[sq] = _compute_ray(sq, 1, 0)
-        RAY_W[sq] = _compute_ray(sq, -1, 0)
-        RAY_NE[sq] = _compute_ray(sq, 1, 1)
-        RAY_NW[sq] = _compute_ray(sq, -1, 1)
-        RAY_SE[sq] = _compute_ray(sq, 1, -1)
-        RAY_SW[sq] = _compute_ray(sq, -1, -1)
+        knight_attacks[sq] = _compute_knight_attacks(sq)
+        king_attacks[sq] = _compute_king_attacks(sq)
+        pawn_attacks_w[sq] = _compute_pawn_attacks(sq, 0)
+        pawn_attacks_b[sq] = _compute_pawn_attacks(sq, 1)
+        ray_n[sq] = _compute_ray(sq, 0, 1)
+        ray_s[sq] = _compute_ray(sq, 0, -1)
+        ray_e[sq] = _compute_ray(sq, 1, 0)
+        ray_w[sq] = _compute_ray(sq, -1, 0)
+        ray_ne[sq] = _compute_ray(sq, 1, 1)
+        ray_nw[sq] = _compute_ray(sq, -1, 1)
+        ray_se[sq] = _compute_ray(sq, 1, -1)
+        ray_sw[sq] = _compute_ray(sq, -1, -1)
 
 
 static func file_of(sq: int) -> int:
@@ -115,10 +115,10 @@ static func from_board_state(bs: BoardState) -> BitboardState:
         if p == 0:
             continue
 
-        state._set_piece_at(sq, p)
+        state.set_piece_at(sq, p)
 
-    state._white_king_sq = state._find_king(0)
-    state._black_king_sq = state._find_king(1)
+    state.white_king_sq = state.find_king(0)
+    state.black_king_sq = state.find_king(1)
     return state
 
 
@@ -143,8 +143,8 @@ func clone() -> BitboardState:
     copy.fullmove_number = fullmove_number
     copy.is_game_over = is_game_over
     copy.result = result
-    copy._white_king_sq = _white_king_sq
-    copy._black_king_sq = _black_king_sq
+    copy.white_king_sq = white_king_sq
+    copy.black_king_sq = black_king_sq
     return copy
 
 
@@ -161,12 +161,12 @@ func get_legal_moves() -> PackedInt32Array:
 
 func apply_move(move: int) -> BitboardState:
     var next := clone()
-    next._apply_move_in_place(move)
+    next.apply_move_in_place(move)
     return next
 
 
 func is_in_check(color: int) -> bool:
-    var king_sq := _find_king(color)
+    var king_sq := find_king(color)
     if king_sq == -1:
         return false
     return _is_square_attacked(king_sq, 1 - color)
@@ -200,11 +200,14 @@ func _generate_pseudo_legal_moves() -> PackedInt32Array:
     return moves
 
 
-func _add_pawn_moves(pawns: int, color: int, friendly_occ: int, enemy_occ: int, moves: PackedInt32Array) -> void:
+func _add_pawn_moves(
+    pawns: int, color: int, friendly_occ: int, enemy_occ: int,
+    moves: PackedInt32Array
+) -> void:
     var dir := 8 if color == 0 else -8
     var start_rank := 1 if color == 0 else 6
     var promotion_rank := 7 if color == 0 else 0
-    var pawn_attacks := PAWN_ATTACKS_W if color == 0 else PAWN_ATTACKS_B
+    var pawn_attacks := pawn_attacks_w if color == 0 else pawn_attacks_b
 
     var bb := pawns
     while bb != 0:
@@ -239,14 +242,17 @@ func _add_knight_moves(knights: int, friendly_occ: int, moves: PackedInt32Array)
     while bb != 0:
         var sq := _bit_scan_forward(bb)
         bb &= bb - 1
-        var attacks := KNIGHT_ATTACKS[sq] & ~friendly_occ
+        var attacks := knight_attacks[sq] & ~friendly_occ
         while attacks != 0:
             var to_sq := _bit_scan_forward(attacks)
             attacks &= attacks - 1
             moves.append(encode_move(sq, to_sq))
 
 
-func _add_slider_moves(sliders: int, occupancy: int, friendly_occ: int, moves: PackedInt32Array, is_diagonal: bool) -> void:
+func _add_slider_moves(
+    sliders: int, occupancy: int, friendly_occ: int,
+    moves: PackedInt32Array, is_diagonal: bool
+) -> void:
     var bb := sliders
     while bb != 0:
         var sq := _bit_scan_forward(bb)
@@ -259,11 +265,11 @@ func _add_slider_moves(sliders: int, occupancy: int, friendly_occ: int, moves: P
             moves.append(encode_move(sq, to_sq))
 
 
-func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: int, moves: PackedInt32Array) -> void:
+func _add_king_moves(king: int, friendly_occ: int, _enemy_occ: int, occupancy: int, moves: PackedInt32Array) -> void:
     if king == 0:
         return
     var sq := _bit_scan_forward(king)
-    var attacks := KING_ATTACKS[sq] & ~friendly_occ
+    var attacks := king_attacks[sq] & ~friendly_occ
     while attacks != 0:
         var to_sq := _bit_scan_forward(attacks)
         attacks &= attacks - 1
@@ -324,7 +330,7 @@ func _add_king_moves(king: int, friendly_occ: int, enemy_occ: int, occupancy: in
                 moves.append(encode_move(60, 58))
 
 
-func _apply_move_in_place(move: int) -> void:
+func apply_move_in_place(move: int) -> void:
     var from := move_from(move)
     var to := move_to(move)
     var flags := move_flags(move)
@@ -356,13 +362,13 @@ func _apply_move_in_place(move: int) -> void:
             var rook_to := to - 1
             var rook_piece := _piece_at(rook_from)
             _remove_piece_at(rook_from, rook_piece)
-            _set_piece_at(rook_to, rook_piece)
+            set_piece_at(rook_to, rook_piece)
         elif from - to == 2:  # Queenside
             var rook_from_q := to - 2
             var rook_to_q := to + 1
             var rook_piece_q := _piece_at(rook_from_q)
             _remove_piece_at(rook_from_q, rook_piece_q)
-            _set_piece_at(rook_to_q, rook_piece_q)
+            set_piece_at(rook_to_q, rook_piece_q)
 
     # Update castling rights
     if abs_p == Piece.KING:
@@ -377,20 +383,20 @@ func _apply_move_in_place(move: int) -> void:
     _remove_piece_at(from, piece)
     if captured != 0:
         _remove_piece_at(to, captured)
-    _set_piece_at(to, piece)
+    set_piece_at(to, piece)
 
     # Update king cache
     if abs_p == Piece.KING:
         if side_to_move == 0:
-            _white_king_sq = to
+            white_king_sq = to
         else:
-            _black_king_sq = to
+            black_king_sq = to
 
     # Pawn promotion (auto-queen)
     if abs_p == Piece.PAWN:
         if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
             _remove_piece_at(to, piece)
-            _set_piece_at(to, Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN)
+            set_piece_at(to, Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN)
 
     # Switch side
     side_to_move = 1 - side_to_move
@@ -405,17 +411,17 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 
     var attackers := 0
     if by_color == 0:
-        attackers = PAWN_ATTACKS_B[sq] & bb_w_pawns
+        attackers = pawn_attacks_b[sq] & bb_w_pawns
         if attackers != 0: return true
-        if KNIGHT_ATTACKS[sq] & bb_w_knights: return true
-        if KING_ATTACKS[sq] & bb_w_king: return true
+        if knight_attacks[sq] & bb_w_knights: return true
+        if king_attacks[sq] & bb_w_king: return true
         if _slider_attacks(sq, occupancy, true) & (bb_w_bishops | bb_w_queens): return true
         if _slider_attacks(sq, occupancy, false) & (bb_w_rooks | bb_w_queens): return true
     else:
-        attackers = PAWN_ATTACKS_W[sq] & bb_b_pawns
+        attackers = pawn_attacks_w[sq] & bb_b_pawns
         if attackers != 0: return true
-        if KNIGHT_ATTACKS[sq] & bb_b_knights: return true
-        if KING_ATTACKS[sq] & bb_b_king: return true
+        if knight_attacks[sq] & bb_b_knights: return true
+        if king_attacks[sq] & bb_b_king: return true
         if _slider_attacks(sq, occupancy, true) & (bb_b_bishops | bb_b_queens): return true
         if _slider_attacks(sq, occupancy, false) & (bb_b_rooks | bb_b_queens): return true
 
@@ -425,15 +431,15 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
 func _slider_attacks(sq: int, occupancy: int, diagonal: bool) -> int:
     var attacks := 0
     if diagonal:
-        attacks |= _ray_attacks(sq, occupancy, RAY_NE, true)
-        attacks |= _ray_attacks(sq, occupancy, RAY_NW, true)
-        attacks |= _ray_attacks(sq, occupancy, RAY_SE, false)
-        attacks |= _ray_attacks(sq, occupancy, RAY_SW, false)
+        attacks |= _ray_attacks(sq, occupancy, ray_ne, true)
+        attacks |= _ray_attacks(sq, occupancy, ray_nw, true)
+        attacks |= _ray_attacks(sq, occupancy, ray_se, false)
+        attacks |= _ray_attacks(sq, occupancy, ray_sw, false)
     else:
-        attacks |= _ray_attacks(sq, occupancy, RAY_N, true)
-        attacks |= _ray_attacks(sq, occupancy, RAY_E, true)
-        attacks |= _ray_attacks(sq, occupancy, RAY_S, false)
-        attacks |= _ray_attacks(sq, occupancy, RAY_W, false)
+        attacks |= _ray_attacks(sq, occupancy, ray_n, true)
+        attacks |= _ray_attacks(sq, occupancy, ray_e, true)
+        attacks |= _ray_attacks(sq, occupancy, ray_s, false)
+        attacks |= _ray_attacks(sq, occupancy, ray_w, false)
     return attacks
 
 
@@ -471,7 +477,7 @@ func _piece_at(sq: int) -> int:
     return piece
 
 
-func _set_piece_at(sq: int, piece: int) -> void:
+func set_piece_at(sq: int, piece: int) -> void:
     var mask := 1 << sq
     match piece:
         Piece.PAWN: bb_w_pawns |= mask
@@ -481,7 +487,7 @@ func _set_piece_at(sq: int, piece: int) -> void:
         Piece.QUEEN: bb_w_queens |= mask
         Piece.KING:
             bb_w_king |= mask
-            _white_king_sq = sq
+            white_king_sq = sq
 
         -Piece.PAWN: bb_b_pawns |= mask
         -Piece.KNIGHT: bb_b_knights |= mask
@@ -490,7 +496,7 @@ func _set_piece_at(sq: int, piece: int) -> void:
         -Piece.QUEEN: bb_b_queens |= mask
         -Piece.KING:
             bb_b_king |= mask
-            _black_king_sq = sq
+            black_king_sq = sq
 
 
 func _remove_piece_at(sq: int, piece: int) -> void:
@@ -512,8 +518,8 @@ func _remove_piece_at(sq: int, piece: int) -> void:
         -Piece.KING: bb_b_king &= mask
 
 
-func _find_king(color: int) -> int:
-    return _white_king_sq if color == 0 else _black_king_sq
+func find_king(color: int) -> int:
+    return white_king_sq if color == 0 else black_king_sq
 
 
 static func _bit_scan_forward(bb: int) -> int:

@@ -103,7 +103,7 @@ func mutate_add_connection() -> void:
     if possible_inputs.is_empty() or possible_outputs.is_empty():
         return
 
-    for _attempt in 10:
+    for attempt in 10:
         var in_node = possible_inputs[randi() % possible_inputs.size()]
         var out_node = possible_outputs[randi() % possible_outputs.size()]
 
@@ -229,7 +229,9 @@ func compatibility(other: NeatGenome, p_config: NeatConfig) -> float:
 
     var avg_weight_diff: float = weight_diff_sum / matching_count if matching_count > 0 else 0.0
 
-    return (p_config.c1_excess * excess / n) + (p_config.c2_disjoint * disjoint / n) + (p_config.c3_weight_diff * avg_weight_diff)
+    return (p_config.c1_excess * excess / n) \
+        + (p_config.c2_disjoint * disjoint / n) \
+        + (p_config.c3_weight_diff * avg_weight_diff)
 
 
 static func crossover(parent_a: NeatGenome, parent_b: NeatGenome) -> NeatGenome:
@@ -366,7 +368,9 @@ func serialize() -> Dictionary:
     return {"nodes": nodes, "connections": connections, "fitness": fitness}
 
 
-static func deserialize(data: Dictionary, p_config: NeatConfig, p_tracker: NeatInnovation) -> NeatGenome:
+static func deserialize(
+    data: Dictionary, p_config: NeatConfig, p_tracker: NeatInnovation
+) -> NeatGenome:
     var genome := NeatGenome.new()
     genome.config = p_config
     genome.innovation_tracker = p_tracker

@@ -22,7 +22,7 @@ func _run_tests() -> void:
 
     _test("attack_tables_knight_a1", func() -> void:
         var sq := BitboardState.square(0, 0)
-        var attacks := BitboardState.KNIGHT_ATTACKS[sq]
+        var attacks := BitboardState.knight_attacks[sq]
         assert_eq(BitboardState._popcount(attacks), 2)
         assert_true((attacks & (1 << BitboardState.square(1, 2))) != 0)
         assert_true((attacks & (1 << BitboardState.square(2, 1))) != 0)
@@ -30,7 +30,7 @@ func _run_tests() -> void:
 
     _test("attack_tables_knight_e4", func() -> void:
         var sq := BitboardState.square(4, 3)
-        var attacks := BitboardState.KNIGHT_ATTACKS[sq]
+        var attacks := BitboardState.knight_attacks[sq]
         assert_eq(BitboardState._popcount(attacks), 8)
         var expected := [
             BitboardState.square(2, 2),
@@ -48,7 +48,7 @@ func _run_tests() -> void:
 
     _test("attack_tables_king_e1", func() -> void:
         var sq := BitboardState.square(4, 0)
-        var attacks := BitboardState.KING_ATTACKS[sq]
+        var attacks := BitboardState.king_attacks[sq]
         assert_eq(BitboardState._popcount(attacks), 5)
         assert_true((attacks & (1 << BitboardState.square(3, 0))) != 0)
         assert_true((attacks & (1 << BitboardState.square(5, 0))) != 0)
@@ -59,8 +59,8 @@ func _run_tests() -> void:
 
     _test("attack_tables_pawn_e4", func() -> void:
         var sq := BitboardState.square(4, 3)
-        var w_attacks := BitboardState.PAWN_ATTACKS_W[sq]
-        var b_attacks := BitboardState.PAWN_ATTACKS_B[sq]
+        var w_attacks := BitboardState.pawn_attacks_w[sq]
+        var b_attacks := BitboardState.pawn_attacks_b[sq]
         assert_true((w_attacks & (1 << BitboardState.square(3, 4))) != 0)
         assert_true((w_attacks & (1 << BitboardState.square(5, 4))) != 0)
         assert_true((b_attacks & (1 << BitboardState.square(3, 2))) != 0)
@@ -69,10 +69,10 @@ func _run_tests() -> void:
 
     _test("attack_tables_ray_d4", func() -> void:
         var sq := BitboardState.square(3, 3)
-        var ray_n := BitboardState.RAY_N[sq]
-        assert_eq(BitboardState._popcount(ray_n), 4)
-        assert_true((ray_n & (1 << BitboardState.square(3, 4))) != 0)
-        assert_true((ray_n & (1 << BitboardState.square(3, 7))) != 0)
+        var north_ray := BitboardState.ray_n[sq]
+        assert_eq(BitboardState._popcount(north_ray), 4)
+        assert_true((north_ray & (1 << BitboardState.square(3, 4))) != 0)
+        assert_true((north_ray & (1 << BitboardState.square(3, 7))) != 0)
     )
 
     _test("from_board_state_matches_legal_moves_multiple_positions", func() -> void:

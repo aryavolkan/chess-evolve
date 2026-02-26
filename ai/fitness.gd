@@ -3,6 +3,8 @@ extends RefCounted
 
 ## Evaluates fitness of a chess player based on game outcome and play quality.
 
+const EndgameHintsScript = preload("res://chess/endgame_hints.gd")
+
 # Weights for fitness components (mutable for curriculum)
 static var win_bonus: float = 10.0
 static var draw_bonus: float = 3.0
@@ -12,6 +14,7 @@ static var mobility_weight: float = 0.05
 static var king_safety_weight: float = 0.5
 static var move_count_bonus: float = 0.01  # Reward for surviving longer
 static var checkmate_bonus: float = 5.0
+static var endgame_weight: float = 1.0
 
 static func set_weights(weights: Dictionary) -> void:
     if weights.has("win_bonus"): win_bonus = weights["win_bonus"]
@@ -22,6 +25,7 @@ static func set_weights(weights: Dictionary) -> void:
     if weights.has("king_safety_weight"): king_safety_weight = weights["king_safety_weight"]
     if weights.has("move_count_bonus"): move_count_bonus = weights["move_count_bonus"]
     if weights.has("checkmate_bonus"): checkmate_bonus = weights["checkmate_bonus"]
+    if weights.has("endgame_weight"): endgame_weight = weights["endgame_weight"]
 
 
 static func evaluate(state, color: int, move_count: int) -> float:
@@ -53,10 +57,19 @@ static func evaluate(state, color: int, move_count: int) -> float:
     # King safety
     fitness += state.king_safety_score(color) * king_safety_weight
 
+    # Endgame hints
+    var endgame := EndgameHintsScript.evaluate_endgame(state)
+    if not endgame.is_empty():
+        var eg_bonus: float = endgame.get("eval_bonus", 0.0)
+        # eval_bonus is positive for white advantage, negative for black
+        if color == 1:
+            eg_bonus = -eg_bonus
+        fitness += eg_bonus * endgame_weight
+
     # Reward for longer games (encourages learning to play)
     fitness += move_count * move_count_bonus
 
-    return fitness
+    return maxf(fitness, 0.0)
 
 
 static func evaluate_from_metrics(

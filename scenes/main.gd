@@ -12,6 +12,7 @@ const NeatNetwork = preload("res://ai/neat_network.gd")
 const TrainingManager = preload("res://ai/training_manager.gd")
 const ChessEncoder = preload("res://chess/encoder.gd")
 const ReplayViewer = preload("res://ui/replay_viewer.gd")
+const HumanPlay = preload("res://ui/human_play.gd")
 
 const SHOWCASE_INTERVAL := 2.0  # Seconds between showcase game updates
 const UPDATE_INTERVAL := 0.3  # Seconds between move updates (slows down visualization)
@@ -32,6 +33,11 @@ func _ready() -> void:
     var replay_file := _check_replay_arg()
     if not replay_file.is_empty():
         _run_replay_mode(replay_file)
+        return
+
+    # Check for human play mode
+    if _check_human_play_arg():
+        _run_human_play_mode()
         return
 
     # Check for auto-train mode (headless training)
@@ -80,6 +86,12 @@ func _ready() -> void:
         # Update games_per_individual to match tournament_opponents when in tournament mode
         if training_manager.use_tournament:
             training_manager.games_per_individual = config["tournament_opponents"]
+
+    # Opening book config
+    if config.has("use_opening_book"):
+        training_manager.use_opening_book = config["use_opening_book"]
+    if config.has("opening_book_depth"):
+        training_manager.opening_book_depth = config["opening_book_depth"]
 
     # Dashboard on the right side
     dashboard = Dashboard.new()
@@ -394,6 +406,12 @@ func _run_auto_train() -> void:
         if training_manager.use_tournament:
             training_manager.games_per_individual = config["tournament_opponents"]
 
+    # Opening book config
+    if config.has("use_opening_book"):
+        training_manager.use_opening_book = config["use_opening_book"]
+    if config.has("opening_book_depth"):
+        training_manager.opening_book_depth = config["opening_book_depth"]
+
     var max_generations := int(config.get("max_generations", 100))
 
     if use_neat:
@@ -462,3 +480,47 @@ func _load_global_elite(worker_id: String, evo: ChessEvolution) -> void:
 
     var seeded := evo.seed_from_global_elite(elite_pool)
     print("GlobalElite: seeded %d genome(s) from %s" % [seeded, path])
+
+
+func _check_human_play_arg() -> bool:
+    var args := OS.get_cmdline_user_args()
+    return "--human-play" in args
+
+
+func _run_human_play_mode() -> void:
+    print("Starting human play mode...")
+    set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+    var config := _load_config()
+    var use_neat: bool = config.get("use_neat", false)
+    var evo
+    if use_neat:
+        var neat_config := NeatConfig.new()
+        neat_config.population_size = config.get("population_size", 30)
+        neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
+        neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
+        evo = ChessNeatEvolution.new(neat_config)
+    else:
+        evo = ChessEvolution.new(
+            config.get("population_size", 30),
+            config.get("input_size", 389),
+            config.get("hidden_size", 64),
+            config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE),
+            config.get("elite_count", 3)
+        )
+        _load_global_elite("", evo)
+
+    # Get the best available opponent network
+    var opponent_net = null
+    if not use_neat and evo.has_hall_of_fame(1):
+        opponent_net = evo.get_hall_of_fame_opponent(1)
+        print("Playing against Hall of Fame opponent")
+    else:
+        opponent_net = evo.get_network(1, 0)
+        print("Playing against random network (no trained models found)")
+
+    var human_viewer := HumanPlay.new()
+    add_child(human_viewer)
+    human_viewer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    human_viewer.setup_game(opponent_net, 0, false, 2)
+    human_viewer.game_finished.connect(func(_r): get_tree().quit())

@@ -10,11 +10,11 @@ func _run_tests() -> void:
 
 
 func _test(name: String, callable: Callable) -> void:
-    _runner._start_test(name)
+    _runner.start_test(name)
     _current_test_failed = false
     callable.call()
     if not _current_test_failed:
-        _runner._pass_test()
+        _runner.pass_test()
 
 
 func assert_true(condition: bool, message: String = "Expected true") -> void:
@@ -45,4 +45,4 @@ func assert_not_null(value, message: String = "Expected non-null") -> void:
 func _fail(message: String) -> void:
     if not _current_test_failed:
         _current_test_failed = true
-        _runner._fail_test(message)
+        _runner.fail_test(message)

@@ -44,6 +44,9 @@ func _run_all_tests() -> void:
         preload("res://test/test_integration.gd"),
         preload("res://test/test_rust_integration.gd"),
         preload("res://test/test_neat_chess.gd"),
+        preload("res://test/test_pgn.gd"),
+        preload("res://test/test_opening_book.gd"),
+        preload("res://test/test_endgame.gd"),
     ]
 
     for suite_script in test_suites:
@@ -53,15 +56,15 @@ func _run_all_tests() -> void:
         suite._run_tests()
 
 
-func _start_test(name: String) -> void:
+func start_test(name: String) -> void:
     _current_test = name
     _tests_run += 1
 
-func _pass_test() -> void:
+func pass_test() -> void:
     _tests_passed += 1
     print("  ✓ %s" % _current_test)
 
-func _fail_test(message: String) -> void:
+func fail_test(message: String) -> void:
     _tests_failed += 1
     var full := "%s: %s" % [_current_test, message]
     _failure_messages.append(full)

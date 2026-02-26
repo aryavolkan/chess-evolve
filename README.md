@@ -62,28 +62,42 @@ Two populations of neural networks — one playing white, one playing black — 
 chess-evolve/
 ├── ai/
 │   ├── neural_network.gd    # Feedforward network
-│   ├── evolution.gd          # Coevolutionary population manager
-│   ├── fitness.gd            # Multi-factor fitness evaluation
-│   └── training_manager.gd   # Orchestrates games and evolution
+│   ├── evolution.gd          # Coevolutionary population manager + Hall of Fame + Elo
+│   ├── fitness.gd            # Multi-factor fitness + endgame evaluation
+│   ├── minimax_player.gd     # Minimax search with NN evaluation
+│   ├── training_manager.gd   # Orchestrates games and evolution
+│   ├── neat_evolution.gd     # NEAT topology evolution manager
+│   ├── neat_genome.gd        # NEAT genome representation
+│   └── neat_network.gd       # NEAT network forward pass
 ├── chess/
 │   ├── constants.gd          # Piece types, values
 │   ├── board_state.gd        # Full chess logic (moves, check, castling, en passant)
-│   └── encoder.gd            # Board → NN input encoding, output → move decoding
+│   ├── encoder.gd            # Board → NN input encoding, output → move decoding
+│   ├── endgame_hints.gd      # Endgame pattern recognition and evaluation
+│   ├── opening_book.gd       # Embedded opening book (~30 openings)
+│   └── pgn.gd                # PGN export (Standard Algebraic Notation)
 ├── ui/
-│   ├── board_renderer.gd     # Visual chess board with Unicode pieces
+│   ├── board_renderer.gd     # Visual chess board with animation and click handling
+│   ├── human_play.gd         # Human vs AI game mode
+│   ├── replay_viewer.gd      # Game replay with PGN export
 │   └── training_dashboard.gd # Stats display and training controls
 ├── scenes/
 │   ├── main.gd               # Main scene controller
 │   └── main.tscn             # Entry scene
+├── scripts/
+│   └── wandb_bridge.py       # Stream metrics to Weights & Biases
 ├── test/
 │   ├── test_base.gd          # Test framework
 │   ├── test_runner.gd        # Headless test runner
-│   ├── test_board_state.gd   # Chess logic tests (14 tests)
-│   ├── test_encoder.gd       # Encoding tests (5 tests)
-│   ├── test_neural_network.gd # NN tests (8 tests)
-│   ├── test_evolution.gd     # Evolution tests (6 tests)
-│   ├── test_fitness.gd       # Fitness tests (4 tests)
-│   └── test_training.gd      # Integration tests (3 tests)
+│   ├── test_board_state.gd   # Chess logic tests
+│   ├── test_encoder.gd       # Encoding tests
+│   ├── test_neural_network.gd # NN tests
+│   ├── test_evolution.gd     # Evolution tests
+│   ├── test_fitness.gd       # Fitness tests
+│   ├── test_training.gd      # Integration tests
+│   ├── test_pgn.gd           # PGN export tests
+│   ├── test_opening_book.gd  # Opening book tests
+│   └── test_endgame.gd       # Endgame hints tests
 └── README.md
 ```
 
@@ -153,16 +167,26 @@ Full legal move generation including:
 - Check, checkmate, and stalemate detection
 - 50-move rule draw
 
-## Phase 2 Roadmap
+## Phase 2 Features
 
-- [ ] NEAT topology evolution (borrow from Evolve's `neat_evolution.gd`)
-- [ ] Hall of Fame — archive strong networks, test against them
-- [ ] Opening book integration
-- [ ] Endgame tablebase hints
-- [ ] W&B integration for Elo tracking
-- [ ] Human play mode (play against evolved networks)
-- [ ] Move animation on board viewer
-- [ ] PGN export of games
+All Phase 2 items are complete:
+
+- [x] **NEAT topology evolution** — `neat_evolution.gd`, `neat_genome.gd`, `neat_network.gd` enable evolving network topology alongside weights
+- [x] **Hall of Fame** — Top 20 networks per color archived with Elo ratings, used as training opponents with weighted selection
+- [x] **Opening book** — ~30 embedded openings (Italian, Sicilian, Caro-Kann, Queen's Gambit, etc.) for training diversity; configurable depth
+- [x] **Endgame hints** — Pattern recognition for K vs K, K+Q/R vs K, insufficient material; driving heuristic integrated into fitness
+- [x] **W&B Elo tracking** — Elo distribution metrics (min/p25/median/p75/max) per color streamed to Weights & Biases
+- [x] **Human play mode** — Play against evolved networks via `--human-play` CLI flag or dashboard button; supports minimax opponent
+- [x] **Move animation** — Tween-based piece animation with capture fade-out on board viewer and replay viewer
+- [x] **PGN export** — Full Standard Algebraic Notation with disambiguation, castling, check/checkmate; export button in replay viewer
+
+### Human Play Mode
+
+```bash
+godot --path . -- --human-play
+```
+
+Click a piece to see legal moves highlighted, then click a destination to move. The AI responds automatically.
 
 ## Relationship to Evolve
 

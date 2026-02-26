@@ -196,9 +196,9 @@ func _run_tests() -> void:
                     match t:
                         Piece.PAWN: b._add_pawn_moves(sq, moves_buf)
                         Piece.KNIGHT: b._add_knight_moves(sq, moves_buf)
-                        Piece.BISHOP: b._add_slider_moves(sq, moves_buf, BoardStateScript._DIAG_DIRS)
-                        Piece.ROOK: b._add_slider_moves(sq, moves_buf, BoardStateScript._STRAIGHT_DIRS)
-                        Piece.QUEEN: b._add_slider_moves(sq, moves_buf, BoardStateScript._ALL_DIRS)
+                        Piece.BISHOP: b._add_slider_moves(sq, moves_buf, BoardStateScript._diag_dirs)
+                        Piece.ROOK: b._add_slider_moves(sq, moves_buf, BoardStateScript._straight_dirs)
+                        Piece.QUEEN: b._add_slider_moves(sq, moves_buf, BoardStateScript._all_dirs)
                         Piece.KING: b._add_king_moves(sq, moves_buf)
             var per_total := Time.get_ticks_usec() - per_start
             var per_avg := float(per_total) / float(iterations)

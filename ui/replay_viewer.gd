@@ -7,10 +7,12 @@ extends Control
 signal replay_closed
 const BoardRenderer = preload("res://ui/board_renderer.gd")
 const GameRecorderScript = preload("res://ai/game_recorder.gd")
+const ChessPGNScript = preload("res://chess/pgn.gd")
 
 
 var _board_renderer: Control = null
 var _states: Array = []  # Array of BoardState from replay
+var _loaded_moves: PackedInt32Array = PackedInt32Array()  # Raw moves for PGN export
 var _metadata: Dictionary = {}
 var _current_index: int = 0
 var _playing := false
@@ -27,6 +29,7 @@ var _speed_label: Label
 var _speed_up_button: Button
 var _speed_down_button: Button
 var _close_button: Button
+var _pgn_button: Button
 
 
 func _ready() -> void:
@@ -45,6 +48,7 @@ func load_replay_file(path: String) -> bool:
 func load_replay_data(moves: PackedInt32Array, metadata: Dictionary = {}) -> bool:
     ## Load replay from move list and optional metadata.
     _metadata = metadata
+    _loaded_moves = moves
     _states = GameRecorderScript.replay_moves(moves)
     _current_index = 0
     _playing = false
@@ -127,6 +131,11 @@ func _build_ui() -> void:
     _speed_up_button.pressed.connect(_increase_speed)
     speed_row.add_child(_speed_up_button)
 
+    _pgn_button = Button.new()
+    _pgn_button.text = "Export PGN"
+    _pgn_button.pressed.connect(_export_pgn)
+    panel.add_child(_pgn_button)
+
     _close_button = Button.new()
     _close_button.text = "Close"
     _close_button.pressed.connect(func(): replay_closed.emit())
@@ -192,6 +201,31 @@ func _update_display() -> void:
 func _update_play_button() -> void:
     if _play_button:
         _play_button.text = "⏸" if _playing else "▶"
+
+
+func _export_pgn() -> void:
+    if _loaded_moves.is_empty():
+        return
+    var headers := {
+        "Event": "Chess-Evolve Training",
+        "White": "Network-W%d" % _metadata.get("white_id", 0),
+        "Black": "Network-B%d" % _metadata.get("black_id", 0),
+        "Date": Time.get_date_string_from_system(),
+    }
+    var result_code: int = _metadata.get("result", 0)
+    match result_code:
+        1: headers["Result"] = "1-0"
+        -1: headers["Result"] = "0-1"
+        2: headers["Result"] = "1/2-1/2"
+    var pgn := ChessPGNScript.game_to_pgn(_loaded_moves, headers)
+    GameRecorderScript._ensure_replay_dir()
+    var gen: int = _metadata.get("generation", 0)
+    var path := GameRecorderScript.REPLAY_DIR + "game_gen%d.pgn" % gen
+    var file := FileAccess.open(path, FileAccess.WRITE)
+    if file:
+        file.store_string(pgn)
+        file.close()
+        print("PGN exported to %s" % path)
 
 
 func _format_metadata() -> String:
