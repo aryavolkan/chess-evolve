@@ -100,6 +100,21 @@ CHESS_LOG_KEYS = [
     "black_material_avg",
     "generation_time_sec",
     "combined_best",
+    # Elo tracking
+    "white_hof_avg_elo",
+    "black_hof_avg_elo",
+    "white_hof_top_elo",
+    "black_hof_top_elo",
+    "white_elo_min",
+    "white_elo_p25",
+    "white_elo_median",
+    "white_elo_p75",
+    "white_elo_max",
+    "black_elo_min",
+    "black_elo_p25",
+    "black_elo_median",
+    "black_elo_p75",
+    "black_elo_max",
 ]
 
 
