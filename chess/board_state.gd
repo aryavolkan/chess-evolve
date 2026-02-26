@@ -5,7 +5,7 @@ extends RefCounted
 ## Board is an 8x8 array: positive = white, negative = black.
 ## Values correspond to ChessConstants.Piece enum.
 
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 # Precomputed tables — static so they're allocated once at class load, never per-call.
 static var _knight_offsets: Array[Vector2i] = [
@@ -37,31 +37,31 @@ var black_king_sq: int = -1
 var use_bitboard_movegen: bool = false
 var _legal_moves_cache: PackedInt32Array = PackedInt32Array()
 var legal_moves_dirty: bool = true
-var _encoder_cache: PackedFloat32Array = PackedFloat32Array()
+var encoder_cache: PackedFloat32Array = PackedFloat32Array()
 var encoder_dirty: bool = true
 
 
 func _init() -> void:
     board.resize(64)
     board.fill(0)
-    _mark_dirty()
+    mark_dirty()
 
 
 func setup_initial() -> void:
     ## Set up the standard starting position.
     board.fill(0)
     # White pieces (rank 1 = indices 0-7)
-    board[0] = Piece.ROOK; board[1] = Piece.KNIGHT; board[2] = Piece.BISHOP
-    board[3] = Piece.QUEEN; board[4] = Piece.KING
-    board[5] = Piece.BISHOP; board[6] = Piece.KNIGHT; board[7] = Piece.ROOK
+    board[0] = PIECE.ROOK; board[1] = PIECE.KNIGHT; board[2] = PIECE.BISHOP
+    board[3] = PIECE.QUEEN; board[4] = PIECE.KING
+    board[5] = PIECE.BISHOP; board[6] = PIECE.KNIGHT; board[7] = PIECE.ROOK
     for i in range(8, 16):
-        board[i] = Piece.PAWN
+        board[i] = PIECE.PAWN
     # Black pieces (rank 8 = indices 56-63)
-    board[56] = -Piece.ROOK; board[57] = -Piece.KNIGHT; board[58] = -Piece.BISHOP
-    board[59] = -Piece.QUEEN; board[60] = -Piece.KING
-    board[61] = -Piece.BISHOP; board[62] = -Piece.KNIGHT; board[63] = -Piece.ROOK
+    board[56] = -PIECE.ROOK; board[57] = -PIECE.KNIGHT; board[58] = -PIECE.BISHOP
+    board[59] = -PIECE.QUEEN; board[60] = -PIECE.KING
+    board[61] = -PIECE.BISHOP; board[62] = -PIECE.KNIGHT; board[63] = -PIECE.ROOK
     for i in range(48, 56):
-        board[i] = -Piece.PAWN
+        board[i] = -PIECE.PAWN
     side_to_move = 0
     castling_rights = 0b1111
     en_passant_square = -1
@@ -71,10 +71,10 @@ func setup_initial() -> void:
     result = 0
     white_king_sq = 4
     black_king_sq = 60
-    _mark_dirty()
+    mark_dirty()
 
 
-func _mark_dirty() -> void:
+func mark_dirty() -> void:
     legal_moves_dirty = true
     encoder_dirty = true
 
@@ -89,16 +89,16 @@ func get_position_key() -> String:
         + "|" + str(castling_rights) + "|" + str(en_passant_square)
 
 
-func _rebuild_piece_lists() -> void:
+func rebuild_piece_lists() -> void:
     white_king_sq = -1
     black_king_sq = -1
     for sq in range(64):
         var p := board[sq]
-        if p == Piece.KING:
+        if p == PIECE.KING:
             white_king_sq = sq
-        elif p == -Piece.KING:
+        elif p == -PIECE.KING:
             black_king_sq = sq
-    _mark_dirty()
+    mark_dirty()
 
 
 static func file_of(sq: int) -> int:
@@ -213,19 +213,19 @@ func _generate_pseudo_legal_moves() -> PackedInt32Array:
     var moves := PackedInt32Array()
     for sq in range(64):
         if (side_to_move == 0 and board[sq] > 0) or (side_to_move == 1 and board[sq] < 0):
-            _add_piece_moves(sq, moves)
+            add_piece_moves(sq, moves)
     return moves
 
 
-func _add_piece_moves(sq: int, moves: PackedInt32Array) -> void:
+func add_piece_moves(sq: int, moves: PackedInt32Array) -> void:
     var piece := abs_piece(sq)
     match piece:
-        Piece.PAWN: _add_pawn_moves(sq, moves)
-        Piece.KNIGHT: _add_knight_moves(sq, moves)
-        Piece.BISHOP: _add_slider_moves(sq, moves, _diag_dirs)
-        Piece.ROOK: _add_slider_moves(sq, moves, _straight_dirs)
-        Piece.QUEEN: _add_slider_moves(sq, moves, _all_dirs)
-        Piece.KING: _add_king_moves(sq, moves)
+        PIECE.PAWN: _add_pawn_moves(sq, moves)
+        PIECE.KNIGHT: _add_knight_moves(sq, moves)
+        PIECE.BISHOP: _add_slider_moves(sq, moves, _diag_dirs)
+        PIECE.ROOK: _add_slider_moves(sq, moves, _straight_dirs)
+        PIECE.QUEEN: _add_slider_moves(sq, moves, _all_dirs)
+        PIECE.KING: _add_king_moves(sq, moves)
 
 
 func _add_pawn_moves(sq: int, moves: PackedInt32Array) -> void:
@@ -308,7 +308,7 @@ func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
             castling_rights & 0b0001
             and board[5] == 0
             and board[6] == 0
-            and board[7] == Piece.ROOK
+            and board[7] == PIECE.ROOK
         ):
             if not _is_square_attacked(4, 1) and not _is_square_attacked(5, 1):
                 moves.append(encode_move(4, 6))
@@ -317,7 +317,7 @@ func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
             and board[3] == 0
             and board[2] == 0
             and board[1] == 0
-            and board[0] == Piece.ROOK
+            and board[0] == PIECE.ROOK
         ):
             if not _is_square_attacked(4, 1) and not _is_square_attacked(3, 1):
                 moves.append(encode_move(4, 2))
@@ -326,7 +326,7 @@ func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
             castling_rights & 0b0100
             and board[61] == 0
             and board[62] == 0
-            and board[63] == -Piece.ROOK
+            and board[63] == -PIECE.ROOK
         ):
             if not _is_square_attacked(60, 0) and not _is_square_attacked(61, 0):
                 moves.append(encode_move(60, 62))
@@ -335,7 +335,7 @@ func _add_king_moves(sq: int, moves: PackedInt32Array) -> void:
             and board[59] == 0
             and board[58] == 0
             and board[57] == 0
-            and board[56] == -Piece.ROOK
+            and board[56] == -PIECE.ROOK
         ):
             if not _is_square_attacked(60, 0) and not _is_square_attacked(59, 0):
                 moves.append(encode_move(60, 58))
@@ -353,7 +353,7 @@ func _is_legal(move: int, king_sq: int) -> bool:
     # Handle en passant capture.
     var ep_sq := -1
     var ep_captured := 0
-    if abs_p == Piece.PAWN and to == en_passant_square:
+    if abs_p == PIECE.PAWN and to == en_passant_square:
         ep_sq = to + (-8 if side_to_move == 0 else 8)
         ep_captured = board[ep_sq]
         board[ep_sq] = 0
@@ -362,7 +362,7 @@ func _is_legal(move: int, king_sq: int) -> bool:
     var rook_from := -1
     var rook_to_sq := -1
     var rook_piece := 0
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if to - from == 2:       # Kingside
             rook_from = to + 1; rook_to_sq = to - 1
         elif from - to == 2:     # Queenside
@@ -375,12 +375,12 @@ func _is_legal(move: int, king_sq: int) -> bool:
     # Apply piece move (with pawn promotion to queen for attack purposes).
     board[to] = piece
     board[from] = 0
-    if abs_p == Piece.PAWN:
+    if abs_p == PIECE.PAWN:
         if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
-            board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+            board[to] = PIECE.QUEEN if side_to_move == 0 else -PIECE.QUEEN
 
     # The king is on `to` if it just moved, otherwise it stays at king_sq.
-    var actual_king_sq := to if abs_p == Piece.KING else king_sq
+    var actual_king_sq := to if abs_p == PIECE.KING else king_sq
     var legal := actual_king_sq != -1 and not _is_square_attacked(actual_king_sq, 1 - side_to_move)
 
     # Undo all board changes.
@@ -410,7 +410,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
         var nf: int = f + off.x
         var nr: int = r + off.y
         if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-            if board[square(nf, nr)] == sign * Piece.KNIGHT: return true
+            if board[square(nf, nr)] == sign * PIECE.KNIGHT: return true
 
     # Pawn attacks
     var pawn_dir := -1 if by_color == 0 else 1  # Pawns attack from behind
@@ -418,7 +418,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
         var nf: int = f + df
         var nr: int = r + pawn_dir
         if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-            if board[square(nf, nr)] == sign * Piece.PAWN: return true
+            if board[square(nf, nr)] == sign * PIECE.PAWN: return true
 
     # King attacks
     for df in [-1, 0, 1]:
@@ -427,7 +427,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
             var nf: int = f + df
             var nr: int = r + dr
             if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
-                if board[square(nf, nr)] == sign * Piece.KING: return true
+                if board[square(nf, nr)] == sign * PIECE.KING: return true
 
     # Slider attacks (bishop/queen diagonals, rook/queen straights)
     for dir in _diag_dirs:
@@ -436,7 +436,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
         while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
             var p := board[square(nf, nr)]
             if p != 0:
-                if p == sign * Piece.BISHOP or p == sign * Piece.QUEEN: return true
+                if p == sign * PIECE.BISHOP or p == sign * PIECE.QUEEN: return true
                 break
             nf += dir.x; nr += dir.y
 
@@ -446,7 +446,7 @@ func _is_square_attacked(sq: int, by_color: int) -> bool:
         while nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
             var p := board[square(nf, nr)]
             if p != 0:
-                if p == sign * Piece.ROOK or p == sign * Piece.QUEEN: return true
+                if p == sign * PIECE.ROOK or p == sign * PIECE.QUEEN: return true
                 break
             nf += dir.x; nr += dir.y
 
@@ -470,30 +470,30 @@ func _apply_move_unchecked(move) -> void:
     var captured := board[to]
 
     # En passant capture
-    if abs_p == Piece.PAWN and to == en_passant_square:
+    if abs_p == PIECE.PAWN and to == en_passant_square:
         var ep_captured_sq := to + (-8 if side_to_move == 0 else 8)
         board[ep_captured_sq] = 0
 
     # Update halfmove clock
-    if abs_p == Piece.PAWN or captured != 0:
+    if abs_p == PIECE.PAWN or captured != 0:
         halfmove_clock = 0
     else:
         halfmove_clock += 1
 
     # En passant square
     en_passant_square = -1
-    if abs_p == Piece.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
+    if abs_p == PIECE.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
         en_passant_square = square(file_of(from), (rank_of(from) + rank_of(to)) / 2)
 
     # Castling: move rook
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if to - from == 2:  # Kingside
             board[to - 1] = board[to + 1]; board[to + 1] = 0
         elif from - to == 2:  # Queenside
             board[to + 1] = board[to - 2]; board[to - 2] = 0
 
     # Update castling rights
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if side_to_move == 0: castling_rights &= 0b1100
         else: castling_rights &= 0b0011
     if from == 0 or to == 0: castling_rights &= ~0b0010
@@ -506,18 +506,18 @@ func _apply_move_unchecked(move) -> void:
     board[from] = 0
 
     # Update king position cache
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if side_to_move == 0:
             white_king_sq = to
         else:
             black_king_sq = to
 
     # Pawn promotion (auto-queen)
-    if abs_p == Piece.PAWN:
+    if abs_p == PIECE.PAWN:
         if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
-            board[to] = Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN
+            board[to] = PIECE.QUEEN if side_to_move == 0 else -PIECE.QUEEN
 
-    _mark_dirty()
+    mark_dirty()
 
 
 func _check_game_over() -> void:
@@ -574,7 +574,7 @@ func king_safety_score(color: int) -> float:
             var nr: int = kr + dr
             if nf >= 0 and nf <= 7 and nr >= 0 and nr <= 7:
                 var p := board[square(nf, nr)]
-                if p == sign * Piece.PAWN:
+                if p == sign * PIECE.PAWN:
                     safety += 1.0
     return safety
 

@@ -9,6 +9,7 @@ disable:
   - no-elif-return            # stylistic preference
   - trailing-whitespace       # handled by editors; too noisy on existing code
   - unused-argument           # common pattern for virtual method overrides in GDScript
+  - private-access             # cross-class access is intentional (encoder, tests, network builder)
 
 # Naming conventions
 class-name: "([A-Z][a-z0-9]*)+"

@@ -8,7 +8,7 @@ const NeatEvolutionScript = preload("res://ai/neat_evolution.gd")
 const ChessNeatPlayerScript = preload("res://ai/chess_neat_player.gd")
 const ChessNeatEvolutionScript = preload("res://ai/chess_neat_evolution.gd")
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 
 func _run_tests() -> void:
@@ -83,13 +83,13 @@ func _run_tests() -> void:
 
         var state := BoardStateScript.new()
         state.board.fill(0)
-        state.board[0] = Piece.KING     # White king a1
-        state.board[16] = -Piece.ROOK   # Black rook a3
-        state.board[18] = -Piece.KING   # Black king c3
+        state.board[0] = PIECE.KING     # White king a1
+        state.board[16] = -PIECE.ROOK   # Black rook a3
+        state.board[18] = -PIECE.KING   # Black king c3
         state.side_to_move = 0
         state.castling_rights = 0
         state.en_passant_square = -1
-        state._rebuild_piece_lists()
+        state.rebuild_piece_lists()
 
         var legal_moves := state.generate_legal_moves()
         assert_eq(legal_moves.size(), 1, "Expected 1 legal move, got %d" % legal_moves.size())

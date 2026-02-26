@@ -1,7 +1,7 @@
 extends "res://test/test_base.gd"
 
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 
 func _run_tests() -> void:
@@ -112,14 +112,14 @@ func _run_tests() -> void:
         # For now just test that game_over works with no legal moves
         var b := BoardStateScript.new()
         b.board.fill(0)
-        b.board[0] = Piece.KING  # White king a1
-        b.board[58] = Piece.QUEEN  # White queen c8... actually let's do:
+        b.board[0] = PIECE.KING  # White king a1
+        b.board[58] = PIECE.QUEEN  # White queen c8... actually let's do:
         # Black king h8 (63), white king f6 (45), white queen g6 (46)
         b.board.fill(0)
-        b.board[63] = -Piece.KING  # Black king h8
-        b.board[45] = Piece.KING   # White king f6
-        b.board[46] = Piece.QUEEN  # White queen g6
-        b._rebuild_piece_lists()
+        b.board[63] = -PIECE.KING  # Black king h8
+        b.board[45] = PIECE.KING   # White king f6
+        b.board[46] = PIECE.QUEEN  # White queen g6
+        b.rebuild_piece_lists()
         b.side_to_move = 1  # Black to move
         var moves := b.generate_legal_moves()
         # Black king is on h8, queen on g6 controls g7,g8,h7. King on f6 controls g7,e7,f7
@@ -142,18 +142,18 @@ func _run_tests() -> void:
     _test("castling kingside white", func():
         var b := BoardStateScript.new()
         b.board.fill(0)
-        b.board[4] = Piece.KING
-        b.board[7] = Piece.ROOK
-        b.board[60] = -Piece.KING
-        b._rebuild_piece_lists()
+        b.board[4] = PIECE.KING
+        b.board[7] = PIECE.ROOK
+        b.board[60] = -PIECE.KING
+        b.rebuild_piece_lists()
         b.castling_rights = 0b0001  # White kingside only
         b.side_to_move = 0
         var moves := b.generate_legal_moves()
         var castle := BoardStateScript.encode_move(4, 6)
         assert_true(moves.has(castle), "Kingside castling should be legal")
         b.make_move(castle)
-        assert_eq(b.board[6], Piece.KING, "King should be on g1")
-        assert_eq(b.board[5], Piece.ROOK, "Rook should be on f1")
+        assert_eq(b.board[6], PIECE.KING, "King should be on g1")
+        assert_eq(b.board[5], PIECE.ROOK, "Rook should be on f1")
     )
 
     _test("profile generate_legal_moves", func():
@@ -164,16 +164,18 @@ func _run_tests() -> void:
         for i in iterations:
             b.generate_legal_moves()
         var total := Time.get_ticks_usec() - start
-        print("generate_legal_moves ", iterations, " ", total, " usec total, ", float(total) / float(iterations), " usec/call")
+        var avg := float(total) / float(iterations)
+        print("generate_legal_moves %d %d usec total, %s usec/call" % [
+            iterations, total, avg])
 
-        var types := [Piece.PAWN, Piece.KNIGHT, Piece.BISHOP, Piece.ROOK, Piece.QUEEN, Piece.KING]
+        var types := [PIECE.PAWN, PIECE.KNIGHT, PIECE.BISHOP, PIECE.ROOK, PIECE.QUEEN, PIECE.KING]
         var type_names := {
-            Piece.PAWN: "pawn",
-            Piece.KNIGHT: "knight",
-            Piece.BISHOP: "bishop",
-            Piece.ROOK: "rook",
-            Piece.QUEEN: "queen",
-            Piece.KING: "king"
+            PIECE.PAWN: "pawn",
+            PIECE.KNIGHT: "knight",
+            PIECE.BISHOP: "bishop",
+            PIECE.ROOK: "rook",
+            PIECE.QUEEN: "queen",
+            PIECE.KING: "king"
         }
         var squares_by_type := {}
         for t in types:
@@ -193,16 +195,11 @@ func _run_tests() -> void:
             for i in iterations:
                 moves_buf.clear()
                 for sq in squares_by_type[t]:
-                    match t:
-                        Piece.PAWN: b._add_pawn_moves(sq, moves_buf)
-                        Piece.KNIGHT: b._add_knight_moves(sq, moves_buf)
-                        Piece.BISHOP: b._add_slider_moves(sq, moves_buf, BoardStateScript._diag_dirs)
-                        Piece.ROOK: b._add_slider_moves(sq, moves_buf, BoardStateScript._straight_dirs)
-                        Piece.QUEEN: b._add_slider_moves(sq, moves_buf, BoardStateScript._all_dirs)
-                        Piece.KING: b._add_king_moves(sq, moves_buf)
+                    b.add_piece_moves(sq, moves_buf)
             var per_total := Time.get_ticks_usec() - per_start
             var per_avg := float(per_total) / float(iterations)
-            print("piece moves ", type_names[t], " ", per_total, " usec total, ", per_avg, " usec/call")
+            print("piece moves %s %d usec total, %s usec/call" % [
+                type_names[t], per_total, per_avg])
             if per_avg > slowest_time:
                 slowest_time = per_avg
                 slowest_name = type_names[t]

@@ -156,7 +156,7 @@ func _init(
     # If using tournament mode, games_per_individual is ignored in favor of tournament_opponents
 
 
-func _generate_round_robin_pairings(population_size: int) -> Dictionary:
+func generate_round_robin_pairings(population_size: int) -> Dictionary:
     ## Generate round-robin pairings where each individual plays against opponents
     ## from different fitness quintiles to ensure diverse matchups.
     var pairings := {}
@@ -219,7 +219,7 @@ func _generate_round_robin_pairings(population_size: int) -> Dictionary:
     return pairings
 
 
-func _generate_swiss_pairings(population_size: int, round_num: int) -> Dictionary:
+func generate_swiss_pairings(population_size: int, round_num: int) -> Dictionary:
     ## Generate Swiss-system pairings based on current tournament standings.
     ## In round 1, pair randomly. In subsequent rounds, pair by score.
     var pairings := {}
@@ -241,7 +241,7 @@ func _generate_swiss_pairings(population_size: int, round_num: int) -> Dictionar
             pairings[indices[i + 1]].append(indices[i])
     else:
         # Subsequent rounds: pair by score
-        var scores := _calculate_tournament_scores()
+        var scores := calculate_tournament_scores()
         var sorted_indices := []
         for i in population_size:
             sorted_indices.append(i)
@@ -269,7 +269,7 @@ func _generate_swiss_pairings(population_size: int, round_num: int) -> Dictionar
     return pairings
 
 
-func _calculate_tournament_scores() -> Dictionary:
+func calculate_tournament_scores() -> Dictionary:
     ## Calculate tournament scores from results (1 point for win, 0.5 for draw, 0 for loss).
     var scores := {}
 
@@ -291,7 +291,7 @@ func _calculate_tournament_scores() -> Dictionary:
     return scores
 
 
-func _update_fitness_from_tournament() -> void:
+func update_fitness_from_tournament() -> void:
     ## Update fitness based on tournament results instead of accumulated game fitness.
     var white_scores := {}
     var black_scores := {}
@@ -371,7 +371,7 @@ func run_generation() -> void:
             # Run multiple Swiss rounds
             var swiss_rounds := mini(tournament_opponents, evolution.population_size - 1)
             for round_idx in swiss_rounds:
-                var round_pairings := _generate_swiss_pairings(evolution.population_size, round_idx)
+                var round_pairings := generate_swiss_pairings(evolution.population_size, round_idx)
                 # Play all games in this round
                 for w_idx in round_pairings:
                     for b_idx in round_pairings[w_idx]:
@@ -384,7 +384,7 @@ func run_generation() -> void:
                             total_games_played += 1
         else:
             # Round-robin tournament
-            _tournament_pairings = _generate_round_robin_pairings(evolution.population_size)
+            _tournament_pairings = generate_round_robin_pairings(evolution.population_size)
             print("Generated %d tournament pairings" % _tournament_pairings.size())
             # Play all tournament games
             for w_idx in _tournament_pairings:
@@ -395,7 +395,7 @@ func run_generation() -> void:
                     total_games_played += 1
 
         # Update fitness based on tournament results
-        _update_fitness_from_tournament()
+        update_fitness_from_tournament()
     else:
         # Original random opponent selection
         var games_this_gen := _run_all_games()
@@ -471,7 +471,7 @@ func run_one_game_step() -> bool:
             tournament_results.clear()
             _tournament_pairings.clear()
             if tournament_mode == "round_robin":
-                _tournament_pairings = _generate_round_robin_pairings(evolution.population_size)
+                _tournament_pairings = generate_round_robin_pairings(evolution.population_size)
 
     if use_tournament:
         # Tournament mode: play pre-determined pairings
@@ -505,7 +505,7 @@ func run_one_game_step() -> bool:
             _current_game_idx += 1
         else:
             # All games played, update fitness and evolve
-            _update_fitness_from_tournament()
+            update_fitness_from_tournament()
             evolution.evolve()
             var stats := get_stats()
             metrics_logger.write_metrics(stats)
@@ -607,7 +607,9 @@ func _select_black_opponent(white_idx: int) -> Dictionary:
             var target := 0.0
             if evolution.white_fitness.size() == evolution.population_size:
                 target = evolution.white_fitness[white_idx]
-            b_idx = _weighted_sample_index(evolution.black_fitness, target, opponent_sampling_temperature)
+            b_idx = _weighted_sample_index(
+                evolution.black_fitness, target,
+                opponent_sampling_temperature)
         else:
             b_idx = randi() % int(evolution.population_size)
 
@@ -1004,10 +1006,14 @@ func _update_map_elites_archive() -> void:
     var white_behavior := Vector2(0.5, 50.0)  # Default: moderate aggression, average game length
     var white_fitness: float = evolution.get_fitness(0, white_best_idx)
     if white_fitness > 0:
-        map_elites_archive.add(evolution.get_network(0, white_best_idx), white_behavior, white_fitness)
+        map_elites_archive.add(
+            evolution.get_network(0, white_best_idx),
+            white_behavior, white_fitness)
 
     # Black
     var black_behavior := Vector2(0.5, 50.0)
     var black_fitness: float = evolution.get_fitness(1, black_best_idx)
     if black_fitness > 0:
-        map_elites_archive.add(evolution.get_network(1, black_best_idx), black_behavior, black_fitness)
+        map_elites_archive.add(
+            evolution.get_network(1, black_best_idx),
+            black_behavior, black_fitness)

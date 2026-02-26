@@ -16,7 +16,7 @@ func test_round_robin_pairings() -> void:
     manager.tournament_opponents = 4
 
     # Generate pairings
-    var pairings = manager._generate_round_robin_pairings(10)
+    var pairings = manager.generate_round_robin_pairings(10)
 
     # Verify structure
     assert_equal(pairings.size(), 10, "Should have pairings for all individuals")
@@ -55,7 +55,7 @@ func test_tournament_scoring() -> void:
     }
 
     # Calculate scores
-    var scores = manager._calculate_tournament_scores()
+    var scores = manager.calculate_tournament_scores()
 
     # Verify scores (wins = 1.0, draws = 0.5, losses = 0.0)
     assert_almost_equal(scores[0], 1.0, 0.01, "Player 0 should have 1.0 points (1 win)")
@@ -73,7 +73,7 @@ func test_swiss_pairings_round1() -> void:
     manager.tournament_mode = "swiss"
 
     # Generate first round pairings
-    var pairings = manager._generate_swiss_pairings(8, 0)
+    var pairings = manager.generate_swiss_pairings(8, 0)
 
     # Verify everyone is paired exactly once
     var paired_count = {}
@@ -108,7 +108,7 @@ func test_fitness_update_from_tournament() -> void:
     }
 
     # Update fitness from tournament
-    manager._update_fitness_from_tournament()
+    manager.update_fitness_from_tournament()
 
     # Verify fitness = tournament_score + 10% of accumulated fitness
     assert_almost_equal(evo.white_fitness[0], 1.0 + 0.5, 0.01, "Player 0: 1.0 + 10% of 5.0")

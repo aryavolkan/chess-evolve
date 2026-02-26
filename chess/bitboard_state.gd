@@ -1,7 +1,7 @@
 class_name BitboardState
 extends RefCounted
 
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 const MOVE_FLAG_PROMOTE := 1 << 12
 const MOVE_FLAG_EN_PASSANT := 1 << 13
@@ -265,7 +265,9 @@ func _add_slider_moves(
             moves.append(encode_move(sq, to_sq))
 
 
-func _add_king_moves(king: int, friendly_occ: int, _enemy_occ: int, occupancy: int, moves: PackedInt32Array) -> void:
+func _add_king_moves(
+    king: int, friendly_occ: int, _enemy_occ: int,
+    occupancy: int, moves: PackedInt32Array) -> void:
     if king == 0:
         return
     var sq := _bit_scan_forward(king)
@@ -339,24 +341,24 @@ func apply_move_in_place(move: int) -> void:
     var captured := _piece_at(to)
 
     # En passant capture
-    if abs_p == Piece.PAWN and (flags & MOVE_FLAG_EN_PASSANT) != 0:
+    if abs_p == PIECE.PAWN and (flags & MOVE_FLAG_EN_PASSANT) != 0:
         var ep_sq := to + (-8 if side_to_move == 0 else 8)
         captured = _piece_at(ep_sq)
         _remove_piece_at(ep_sq, captured)
 
     # Update halfmove clock
-    if abs_p == Piece.PAWN or captured != 0:
+    if abs_p == PIECE.PAWN or captured != 0:
         halfmove_clock = 0
     else:
         halfmove_clock += 1
 
     # En passant square
     en_passant_square = -1
-    if abs_p == Piece.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
+    if abs_p == PIECE.PAWN and absi(rank_of(to) - rank_of(from)) == 2:
         en_passant_square = square(file_of(from), (rank_of(from) + rank_of(to)) / 2)
 
     # Castling: move rook
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if to - from == 2:  # Kingside
             var rook_from := to + 1
             var rook_to := to - 1
@@ -371,7 +373,7 @@ func apply_move_in_place(move: int) -> void:
             set_piece_at(rook_to_q, rook_piece_q)
 
     # Update castling rights
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if side_to_move == 0: castling_rights &= 0b1100
         else: castling_rights &= 0b0011
     if from == 0 or to == 0: castling_rights &= ~0b0010
@@ -386,17 +388,17 @@ func apply_move_in_place(move: int) -> void:
     set_piece_at(to, piece)
 
     # Update king cache
-    if abs_p == Piece.KING:
+    if abs_p == PIECE.KING:
         if side_to_move == 0:
             white_king_sq = to
         else:
             black_king_sq = to
 
     # Pawn promotion (auto-queen)
-    if abs_p == Piece.PAWN:
+    if abs_p == PIECE.PAWN:
         if (side_to_move == 0 and rank_of(to) == 7) or (side_to_move == 1 and rank_of(to) == 0):
             _remove_piece_at(to, piece)
-            set_piece_at(to, Piece.QUEEN if side_to_move == 0 else -Piece.QUEEN)
+            set_piece_at(to, PIECE.QUEEN if side_to_move == 0 else -PIECE.QUEEN)
 
     # Switch side
     side_to_move = 1 - side_to_move
@@ -462,39 +464,39 @@ func _black_occ() -> int:
 func _piece_at(sq: int) -> int:
     var mask := 1 << sq
     var piece := 0
-    if bb_w_pawns & mask: piece = Piece.PAWN
-    elif bb_w_knights & mask: piece = Piece.KNIGHT
-    elif bb_w_bishops & mask: piece = Piece.BISHOP
-    elif bb_w_rooks & mask: piece = Piece.ROOK
-    elif bb_w_queens & mask: piece = Piece.QUEEN
-    elif bb_w_king & mask: piece = Piece.KING
-    elif bb_b_pawns & mask: piece = -Piece.PAWN
-    elif bb_b_knights & mask: piece = -Piece.KNIGHT
-    elif bb_b_bishops & mask: piece = -Piece.BISHOP
-    elif bb_b_rooks & mask: piece = -Piece.ROOK
-    elif bb_b_queens & mask: piece = -Piece.QUEEN
-    elif bb_b_king & mask: piece = -Piece.KING
+    if bb_w_pawns & mask: piece = PIECE.PAWN
+    elif bb_w_knights & mask: piece = PIECE.KNIGHT
+    elif bb_w_bishops & mask: piece = PIECE.BISHOP
+    elif bb_w_rooks & mask: piece = PIECE.ROOK
+    elif bb_w_queens & mask: piece = PIECE.QUEEN
+    elif bb_w_king & mask: piece = PIECE.KING
+    elif bb_b_pawns & mask: piece = -PIECE.PAWN
+    elif bb_b_knights & mask: piece = -PIECE.KNIGHT
+    elif bb_b_bishops & mask: piece = -PIECE.BISHOP
+    elif bb_b_rooks & mask: piece = -PIECE.ROOK
+    elif bb_b_queens & mask: piece = -PIECE.QUEEN
+    elif bb_b_king & mask: piece = -PIECE.KING
     return piece
 
 
 func set_piece_at(sq: int, piece: int) -> void:
     var mask := 1 << sq
     match piece:
-        Piece.PAWN: bb_w_pawns |= mask
-        Piece.KNIGHT: bb_w_knights |= mask
-        Piece.BISHOP: bb_w_bishops |= mask
-        Piece.ROOK: bb_w_rooks |= mask
-        Piece.QUEEN: bb_w_queens |= mask
-        Piece.KING:
+        PIECE.PAWN: bb_w_pawns |= mask
+        PIECE.KNIGHT: bb_w_knights |= mask
+        PIECE.BISHOP: bb_w_bishops |= mask
+        PIECE.ROOK: bb_w_rooks |= mask
+        PIECE.QUEEN: bb_w_queens |= mask
+        PIECE.KING:
             bb_w_king |= mask
             white_king_sq = sq
 
-        -Piece.PAWN: bb_b_pawns |= mask
-        -Piece.KNIGHT: bb_b_knights |= mask
-        -Piece.BISHOP: bb_b_bishops |= mask
-        -Piece.ROOK: bb_b_rooks |= mask
-        -Piece.QUEEN: bb_b_queens |= mask
-        -Piece.KING:
+        -PIECE.PAWN: bb_b_pawns |= mask
+        -PIECE.KNIGHT: bb_b_knights |= mask
+        -PIECE.BISHOP: bb_b_bishops |= mask
+        -PIECE.ROOK: bb_b_rooks |= mask
+        -PIECE.QUEEN: bb_b_queens |= mask
+        -PIECE.KING:
             bb_b_king |= mask
             black_king_sq = sq
 
@@ -504,18 +506,18 @@ func _remove_piece_at(sq: int, piece: int) -> void:
         return
     var mask := ~(1 << sq)
     match piece:
-        Piece.PAWN: bb_w_pawns &= mask
-        Piece.KNIGHT: bb_w_knights &= mask
-        Piece.BISHOP: bb_w_bishops &= mask
-        Piece.ROOK: bb_w_rooks &= mask
-        Piece.QUEEN: bb_w_queens &= mask
-        Piece.KING: bb_w_king &= mask
-        -Piece.PAWN: bb_b_pawns &= mask
-        -Piece.KNIGHT: bb_b_knights &= mask
-        -Piece.BISHOP: bb_b_bishops &= mask
-        -Piece.ROOK: bb_b_rooks &= mask
-        -Piece.QUEEN: bb_b_queens &= mask
-        -Piece.KING: bb_b_king &= mask
+        PIECE.PAWN: bb_w_pawns &= mask
+        PIECE.KNIGHT: bb_w_knights &= mask
+        PIECE.BISHOP: bb_w_bishops &= mask
+        PIECE.ROOK: bb_w_rooks &= mask
+        PIECE.QUEEN: bb_w_queens &= mask
+        PIECE.KING: bb_w_king &= mask
+        -PIECE.PAWN: bb_b_pawns &= mask
+        -PIECE.KNIGHT: bb_b_knights &= mask
+        -PIECE.BISHOP: bb_b_bishops &= mask
+        -PIECE.ROOK: bb_b_rooks &= mask
+        -PIECE.QUEEN: bb_b_queens &= mask
+        -PIECE.KING: bb_b_king &= mask
 
 
 func find_king(color: int) -> int:
@@ -552,7 +554,7 @@ static func _bit_scan_reverse(bb: int) -> int:
     return n
 
 
-static func _popcount(bb: int) -> int:
+static func popcount(bb: int) -> int:
     ## Kernighan's algorithm: O(k) where k = number of set bits.
     var count := 0
     while bb != 0:

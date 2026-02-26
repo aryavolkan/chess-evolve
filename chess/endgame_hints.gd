@@ -5,7 +5,7 @@ extends RefCounted
 ## Only activates when total non-king pieces <= 6.
 ## Provides bonuses to guide the AI in known endgame patterns.
 
-const Piece = ChessConstants.Piece
+const PIECE = ChessConstants.Piece
 
 
 ## Returns {type: String, advantage: int (0=white, 1=black, -1=none), eval_bonus: float}
@@ -55,18 +55,18 @@ static func _evaluate_lone_king(state, pieces_list: Array, color: int) -> Dictio
 	# Check for known draws first
 	if pieces_list.size() == 1:
 		var p: int = pieces_list[0]
-		if p == Piece.BISHOP or p == Piece.KNIGHT:
+		if p == PIECE.BISHOP or p == PIECE.KNIGHT:
 			return {type = "known_draw", advantage = -1, eval_bonus = 0.0}
 
 	# K+Q vs K
-	if pieces_list.size() == 1 and pieces_list[0] == Piece.QUEEN:
+	if pieces_list.size() == 1 and pieces_list[0] == PIECE.QUEEN:
 		var corner_dist := king_corner_distance(losing_king_sq)
 		var king_prox := 7.0 - float(square_distance(winning_king_sq, losing_king_sq))
 		var bonus := (7.0 - corner_dist) * 1.0 + king_prox * 0.5 + 5.0
 		return {type = "KQ_vs_K", advantage = color, eval_bonus = bonus}
 
 	# K+R vs K
-	if pieces_list.size() == 1 and pieces_list[0] == Piece.ROOK:
+	if pieces_list.size() == 1 and pieces_list[0] == PIECE.ROOK:
 		var corner_dist := king_corner_distance(losing_king_sq)
 		var king_prox := 7.0 - float(square_distance(winning_king_sq, losing_king_sq))
 		var bonus := (7.0 - corner_dist) * 1.0 + king_prox * 0.5 + 5.0
@@ -76,19 +76,19 @@ static func _evaluate_lone_king(state, pieces_list: Array, color: int) -> Dictio
 	if pieces_list.size() == 2:
 		var sorted := pieces_list.duplicate()
 		sorted.sort()
-		if sorted[0] == Piece.KNIGHT and sorted[1] == Piece.BISHOP:
+		if sorted[0] == PIECE.KNIGHT and sorted[1] == PIECE.BISHOP:
 			var corner_dist := king_corner_distance(losing_king_sq)
 			var king_prox := 7.0 - float(square_distance(winning_king_sq, losing_king_sq))
 			var bonus := (7.0 - corner_dist) * 0.5 + king_prox * 0.25 + 2.0
 			return {type = "KBN_vs_K", advantage = color, eval_bonus = bonus}
 
 	# K+P vs K
-	if pieces_list.size() == 1 and pieces_list[0] == Piece.PAWN:
+	if pieces_list.size() == 1 and pieces_list[0] == PIECE.PAWN:
 		# Find the pawn square
 		var pawn_sq := -1
 		var sign := 1 if color == 0 else -1
 		for sq in range(64):
-			if state.board[sq] == sign * Piece.PAWN:
+			if state.board[sq] == sign * PIECE.PAWN:
 				pawn_sq = sq
 				break
 		var pawn_rank: int = pawn_sq / 8
@@ -115,9 +115,9 @@ static func count_pieces(state) -> Dictionary:
 	var black: Array[int] = []
 	for sq in range(64):
 		var p: int = state.board[sq]
-		if p > 0 and p != Piece.KING:
+		if p > 0 and p != PIECE.KING:
 			white.append(p)
-		elif p < 0 and absi(p) != Piece.KING:
+		elif p < 0 and absi(p) != PIECE.KING:
 			black.append(absi(p))
 	return {white = white, black = black, white_total = white.size(), black_total = black.size()}
 
@@ -136,11 +136,11 @@ static func is_known_draw(state) -> bool:
 	# K+B vs K or K+N vs K (either side)
 	if pieces.white.is_empty() and pieces.black.size() == 1:
 		var p: int = pieces.black[0]
-		if p == Piece.BISHOP or p == Piece.KNIGHT:
+		if p == PIECE.BISHOP or p == PIECE.KNIGHT:
 			return true
 	if pieces.black.is_empty() and pieces.white.size() == 1:
 		var p: int = pieces.white[0]
-		if p == Piece.BISHOP or p == Piece.KNIGHT:
+		if p == PIECE.BISHOP or p == PIECE.KNIGHT:
 			return true
 
 	return false

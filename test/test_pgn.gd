@@ -2,7 +2,7 @@ extends "res://test/test_base.gd"
 
 const ChessPGNScript = preload("res://chess/pgn.gd")
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 
 func _run_tests() -> void:
@@ -50,14 +50,14 @@ func _run_tests() -> void:
 		# Set up a position where white can castle kingside
 		var state := BoardStateScript.new()
 		state.board.fill(0)
-		state.board[4] = Piece.KING    # White king on e1
-		state.board[7] = Piece.ROOK    # White rook on h1
-		state.board[60] = -Piece.KING  # Black king on e8
+		state.board[4] = PIECE.KING    # White king on e1
+		state.board[7] = PIECE.ROOK    # White rook on h1
+		state.board[60] = -PIECE.KING  # Black king on e8
 		state.white_king_sq = 4
 		state.black_king_sq = 60
 		state.side_to_move = 0
 		state.castling_rights = 0b0001  # White kingside only
-		state._mark_dirty()
+		state.mark_dirty()
 		# O-O = king e1->g1 = encode(4, 6)
 		var move := BoardStateScript.encode_move(4, 6)
 		var san := ChessPGNScript.move_to_san(state, move)
@@ -67,14 +67,14 @@ func _run_tests() -> void:
 	_test("queenside castling to SAN", func():
 		var state := BoardStateScript.new()
 		state.board.fill(0)
-		state.board[4] = Piece.KING    # White king on e1
-		state.board[0] = Piece.ROOK    # White rook on a1
-		state.board[60] = -Piece.KING  # Black king on e8
+		state.board[4] = PIECE.KING    # White king on e1
+		state.board[0] = PIECE.ROOK    # White rook on a1
+		state.board[60] = -PIECE.KING  # Black king on e8
 		state.white_king_sq = 4
 		state.black_king_sq = 60
 		state.side_to_move = 0
 		state.castling_rights = 0b0010  # White queenside only
-		state._mark_dirty()
+		state.mark_dirty()
 		# O-O-O = king e1->c1 = encode(4, 2)
 		var move := BoardStateScript.encode_move(4, 2)
 		var san := ChessPGNScript.move_to_san(state, move)
@@ -85,13 +85,13 @@ func _run_tests() -> void:
 		# Set up: white queen can give check
 		var state := BoardStateScript.new()
 		state.board.fill(0)
-		state.board[4] = Piece.KING    # White king on e1
-		state.board[27] = Piece.QUEEN  # White queen on d4
-		state.board[60] = -Piece.KING  # Black king on e8
+		state.board[4] = PIECE.KING    # White king on e1
+		state.board[27] = PIECE.QUEEN  # White queen on d4
+		state.board[60] = -PIECE.KING  # Black king on e8
 		state.white_king_sq = 4
 		state.black_king_sq = 60
 		state.side_to_move = 0
-		state._mark_dirty()
+		state.mark_dirty()
 		# Qd4-d8 gives check: encode(27, 59)
 		# d8=59. Is d4-d8 legal? Queen moves straight up file d.
 		# d4=27 (rank 3, file 3), d8=59 (rank 7, file 3). Yes, straight line.
@@ -132,13 +132,13 @@ func _run_tests() -> void:
 		# White pawn on e7 (sq 52), empty e8 (sq 60)
 		var state := BoardStateScript.new()
 		state.board.fill(0)
-		state.board[4] = Piece.KING     # White king on e1
-		state.board[52] = Piece.PAWN    # White pawn on e7
-		state.board[56] = -Piece.KING   # Black king on a8
+		state.board[4] = PIECE.KING     # White king on e1
+		state.board[52] = PIECE.PAWN    # White pawn on e7
+		state.board[56] = -PIECE.KING   # Black king on a8
 		state.white_king_sq = 4
 		state.black_king_sq = 56
 		state.side_to_move = 0
-		state._mark_dirty()
+		state.mark_dirty()
 		# e7-e8=Q = encode(52, 60)
 		var move := BoardStateScript.encode_move(52, 60)
 		var san := ChessPGNScript.move_to_san(state, move)
@@ -147,10 +147,10 @@ func _run_tests() -> void:
 	)
 
 	_test("piece_letter returns correct letters", func():
-		assert_eq(ChessPGNScript.piece_letter(Piece.PAWN), "")
-		assert_eq(ChessPGNScript.piece_letter(Piece.KNIGHT), "N")
-		assert_eq(ChessPGNScript.piece_letter(Piece.BISHOP), "B")
-		assert_eq(ChessPGNScript.piece_letter(Piece.ROOK), "R")
-		assert_eq(ChessPGNScript.piece_letter(Piece.QUEEN), "Q")
-		assert_eq(ChessPGNScript.piece_letter(Piece.KING), "K")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.PAWN), "")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.KNIGHT), "N")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.BISHOP), "B")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.ROOK), "R")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.QUEEN), "Q")
+		assert_eq(ChessPGNScript.piece_letter(PIECE.KING), "K")
 	)

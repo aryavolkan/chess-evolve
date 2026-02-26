@@ -6,24 +6,24 @@ func _run_tests() -> void:
         var bs := BoardState.new()
         bs.setup_initial()
         var bb := BitboardState.from_board_state(bs)
-        assert_eq(BitboardState._popcount(bb.bb_w_pawns), 8)
-        assert_eq(BitboardState._popcount(bb.bb_w_knights), 2)
-        assert_eq(BitboardState._popcount(bb.bb_w_bishops), 2)
-        assert_eq(BitboardState._popcount(bb.bb_w_rooks), 2)
-        assert_eq(BitboardState._popcount(bb.bb_w_queens), 1)
-        assert_eq(BitboardState._popcount(bb.bb_w_king), 1)
-        assert_eq(BitboardState._popcount(bb.bb_b_pawns), 8)
-        assert_eq(BitboardState._popcount(bb.bb_b_knights), 2)
-        assert_eq(BitboardState._popcount(bb.bb_b_bishops), 2)
-        assert_eq(BitboardState._popcount(bb.bb_b_rooks), 2)
-        assert_eq(BitboardState._popcount(bb.bb_b_queens), 1)
-        assert_eq(BitboardState._popcount(bb.bb_b_king), 1)
+        assert_eq(BitboardState.popcount(bb.bb_w_pawns), 8)
+        assert_eq(BitboardState.popcount(bb.bb_w_knights), 2)
+        assert_eq(BitboardState.popcount(bb.bb_w_bishops), 2)
+        assert_eq(BitboardState.popcount(bb.bb_w_rooks), 2)
+        assert_eq(BitboardState.popcount(bb.bb_w_queens), 1)
+        assert_eq(BitboardState.popcount(bb.bb_w_king), 1)
+        assert_eq(BitboardState.popcount(bb.bb_b_pawns), 8)
+        assert_eq(BitboardState.popcount(bb.bb_b_knights), 2)
+        assert_eq(BitboardState.popcount(bb.bb_b_bishops), 2)
+        assert_eq(BitboardState.popcount(bb.bb_b_rooks), 2)
+        assert_eq(BitboardState.popcount(bb.bb_b_queens), 1)
+        assert_eq(BitboardState.popcount(bb.bb_b_king), 1)
     )
 
     _test("attack_tables_knight_a1", func() -> void:
         var sq := BitboardState.square(0, 0)
         var attacks := BitboardState.knight_attacks[sq]
-        assert_eq(BitboardState._popcount(attacks), 2)
+        assert_eq(BitboardState.popcount(attacks), 2)
         assert_true((attacks & (1 << BitboardState.square(1, 2))) != 0)
         assert_true((attacks & (1 << BitboardState.square(2, 1))) != 0)
     )
@@ -31,7 +31,7 @@ func _run_tests() -> void:
     _test("attack_tables_knight_e4", func() -> void:
         var sq := BitboardState.square(4, 3)
         var attacks := BitboardState.knight_attacks[sq]
-        assert_eq(BitboardState._popcount(attacks), 8)
+        assert_eq(BitboardState.popcount(attacks), 8)
         var expected := [
             BitboardState.square(2, 2),
             BitboardState.square(2, 4),
@@ -49,7 +49,7 @@ func _run_tests() -> void:
     _test("attack_tables_king_e1", func() -> void:
         var sq := BitboardState.square(4, 0)
         var attacks := BitboardState.king_attacks[sq]
-        assert_eq(BitboardState._popcount(attacks), 5)
+        assert_eq(BitboardState.popcount(attacks), 5)
         assert_true((attacks & (1 << BitboardState.square(3, 0))) != 0)
         assert_true((attacks & (1 << BitboardState.square(5, 0))) != 0)
         assert_true((attacks & (1 << BitboardState.square(3, 1))) != 0)
@@ -70,7 +70,7 @@ func _run_tests() -> void:
     _test("attack_tables_ray_d4", func() -> void:
         var sq := BitboardState.square(3, 3)
         var north_ray := BitboardState.ray_n[sq]
-        assert_eq(BitboardState._popcount(north_ray), 4)
+        assert_eq(BitboardState.popcount(north_ray), 4)
         assert_true((north_ray & (1 << BitboardState.square(3, 4))) != 0)
         assert_true((north_ray & (1 << BitboardState.square(3, 7))) != 0)
     )
@@ -81,7 +81,8 @@ func _run_tests() -> void:
             [_mv(4, 1, 4, 3)],  # e2-e4
             [_mv(4, 1, 4, 3), _mv(4, 6, 4, 4), _mv(6, 0, 5, 2), _mv(1, 7, 2, 5)],
             [_mv(3, 1, 3, 3), _mv(3, 6, 3, 4), _mv(2, 0, 6, 4)],
-            [_mv(4, 1, 4, 3), _mv(2, 6, 2, 4), _mv(6, 0, 5, 2), _mv(3, 6, 3, 5), _mv(3, 1, 3, 3), _mv(2, 4, 3, 3)],
+            [_mv(4, 1, 4, 3), _mv(2, 6, 2, 4), _mv(6, 0, 5, 2),
+                _mv(3, 6, 3, 5), _mv(3, 1, 3, 3), _mv(2, 4, 3, 3)],
         ]
 
         for sequence in positions:
@@ -142,7 +143,7 @@ func _run_tests() -> void:
         bs.board[60] = -ChessConstants.Piece.KING
         bs.castling_rights = 0b0001
         bs.side_to_move = 0
-        bs._rebuild_piece_lists()
+        bs.rebuild_piece_lists()
         var castle := BoardState.encode_move(4, 6)
         bs.make_move(castle)
         var expected := BitboardState.from_board_state(bs)
@@ -154,7 +155,7 @@ func _run_tests() -> void:
         start.board[60] = -ChessConstants.Piece.KING
         start.castling_rights = 0b0001
         start.side_to_move = 0
-        start._rebuild_piece_lists()
+        start.rebuild_piece_lists()
         var bb := BitboardState.from_board_state(start)
         var actual := bb.apply_move(BitboardState.encode_move(4, 6))
 

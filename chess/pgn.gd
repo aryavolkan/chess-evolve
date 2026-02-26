@@ -5,7 +5,7 @@ extends RefCounted
 ## Pure chess utility — no AI dependencies.
 
 const BoardStateScript = preload("res://chess/board_state.gd")
-const Piece = ChessConstants.Piece  # gdlint:ignore = constant-name
+const PIECE = ChessConstants.Piece
 
 
 static func file_char(f: int) -> String:
@@ -18,11 +18,11 @@ static func square_name(sq: int) -> String:
 
 static func piece_letter(abs_piece: int) -> String:
 	match abs_piece:
-		Piece.KNIGHT: return "N"
-		Piece.BISHOP: return "B"
-		Piece.ROOK: return "R"
-		Piece.QUEEN: return "Q"
-		Piece.KING: return "K"
+		PIECE.KNIGHT: return "N"
+		PIECE.BISHOP: return "B"
+		PIECE.ROOK: return "R"
+		PIECE.QUEEN: return "Q"
+		PIECE.KING: return "K"
 	return ""  # Pawns have no letter
 
 
@@ -35,7 +35,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 	var captured: int = state.board[to_sq]
 
 	# Castling
-	if abs_p == Piece.KING and absi(to_sq - from_sq) == 2:
+	if abs_p == PIECE.KING and absi(to_sq - from_sq) == 2:
 		var san := "O-O" if to_sq > from_sq else "O-O-O"
 		# Check/checkmate suffix
 		var after := state.clone()
@@ -49,14 +49,14 @@ static func move_to_san(state, encoded_move: int) -> String:
 	san += piece_letter(abs_p)
 
 	# Disambiguation for non-pawn pieces
-	if abs_p != Piece.PAWN:
+	if abs_p != PIECE.PAWN:
 		var disambig := _disambiguation(state, from_sq, to_sq, abs_p)
 		san += disambig
 
 	# Capture
-	var is_capture := captured != 0 or (abs_p == Piece.PAWN and to_sq == state.en_passant_square)
+	var is_capture := captured != 0 or (abs_p == PIECE.PAWN and to_sq == state.en_passant_square)
 	if is_capture:
-		if abs_p == Piece.PAWN:
+		if abs_p == PIECE.PAWN:
 			san += file_char(from_sq % 8)
 		san += "x"
 
@@ -64,7 +64,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 	san += square_name(to_sq)
 
 	# Promotion
-	if abs_p == Piece.PAWN:
+	if abs_p == PIECE.PAWN:
 		var to_rank := to_sq / 8
 		if to_rank == 7 or to_rank == 0:
 			san += "=Q"
@@ -173,10 +173,9 @@ static func _disambiguation(state, from_sq: int, to_sq: int, abs_piece: int) -> 
 
 	if same_file and same_rank:
 		return file_char(from_file) + str(from_rank + 1)
-	elif same_file:
+	if same_file:
 		return str(from_rank + 1)
-	else:
-		return file_char(from_file)
+	return file_char(from_file)
 
 
 static func _check_suffix(state_after) -> String:
