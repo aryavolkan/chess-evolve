@@ -138,6 +138,9 @@ var _white_material_total: float = 0.0
 var _black_material_total: float = 0.0
 var _white_tournament_scores: Array = []
 var _black_tournament_scores: Array = []
+# Per-individual game stats for MAP-Elites behavior computation
+# Key: "w_<idx>" or "b_<idx>", Value: {captures: int, moves: int, games: int}
+var _individual_stats: Dictionary = {}
 
 func _init(
     p_evolution = null, p_games_per: int = 3, p_max_moves: int = 150,
@@ -357,6 +360,7 @@ func _reset_generation_metrics() -> void:
     _black_material_total = 0.0
     _white_tournament_scores.clear()
     _black_tournament_scores.clear()
+    _individual_stats.clear()
 
 
 func run_generation() -> void:
@@ -436,6 +440,15 @@ func _track_game_metrics(game_result: Dictionary) -> void:
     else:  # Black wins
         _white_losses += 1
         _black_wins += 1
+
+
+func _accumulate_individual_stats(key: String, captures: int, moves: int) -> void:
+    ## Accumulate per-individual game stats for MAP-Elites behavior computation.
+    if not _individual_stats.has(key):
+        _individual_stats[key] = {"captures": 0, "moves": 0, "games": 0}
+    _individual_stats[key]["captures"] += captures
+    _individual_stats[key]["moves"] += moves
+    _individual_stats[key]["games"] += 1
 
 
 func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> void:
@@ -720,7 +733,9 @@ func _play_game(
             "move_count": moves_val,
             "material_score": null,
             "king_safety_score": null,
-            "is_game_over": true
+            "is_game_over": true,
+            "white_captures": 0,
+            "black_captures": 0,
         }
 
     # Create minimax players if enabled
@@ -741,6 +756,8 @@ func _play_game(
         })
 
     var move_count := 0
+    var white_captures := 0
+    var black_captures := 0
     while not state.is_game_over and move_count < max_moves_per_game:
         var chosen := -1
 
@@ -780,6 +797,14 @@ func _play_game(
 
         if chosen == -1:
             break  # Invalid move
+
+        # Track captures for MAP-Elites behavior
+        var to_sq := BoardStateScript.move_to(chosen)
+        if state.board[to_sq] != 0:
+            if state.side_to_move == 0:
+                white_captures += 1
+            else:
+                black_captures += 1
 
         state.make_move(chosen)
         move_count += 1
@@ -827,6 +852,12 @@ func _play_game(
         else:
             evolution.set_fitness(1, black_idx, b_prev + b_fitness / games_per_individual)
 
+    # Accumulate per-individual game stats for MAP-Elites behavior
+    if not white_is_hof:
+        _accumulate_individual_stats("w_%d" % white_idx, white_captures, move_count)
+    if not black_is_hof:
+        _accumulate_individual_stats("b_%d" % black_idx, black_captures, move_count)
+
     # Add final state to history
     game_history.append(state.clone())
 
@@ -847,7 +878,9 @@ func _play_game(
         "move_count": move_count,
         "material_score": state.material_score.bind(state),  # Bind the method for later use
         "king_safety_score": state.king_safety_score.bind(state),
-        "is_game_over": state.is_game_over
+        "is_game_over": state.is_game_over,
+        "white_captures": white_captures,
+        "black_captures": black_captures,
     }
 
 
@@ -1001,22 +1034,23 @@ func _update_map_elites_archive() -> void:
     var white_best_idx: int = evolution.get_best_index(0)
     var black_best_idx: int = evolution.get_best_index(1)
 
-    # Get behavior descriptors for the best individuals
-    # For now, we use simple heuristics based on fitness
-    # In a full implementation, you'd track game stats per individual
-
-    # White: Archive with behavior based on win rate and material
-    var white_behavior := Vector2(0.5, 50.0)  # Default: moderate aggression, average game length
+    # Compute behavior from tracked per-individual game stats
     var white_fitness: float = evolution.get_fitness(0, white_best_idx)
-    if white_fitness > 0:
+    var w_key := "w_%d" % white_best_idx
+    if _individual_stats.has(w_key):
+        var stats: Dictionary = _individual_stats[w_key]
+        var behavior := ChessMapElitesScript.calculate_behavior(
+            {"captures": stats["captures"], "moves": stats["moves"]})
         map_elites_archive.add(
             evolution.get_network(0, white_best_idx),
-            white_behavior, white_fitness)
+            behavior, white_fitness)
 
-    # Black
-    var black_behavior := Vector2(0.5, 50.0)
     var black_fitness: float = evolution.get_fitness(1, black_best_idx)
-    if black_fitness > 0:
+    var b_key := "b_%d" % black_best_idx
+    if _individual_stats.has(b_key):
+        var stats: Dictionary = _individual_stats[b_key]
+        var behavior := ChessMapElitesScript.calculate_behavior(
+            {"captures": stats["captures"], "moves": stats["moves"]})
         map_elites_archive.add(
             evolution.get_network(1, black_best_idx),
-            black_behavior, black_fitness)
+            behavior, black_fitness)

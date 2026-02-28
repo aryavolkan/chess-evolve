@@ -164,35 +164,25 @@ func _mutate_array(arr: PackedFloat32Array, mutation_rate: float, mutation_stren
 
 
 func crossover_with(other):
-    ## Two-point crossover operating directly on weight sub-arrays.
-    ## Avoids the 3 x ~33K-float intermediate allocation from get_weights().
+    ## Per-layer single-point crossover. Each weight array gets its own
+    ## crossover point so chunks never span across weight matrices, preserving
+    ## the semantic coherence of each layer.
     var child = get_script().new(input_size, hidden_size, output_size, false)
-    var total := get_weight_count()
-    var p1 := randi() % total
-    var p2 := randi() % total
-    if p1 > p2:
-        var tmp := p1; p1 = p2; p2 = tmp
-
-    var offset := 0
-    _crossover_segment(child.weights_ih, weights_ih, other.weights_ih, p1, p2, offset)
-    offset += weights_ih.size()
-    _crossover_segment(child.bias_h, bias_h, other.bias_h, p1, p2, offset)
-    offset += bias_h.size()
-    _crossover_segment(child.weights_ho, weights_ho, other.weights_ho, p1, p2, offset)
-    offset += weights_ho.size()
-    _crossover_segment(child.bias_o, bias_o, other.bias_o, p1, p2, offset)
+    _layer_crossover(child.weights_ih, weights_ih, other.weights_ih)
+    _layer_crossover(child.bias_h, bias_h, other.bias_h)
+    _layer_crossover(child.weights_ho, weights_ho, other.weights_ho)
+    _layer_crossover(child.bias_o, bias_o, other.bias_o)
     return child
 
 
-func _crossover_segment(
+func _layer_crossover(
         dst: PackedFloat32Array,
         a: PackedFloat32Array,
         b: PackedFloat32Array,
-        p1: int, p2: int, offset: int
     ) -> void:
+    var point := randi() % a.size()
     for i in a.size():
-        var gi := offset + i
-        dst[i] = b[i] if (gi >= p1 and gi < p2) else a[i]
+        dst[i] = a[i] if i < point else b[i]
 
 
 func to_dict() -> Dictionary:

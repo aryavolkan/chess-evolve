@@ -247,11 +247,22 @@ func _apply_fitness_sharing(pop: Array, fitness: PackedFloat32Array) -> PackedFl
     var shared := PackedFloat32Array()
     shared.resize(n)
 
-    # Precompute weight vectors (use only hidden biases for speed — they are
-    # compact and sufficient to distinguish genotypes)
+    # Precompute genetic signatures: all biases + strided sample of weight
+    # matrices. Using only bias_h (64 floats) ignores 99.98% of the genome;
+    # this samples across all layers for a more representative fingerprint.
     var signatures: Array[PackedFloat32Array] = []
+    var stride := 64
     for i in n:
-        signatures.append(pop[i].bias_h)
+        var sig := PackedFloat32Array()
+        sig.append_array(pop[i].bias_h)
+        sig.append_array(pop[i].bias_o)
+        var wih = pop[i].weights_ih
+        for j in range(0, wih.size(), stride):
+            sig.append(wih[j])
+        var who = pop[i].weights_ho
+        for j in range(0, who.size(), stride):
+            sig.append(who[j])
+        signatures.append(sig)
 
     for i in n:
         var niche_count: float = 0.0

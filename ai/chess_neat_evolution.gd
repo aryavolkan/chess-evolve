@@ -163,6 +163,12 @@ func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: float) -
         return
 
     var entry: Dictionary = hof[opponent_idx]
+
+    # Update Elo rating
+    var expected: float = _elo_expected_score(entry.elo, ELO_DEFAULT)
+    entry.elo += ELO_K_FACTOR * (result - expected)
+
+    # Update stats
     entry.games_played += 1
     if result >= 0.75:
         entry.games_won += 1
@@ -171,11 +177,17 @@ func update_hall_of_fame_elo(is_white: bool, opponent_idx: int, result: float) -
     else:
         entry.games_lost += 1
 
+    # Re-sort after Elo update
     hof.sort_custom(func(a, b):
         if a.elo != b.elo:
             return a.elo > b.elo
         return a.fitness > b.fitness
     )
+
+
+static func _elo_expected_score(rating_a: float, rating_b: float) -> float:
+    ## Calculate expected score for player A against player B.
+    return 1.0 / (1.0 + pow(10.0, (rating_b - rating_a) / 400.0))
 
 
 func get_hall_of_fame_opponent(color: int, use_elo_weight: bool = ELO_ELO_WEIGHTED):
