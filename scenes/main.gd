@@ -62,7 +62,7 @@ func _ready() -> void:
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
         _apply_neat_config(neat_config, config)
-        var seed_genome := _load_seed_genome(config)
+        var seed_genome = _load_seed_genome(config)
         evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(
@@ -365,7 +365,7 @@ func _apply_neat_config(neat_config: NeatConfig, config: Dictionary) -> void:
         neat_config.parsimony_coefficient = config["neat_parsimony_coefficient"]
 
 
-func _load_seed_genome(config: Dictionary) -> NeatGenome:
+func _load_seed_genome(config: Dictionary):
     ## Load a seed genome from the path specified in config, or return null.
     var path: String = config.get("neat_seed_genome_path", "")
     if path.is_empty():
@@ -413,7 +413,7 @@ func _save_best_genome(config: Dictionary) -> void:
     if not evo is ChessNeatEvolution:
         return
 
-    var best_genome: NeatGenome = null
+    var best_genome = null
     var best_fitness: float = -INF
 
     if evo.all_time_best_white != null and evo.all_time_best_white_fitness > best_fitness:
@@ -427,7 +427,7 @@ func _save_best_genome(config: Dictionary) -> void:
         return
 
     var save_path: String = config.get("neat_save_genome_path", "user://neat_best_genome.json")
-    var data := best_genome.serialize()
+    var data: Dictionary = best_genome.serialize()
     data["metadata"] = {
         "generation": evo.generation,
         "fitness": best_fitness,
@@ -461,7 +461,7 @@ func _run_auto_train() -> void:
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
         _apply_neat_config(neat_config, config)
-        var seed_genome := _load_seed_genome(config)
+        var seed_genome = _load_seed_genome(config)
         evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(
@@ -614,7 +614,7 @@ func _run_human_play_mode() -> void:
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
         _apply_neat_config(neat_config, config)
-        var seed_genome := _load_seed_genome(config)
+        var seed_genome = _load_seed_genome(config)
         evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(

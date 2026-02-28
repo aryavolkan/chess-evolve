@@ -38,7 +38,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 	if abs_p == PIECE.KING and absi(to_sq - from_sq) == 2:
 		var san := "O-O" if to_sq > from_sq else "O-O-O"
 		# Check/checkmate suffix
-		var after := state.clone()
+		var after = state.clone()
 		after.make_move(encoded_move)
 		san += _check_suffix(after)
 		return san
@@ -54,7 +54,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 		san += disambig
 
 	# Capture
-	var is_capture := captured != 0 or (abs_p == PIECE.PAWN and to_sq == state.en_passant_square)
+	var is_capture: bool = captured != 0 or (abs_p == PIECE.PAWN and to_sq == state.en_passant_square)
 	if is_capture:
 		if abs_p == PIECE.PAWN:
 			san += file_char(from_sq % 8)
@@ -70,7 +70,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 			san += "=Q"
 
 	# Check/checkmate suffix
-	var after := state.clone()
+	var after = state.clone()
 	after.make_move(encoded_move)
 	san += _check_suffix(after)
 
@@ -139,7 +139,7 @@ static func game_to_pgn(moves: PackedInt32Array, headers: Dictionary = {}) -> St
 
 static func _disambiguation(state, from_sq: int, to_sq: int, abs_piece: int) -> String:
 	## Determine disambiguation string when multiple pieces of the same type can reach to_sq.
-	var legal_moves := state.generate_legal_moves()
+	var legal_moves = state.generate_legal_moves()
 	var ambiguous_from: Array[int] = []
 	for move in legal_moves:
 		var m_from: int = BoardStateScript.move_from(move)

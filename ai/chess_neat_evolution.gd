@@ -38,7 +38,7 @@ var hall_of_fame: Array = []
 var black_hall_of_fame: Array = []
 
 
-func _init(p_pop_size = 50, p_config: NeatConfig = null, p_seed_genome: NeatGenome = null) -> void:
+func _init(p_pop_size = 50, p_config: NeatConfig = null, p_seed_genome = null) -> void:
     var config: NeatConfig
     if p_pop_size is NeatConfig:
         config = p_pop_size

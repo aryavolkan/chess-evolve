@@ -121,7 +121,7 @@ func _on_human_move(from_sq: int, to_sq: int) -> void:
 		return
 
 	var move := BoardStateScript.encode_move(from_sq, to_sq)
-	var legal := board_state.generate_legal_moves()
+	var legal = board_state.generate_legal_moves()
 	if not legal.has(move):
 		return
 
@@ -146,7 +146,7 @@ func _make_ai_move() -> void:
 		_board_renderer.interactive = true
 		return
 
-	var legal_moves := board_state.generate_legal_moves()
+	var legal_moves = board_state.generate_legal_moves()
 	if legal_moves.is_empty():
 		_end_game()
 		return
@@ -157,7 +157,7 @@ func _make_ai_move() -> void:
 		chosen = _ai_player.choose_move(board_state)
 	elif ai_network:
 		var inputs := ChessEncoderScript.encode_board(board_state)
-		var outputs := ai_network.forward(inputs)
+		var outputs = ai_network.forward(inputs)
 		chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
 
 	if chosen == -1:
@@ -188,7 +188,7 @@ func _end_game() -> void:
 		-1: result_text = "Black wins!"
 		2: result_text = "Draw"
 	if board_state.result != 0:
-		var human_won := (board_state.result == 1 and human_color == 0) or \
+		var human_won: bool = (board_state.result == 1 and human_color == 0) or \
 			(board_state.result == -1 and human_color == 1)
 		if human_won:
 			result_text += "\nYou win!"
@@ -204,7 +204,7 @@ func _update_status() -> void:
 	if not _game_active:
 		return
 	var turn := "White" if board_state.side_to_move == 0 else "Black"
-	var is_human := board_state.side_to_move == human_color
+	var is_human: bool = board_state.side_to_move == human_color
 	_status_label.text = "%s to move (%s)" % [turn, "You" if is_human else "AI"]
 	if board_state.is_in_check():
 		_status_label.text += " - CHECK!"

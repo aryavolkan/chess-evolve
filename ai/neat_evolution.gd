@@ -22,7 +22,7 @@ var seed_genome: NeatGenome = null
 var _next_species_id: int = 0
 
 
-func _init(p_config: NeatConfig, p_seed_genome: NeatGenome = null) -> void:
+func _init(p_config: NeatConfig, p_seed_genome = null) -> void:
     config = p_config
     population_size = config.population_size
     var node_count := config.input_count + config.output_count + int(config.use_bias)

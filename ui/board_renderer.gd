@@ -177,7 +177,7 @@ func _screen_to_square(pos: Vector2) -> int:
 
 func _select_square(sq: int) -> void:
 	selected_square = sq
-	var all_legal := board_state.generate_legal_moves()
+	var all_legal = board_state.generate_legal_moves()
 	legal_moves_from_selected.clear()
 	for move in all_legal:
 		if BoardStateScript.move_from(move) == sq:
@@ -239,7 +239,7 @@ func _draw() -> void:
 			var to_sq := BoardStateScript.move_to(move)
 			var tf := to_sq % 8
 			var tr := to_sq / 8
-			var is_capture := board_state.board[to_sq] != 0
+			var is_capture: bool = board_state.board[to_sq] != 0
 			var move_rect := Rect2(
 				board_origin + Vector2(tf, 7 - tr) * square_size,
 				Vector2(square_size, square_size)
