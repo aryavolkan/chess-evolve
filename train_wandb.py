@@ -266,7 +266,10 @@ def _run_godot_training(run, config, max_gens, elite_pool):
     )
 
     try:
-        if not wait_for_metrics(_worker.metrics_path, timeout=120.0):
+        # NEAT networks are much slower than fixed-topology; allow more time
+        use_neat = config.get("use_neat", False)
+        start_timeout = 600.0 if use_neat else 120.0
+        if not wait_for_metrics(_worker.metrics_path, timeout=start_timeout):
             print("❌ Metrics file never appeared; terminating run")
             proc.kill()
             run.finish(exit_code=1)
@@ -274,8 +277,10 @@ def _run_godot_training(run, config, max_gens, elite_pool):
             return
 
         # max_stale scales with population: large pops take minutes per gen
+        # NEAT is ~10x slower per individual due to variable topology
         pop_size = config.get("population_size", 30)
-        stale_timeout = max(120, pop_size * 3)  # ~3s per individual, minimum 2 min
+        per_individual = 10 if use_neat else 3
+        stale_timeout = max(120, pop_size * per_individual)
         final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform, max_stale=stale_timeout)
 
         # Wait for Godot to exit gracefully
