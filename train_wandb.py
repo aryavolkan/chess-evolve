@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
     "mutation_strength": 0.12,
     "games_per_individual": 2,
     "max_generations": 50,
-    "max_moves_per_game": 40,    # capped for GDScript performance
+    "max_moves_per_game": 100,
     "input_size": 389,
     "output_size": 4096,
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
@@ -261,7 +261,10 @@ def _run_godot_training(run, config, max_gens, elite_pool):
             _worker.cleanup()
             return
 
-        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform)
+        # max_stale scales with population: large pops take minutes per gen
+        pop_size = config.get("population_size", 30)
+        stale_timeout = max(120, pop_size * 3)  # ~3s per individual, minimum 2 min
+        final = poll_metrics(run, _worker.metrics_path, max_gens, log_keys=CHESS_LOG_KEYS, metric_transform=_chess_metric_transform, max_stale=stale_timeout)
 
         # Wait for Godot to exit gracefully
         try:

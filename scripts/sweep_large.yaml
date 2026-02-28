@@ -1,0 +1,51 @@
+program: train_wandb.py
+method: grid
+metric:
+  name: best_fitness
+  goal: maximize
+
+parameters:
+  population_size:
+    value: 200
+
+  hidden_size:
+    value: 128
+
+  elite_count:
+    value: 5
+
+  games_per_individual:
+    value: 2
+
+  max_moves_per_game:
+    value: 100
+
+  mutation_rate:
+    value: 0.20
+
+  mutation_strength:
+    value: 0.15
+
+  crossover_rate:
+    value: 0.70
+
+  max_generations:
+    value: 150
+
+  use_tournament:
+    value: true
+
+  tournament_opponents:
+    value: 5
+
+  tournament_mode:
+    value: round_robin
+
+  immigration_rate:
+    value: 0.1
+
+  fitness_sharing_sigma:
+    value: 0.08
+
+  tournament_k:
+    value: 2

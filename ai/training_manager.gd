@@ -21,7 +21,7 @@ const OpeningBookScript = preload("res://chess/opening_book.gd")
 var evolution
 var use_neat: bool = false
 var games_per_individual: int = 3  # Each individual plays N games per generation
-var max_moves_per_game: int = 150
+var max_moves_per_game: int = 100
 var current_games: Array = []  # Array of active GameState dicts
 var total_games_played: int = 0
 var metrics_logger: MetricsLogger
@@ -47,40 +47,40 @@ var curriculum_stages: Array = [
     {
         "min_gen": 0,
         "max_gen": 2,
-        "max_moves": 60,
+        "max_moves": 50,
         "weights": {
             "win_bonus": 6.0,
-            "draw_bonus": 1.0,
+            "draw_bonus": 0.5,
             "material_weight": 1.2,
             "mobility_weight": 0.1,
             "king_safety_weight": 0.2,
-            "move_count_bonus": 0.02
+            "move_count_bonus": 0.0
         }
     },
     {
         "min_gen": 3,
         "max_gen": 7,
-        "max_moves": 100,
+        "max_moves": 80,
         "weights": {
             "win_bonus": 8.0,
-            "draw_bonus": 2.0,
+            "draw_bonus": 1.0,
             "material_weight": 1.0,
             "mobility_weight": 0.08,
             "king_safety_weight": 0.35,
-            "move_count_bonus": 0.015
+            "move_count_bonus": -0.003
         }
     },
     {
         "min_gen": 8,
         "max_gen": 999999,
-        "max_moves": 150,
+        "max_moves": 100,
         "weights": {
             "win_bonus": 10.0,
-            "draw_bonus": 3.0,
+            "draw_bonus": 1.5,
             "material_weight": 1.0,
             "mobility_weight": 0.05,
             "king_safety_weight": 0.5,
-            "move_count_bonus": 0.01
+            "move_count_bonus": -0.005
         }
     }
 ]
@@ -277,6 +277,7 @@ func generate_swiss_pairings(population_size: int, round_num: int) -> Dictionary
 
 func calculate_tournament_scores() -> Dictionary:
     ## Calculate tournament scores from results (1 point for win, 0.5 for draw, 0 for loss).
+    ## Draws are weighted by material advantage: 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2).
     var scores := {}
 
     for i in evolution.population_size:
@@ -286,12 +287,15 @@ func calculate_tournament_scores() -> Dictionary:
         var parts: PackedStringArray = key.split("_")
         if parts.size() >= 2:
             var idx := int(parts[0])
-            var result: int = tournament_results[key]
+            var entry = tournament_results[key]
+            var result: int = entry["result"] if entry is Dictionary else int(entry)
 
             if result == 1:  # Win
                 scores[idx] += 1.0
             elif result == 0:  # Draw
-                scores[idx] += 0.5
+                var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
+                var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
+                scores[idx] += draw_score
             # Loss gives 0 points
 
     return scores
@@ -310,18 +314,23 @@ func update_fitness_from_tournament() -> void:
         var parts: PackedStringArray = key.split("_")
         if parts.size() >= 2:
             var idx := int(parts[0])
-            var result: int = tournament_results[key]
+            var entry = tournament_results[key]
+            var result: int = entry["result"] if entry is Dictionary else int(entry)
 
             if parts[1] == "white":
                 if result == 1:
                     white_scores[idx] += 1.0
                 elif result == 0:
-                    white_scores[idx] += 0.5
+                    var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
+                    var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
+                    white_scores[idx] += draw_score
             elif parts[1] == "black":
                 if result == 1:
                     black_scores[idx] += 1.0
                 elif result == 0:
-                    black_scores[idx] += 0.5
+                    var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
+                    var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
+                    black_scores[idx] += draw_score
 
     # Store tournament scores for metrics
     _white_tournament_scores.clear()
@@ -457,14 +466,20 @@ func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> v
     _track_game_metrics(game_result)
 
     if game_result["result"] == 2:  # Draw
-        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = 0
-        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = 0
+        var material_diff: float = 0.0
+        var state = game_result["state"]
+        if state != null:
+            material_diff = state.material_score(0) - state.material_score(1)
+        else:  # Rust path
+            material_diff = game_result.get("white_material_final", 0.0) - game_result.get("black_material_final", 0.0)
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = {"result": 0, "material_advantage": material_diff}
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = {"result": 0, "material_advantage": -material_diff}
     elif game_result["result"] == 1:  # White wins
-        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = 1
-        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = -1
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = {"result": 1}
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = {"result": -1}
     else:  # Black wins
-        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = -1
-        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = 1
+        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = {"result": -1}
+        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = {"result": 1}
 
 
 func run_one_game_step() -> bool:
@@ -736,6 +751,8 @@ func _play_game(
             "is_game_over": true,
             "white_captures": 0,
             "black_captures": 0,
+            "white_material_final": stats.get("white_material", 0.0),
+            "black_material_final": stats.get("black_material", 0.0),
         }
 
     # Create minimax players if enabled
@@ -758,6 +775,7 @@ func _play_game(
     var move_count := 0
     var white_captures := 0
     var black_captures := 0
+    var position_counts: Dictionary = {}
     while not state.is_game_over and move_count < max_moves_per_game:
         var chosen := -1
 
@@ -808,6 +826,15 @@ func _play_game(
 
         state.make_move(chosen)
         move_count += 1
+
+        # Threefold repetition detection
+        var pos_key: String = state.get_position_key()
+        var pos_count: int = position_counts.get(pos_key, 0) + 1
+        position_counts[pos_key] = pos_count
+        if pos_count >= 3:
+            state.is_game_over = true
+            state.result = 2
+            break
 
         # Early termination (mercy rule) to save compute
         if move_count >= mercy_min_moves:

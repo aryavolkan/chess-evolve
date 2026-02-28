@@ -1,0 +1,73 @@
+program: train_wandb.py
+method: bayes
+metric:
+  name: combined_best
+  goal: maximize
+
+run_cap: 3
+
+parameters:
+  population_size:
+    value: 30
+
+  hidden_size:
+    value: 64
+
+  elite_count:
+    value: 2
+
+  crossover_rate:
+    value: 0.70
+
+  mutation_rate:
+    value: 0.25
+
+  mutation_strength:
+    value: 0.12
+
+  games_per_individual:
+    value: 2
+
+  max_generations:
+    value: 50
+
+  max_moves_per_game:
+    value: 100
+
+  input_size:
+    value: 389
+
+  output_size:
+    value: 4096
+
+  use_minimax:
+    value: false
+
+  use_tournament:
+    value: true
+
+  tournament_opponents:
+    value: 5
+
+  tournament_mode:
+    value: round_robin
+
+  immigration_rate:
+    value: 0.1
+
+  fitness_sharing_sigma:
+    value: 0.08
+
+  tournament_k:
+    value: 2
+
+  use_opening_book:
+    value: true
+
+  opening_book_depth:
+    value: 6
+
+  move_temperature:
+    distribution: uniform
+    min: 0.3
+    max: 0.7

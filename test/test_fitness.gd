@@ -40,10 +40,12 @@ func _run_tests() -> void:
         assert_gt(w, 10.0, "Winner should have high fitness")
     )
 
-    _test("longer games give more fitness", func():
+    _test("shorter games give more fitness (negative move_count_bonus)", func():
+        # With negative move_count_bonus, shorter games should score higher
+        ChessFitnessScript.move_count_bonus = -0.005
         var b := BoardStateScript.new()
         b.setup_initial()
         var short: float = fitness.call("evaluate", b, 0, 5)
         var long_game: float = fitness.call("evaluate", b, 0, 50)
-        assert_gt(long_game, short, "Longer games should give more fitness")
+        assert_gt(short, long_game, "Shorter games should give more fitness with negative move_count_bonus")
     )

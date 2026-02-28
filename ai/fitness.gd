@@ -7,12 +7,12 @@ const EndgameHintsScript = preload("res://chess/endgame_hints.gd")
 
 # Weights for fitness components (mutable for curriculum)
 static var win_bonus: float = 10.0
-static var draw_bonus: float = 3.0
+static var draw_bonus: float = 1.5
 static var loss_penalty: float = -2.0
 static var material_weight: float = 1.0
 static var mobility_weight: float = 0.05
 static var king_safety_weight: float = 0.5
-static var move_count_bonus: float = 0.01  # Reward for surviving longer
+static var move_count_bonus: float = -0.005  # Penalize longer games to discourage stalling
 static var checkmate_bonus: float = 5.0
 static var endgame_weight: float = 1.0
 
@@ -32,20 +32,21 @@ static func evaluate(state, color: int, move_count: int) -> float:
     ## Compute fitness for a player after a game.
     var fitness := 0.0
 
+    # Material advantage
+    var my_material: float = state.material_score(color)
+    var opp_material: float = state.material_score(1 - color)
+
     # Game result
     if state.is_game_over:
-        if state.result == 2:  # Draw
-            fitness += draw_bonus
+        if state.result == 2:  # Draw — scale by material advantage
+            var mat_adv: float = clampf((my_material - opp_material) / 10.0, -1.0, 1.0)
+            fitness += draw_bonus * (0.5 + 0.5 * mat_adv)
         elif (state.result == 1 and color == 0) or (state.result == -1 and color == 1):
             fitness += win_bonus
             # Extra bonus for checkmate (vs timeout/stalemate)
             fitness += checkmate_bonus
         else:
             fitness += loss_penalty
-
-    # Material advantage
-    var my_material: float = state.material_score(color)
-    var opp_material: float = state.material_score(1 - color)
     fitness += (my_material - opp_material) * material_weight
 
     # Mobility (at end of game)
@@ -84,8 +85,9 @@ static func evaluate_from_metrics(
     ) -> float:
     var fitness := 0.0
     if is_game_over:
-        if result == 2:
-            fitness += draw_bonus
+        if result == 2:  # Draw — scale by material advantage
+            var mat_adv: float = clampf((my_material - opp_material) / 10.0, -1.0, 1.0)
+            fitness += draw_bonus * (0.5 + 0.5 * mat_adv)
         elif (result == 1 and color == 0) or (result == -1 and color == 1):
             fitness += win_bonus
             fitness += checkmate_bonus
