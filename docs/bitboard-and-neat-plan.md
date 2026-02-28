@@ -1,8 +1,8 @@
 # Bitboard Representation & NEAT Port — Planning Document
 
-**Project:** Chess-Evolve  
-**Date:** 2026-02-17  
-**Status:** Planning  
+**Project:** Chess-Evolve
+**Date:** 2026-02-17 (updated 2026-02-27)
+**Status:** Partially Complete
 
 ---
 
@@ -140,23 +140,17 @@ This **eliminates the encoding loop entirely** — the bitboard unpacking is the
 
 ### Migration Plan
 
-| Phase | Work | Tests |
-|-------|------|-------|
-| 1a | Add `BitboardState` class alongside `BoardState` (parallel, not replacing) | New unit tests for bb operations |
-| 1b | Implement precomputed tables and verify against `BoardState.get_legal_moves()` | Fuzzing: compare outputs on 1000 random positions |
-| 1c | Swap `training_manager.gd` to use `BitboardState`; keep `BoardState` as fallback | Full integration test suite must pass |
-| 1d | Update encoder to `INPUT_SIZE_BITBOARD = 773`; retrain from scratch | Benchmark: moves/second before and after |
-| 1e | Delete `BoardState` after 1-week burn-in | — |
+| Phase | Work | Status |
+|-------|------|--------|
+| 1a | Add `BitboardState` class alongside `BoardState` | **Done** — `chess/bitboard_state.gd` implemented |
+| 1b | Implement precomputed tables and verify against `BoardState` | **Done** — `test/test_bitboard_state.gd` |
+| 1c | Swap `training_manager.gd` to use `BitboardState` as default | **Not done** — training still defaults to `BoardState` |
+| 1d | Update encoder to `INPUT_SIZE_BITBOARD = 773` | **Not done** — still using 389-input encoder |
+| 1e | Delete `BoardState` after burn-in | **Not done** |
 
-**Expected speedup:** 5–15× for move generation in GDScript. In a future GDExtension/Rust port (see NEAT section), bitboards are the standard representation and the speedup becomes 100–1000×.
+Additionally, the **Rust GDExtension** (`rust/chess-native/`) implements magic bitboard move generation in Rust and is fully integrated on Linux. This provides the 100-1000x speedup noted below, making the GDScript bitboard migration less urgent.
 
-### Estimated Effort
-
-- `BitboardState` implementation: ~300 LOC
-- Precomputed table generator: ~150 LOC  
-- Encoder update: ~50 LOC
-- Test suite (comparison fuzzing): ~100 LOC
-- **Total: ~3–4 days**
+**Expected speedup:** 5–15× for move generation in GDScript. The Rust GDExtension path provides 100–1000× speedup.
 
 ---
 
@@ -322,49 +316,48 @@ This unlocks ~100× speedup over pure GDScript, enabling population sizes of 500
 
 ### Migration Plan
 
-| Phase | Work | Depends on |
-|-------|------|------------|
-| 0 | Port `Genome` + `SparseNetwork`; add genome tests | Nothing |
-| 1a | Port `NeatPopulation` with speciation | Phase 0 |
-| 1b | Port `NeatConfig` (chess-tuned values) | Phase 0 |
-| 1c | Replace `evolution.gd` with NEAT in `training_manager.gd` | Phase 1a/b |
-| 1d | Add HOF for coevolution stability | Phase 1c |
-| 2 | Bitboard encoder → 773 inputs; retrain from scratch | Bitboard Part 1 |
-| 3 | GDExtension Rust port | Phase 2 stable |
+| Phase | Work | Status |
+|-------|------|--------|
+| 0 | Port `Genome` + `SparseNetwork`; add genome tests | **Done** — `neat_genome.gd`, `neat_network.gd` |
+| 1a | Port `NeatPopulation` with speciation | **Done** — `chess_neat_evolution.gd` |
+| 1b | Port `NeatConfig` (chess-tuned values) | **Done** — `neat_config.gd` |
+| 1c | Replace `evolution.gd` with NEAT in `training_manager.gd` | **Done** — `use_neat: true` toggles NEAT |
+| 1d | Add HOF for coevolution stability | **Done** — Hall of Fame with Elo ratings in `evolution.gd` |
+| 2 | Bitboard encoder → 773 inputs; retrain from scratch | **Not done** |
+| 3 | GDExtension Rust port of NEAT forward pass | **Not done** — Rust GDExtension exists for standard NN but not NEAT sparse forward pass |
 
-### Estimated Effort
-
-| Phase | Effort |
-|-------|--------|
-| Phase 0: Genome + SparseNetwork | 1–2 days |
-| Phase 1: Full NEAT | 3–4 days |
-| Phase 2: Bitboard integration | 1 day (after bitboards done) |
-| Phase 3: GDExtension | 5–7 days |
+**Note:** NEAT config still defaults to `output_count: 128` (in `neat_config.gd`), while the standard NE pipeline uses 4096 outputs. Aligning these is a remaining task.
 
 ---
 
-## Sequencing Recommendation
+## Sequencing Recommendation (Updated)
 
+Completed work:
+- BitboardState class (Phase 1a-1b) — done
+- NEAT genome, network, speciation, config (Phase 0-1) — done
+- Hall of Fame with Elo ratings (Phase 1d) — done
+- Rust GDExtension for move gen + NN eval — done
+
+Remaining sequence:
 ```
-Week 1: Bitboard Phase 1a–1c (parallel BitboardState, verified against BoardState)
-Week 2: Bitboard Phase 1d–1e (encoder update, delete old BoardState)
-         + NEAT Phase 0 (Genome + SparseNetwork port)
-Week 3: NEAT Phase 1a–1c (full population + speciation)
-Week 4: NEAT Phase 1d (HOF coevolution) + integration
-Week 5+: GDExtension if needed
+1. Switch training default to BitboardState (Phase 1c)
+2. Implement 773-input encoder (Phase 1d) — requires retraining from scratch
+3. Align NEAT output size with 4096 or reduce to 218
+4. Port NEAT sparse forward pass to Rust (Phase 3) — stretch goal
 ```
 
-Both changes together will make Chess-Evolve a significantly more capable and faster system — bitboards enabling real-time move generation, NEAT enabling the architecture to grow in complexity as chess understanding deepens.
-
 ---
 
-## Open Questions
+## Open Questions (Updated)
 
-1. **Output size final decision:** 218 (legal move index) vs 4096 (all from-to pairs)? The 218 scheme is simpler but requires sorting legal moves consistently between evaluation and policy decoding.
-2. **Coevolution fitness assignment:** Symmetric (white_score + black_score averaged per individual)? Or fully separate populations with asymmetric fitness?
-3. **GDExtension language:** Rust (fastest, more complex FFI) vs C++ (GDExtension has better C++ support, more examples)?
-4. **Reuse Evolve's NEAT directly** via a shared GDExtension plugin vs porting to chess-evolve standalone?
+1. **Output size for NEAT:** Standard NE uses 4096. NEAT config still defaults to 128. Options: align to 4096 (consistent but large initial genome), or use 218 (legal move index, smallest search space). Decision pending.
+2. ~~**Coevolution fitness assignment**~~ **Resolved:** Fully separate populations with asymmetric fitness. `combined_best = min(white_best, black_best)` used as the optimization metric.
+3. ~~**GDExtension language**~~ **Resolved:** Rust. The `rust/chess-native/` GDExtension is complete and integrated on Linux.
+4. ~~**Reuse Evolve's NEAT directly**~~ **Resolved:** Ported to chess-evolve standalone (`neat_genome.gd`, `neat_network.gd`, `chess_neat_evolution.gd`).
 
----
+## Remaining Work
 
-*Next step: assign a coder agent to Phase 0 (Genome + SparseNetwork port) as the first concrete PR.*
+- Switch training pipeline default from `BoardState` to `BitboardState` (Phase 1c)
+- Implement 773-input encoder and retrain (Phase 1d)
+- Align NEAT output size with standard NE (128 → 4096 or 218)
+- Port NEAT sparse forward pass to Rust GDExtension (Phase 3)

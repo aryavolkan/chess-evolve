@@ -21,7 +21,7 @@ Two populations of neural networks — one playing white, one playing black — 
 │         Game Engine (BoardState)             │
 │            │       │                         │
 │         Encoder ──► Neural Network           │
-│         (389 in)   (64 hidden → 128 out)     │
+│         (389 in)   (64 hidden → 4096 out)    │
 │            │                                 │
 │         Fitness Evaluation                   │
 │  (material, mobility, king safety, result)   │
@@ -32,8 +32,8 @@ Two populations of neural networks — one playing white, one playing black — 
 
 - **Input (389):** 6 piece-type planes × 64 squares (signed ±1), side to move, castling rights
 - **Hidden:** 64 neurons, tanh activation
-- **Output (128):** 64 from-square + 64 to-square preferences
-- **Move selection:** Score each legal move as `from_pref + to_pref`, pick highest
+- **Output (4096):** one logit per (from_square × 64 + to_square) pair
+- **Move selection:** score = output[from×64 + to], masked to legal moves, pick highest
 - **~33K trainable parameters**
 
 ### Fitness Function
@@ -192,6 +192,15 @@ Click a piece to see legal moves highlighted, then click a destination to move. 
 
 Borrows patterns from Evolve:
 - `neural_network.gd` — same feedforward architecture, adapted sizes
-- `evolution.gd` — tournament selection, crossover, mutation (extended for coevolution)
-- `training_manager.gd` — orchestration pattern
+- `evolution.gd` — tournament selection, crossover, mutation (extended for coevolution + Hall of Fame)
+- `training_manager.gd` — orchestration pattern (extended with curriculum, tournament mode)
 - `test/` — same test framework and conventions
+
+## Documentation
+
+Detailed documentation lives in `docs/`:
+- [Architecture](docs/ARCHITECTURE.md) — system design and data flow
+- [Training](docs/TRAINING.md) — running training, sweep config, metrics
+- [Improving Training](docs/IMPROVING_TRAINING.md) — hyperparameter tuning, diagnosing issues, performance
+- [AI System](docs/AI_SYSTEM.md) — network architecture, evolution, fitness, Hall of Fame
+- [Game System](docs/GAME_SYSTEM.md) — chess rules, board representation, encoder

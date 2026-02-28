@@ -76,7 +76,7 @@ Chess-Evolve uses **coevolutionary neuroevolution** to train chess-playing neura
    a. Initialize fresh BoardState
    b. Loop (up to max_moves):
       - Encode board → 389-float vector
-      - NeuralNetwork.forward(inputs) → 128 logits
+      - NeuralNetwork.forward(inputs) → 4096 logits
       - ChessEncoder.decode_move(logits, legal_moves) → best legal move
       - board.make_move(move)
    c. ChessFitness.evaluate(result, material, mobility, king_safety) → score

@@ -1,200 +1,43 @@
-# NEAT Chess Evolution Improvements
+# Changelog
 
-This document summarizes the major improvements made to the chess-evolve project to enhance NEAT-based self-play training.
+Notable changes to chess-evolve, newest first. For detailed documentation see `docs/`.
 
-## Change 1: Minimax Wrapper (Value Network + Alpha-Beta Search)
+## 2026-02-27
 
-### What was implemented:
-- Added `ai/minimax_player.gd`: A new player class that uses minimax search with alpha-beta pruning
-- The neural network now serves as a position evaluation function instead of directly choosing moves
-- Configurable search depth (default: 2, can be increased to 3 for stronger play)
-- The existing policy network architecture (389→hidden→128) is adapted to output position scores by summing the outputs
+- **Elo tracking**: 14 Elo distribution metrics (min/p25/median/p75/max per color) synced to W&B
+- **Documentation consolidation**: new [Improving Training](docs/IMPROVING_TRAINING.md) guide, updated all docs to reflect current 4096-output architecture
 
-### Design decisions:
-- Instead of modifying the network architecture to output a single value, we interpret the sum of the 128 outputs as a position score
-- This maintains backward compatibility with existing networks while transitioning to search-based play
-- The minimax player properly handles terminal states (checkmate, stalemate) with appropriate scores
+## 2026-02-15 — Phase 2 Complete
 
-### Configuration in `training_manager.gd`:
-```gdscript
-var use_minimax: bool = true  # Enable/disable minimax search
-var minimax_depth: int = 2    # Search depth (2-3 recommended)
-```
+All Phase 2 roadmap items shipped:
 
-## Change 2: Hall of Fame Coevolution
+- **NEAT topology evolution** — `chess_neat_evolution.gd`, `neat_genome.gd`, `neat_network.gd`
+- **Hall of Fame** — top 20 per color, Elo-ranked, weighted opponent selection
+- **Opening book** — ~30 embedded openings with configurable depth
+- **Endgame hints** — K vs K, K+Q/R vs K pattern recognition in fitness
+- **Human play mode** — `--human-play` CLI flag
+- **Move animation** — tween-based transitions with capture fade
+- **PGN export** — Standard Algebraic Notation with disambiguation
 
-### What was implemented:
-- Added Hall of Fame arrays in `ai/evolution.gd` to maintain the best individuals from past generations
-- Maximum 20 individuals per Hall of Fame (configurable via `HALL_OF_FAME_SIZE`)
-- After each generation, the best white and black individuals are added to their respective Hall of Fame
-- During fitness evaluation, individuals play against both current population members and Hall of Fame members
-- Hall of Fame opponents are frozen (not mutated) to provide stable benchmarks
+## 2026-02-12
 
-### Key features:
-- Prevents cycling in coevolution by maintaining diverse historical opponents
-- Both white and black populations play as primary players to ensure symmetric evaluation
-- Configurable ratio of games against Hall of Fame vs current population
+- **Rust GDExtension** — complete Linux integration for move generation and NN eval
 
-### Configuration in `training_manager.gd`:
-```gdscript
-var hall_of_fame_ratio: float = 0.5  # 50% of games against Hall of Fame
-```
+## 2026-02-10
 
-## Testing Instructions
+- **Balanced optimization** — `combined_best = min(white_best, black_best)` as sweep metric
+- **Immigration** — 10% random replacement per generation for diversity
+- **Fitness sharing** — genetic distance reward (`sigma=0.08`)
+- **Reduced selection pressure** — `tournament_k=2` (down from 3)
 
-1. **Test Minimax Player**:
-   ```bash
-   # Run with minimax enabled (default)
-   godot --headless --script res://test/test_integration.gd
-   
-   # Compare with direct network output
-   # Set use_minimax = false in training_manager.gd, then run again
-   ```
+## Earlier
 
-2. **Test Hall of Fame**:
-   ```bash
-   # Run training for several generations
-   python3 train_local.py --generations 10 --population 20
-   
-   # Check that Hall of Fame is being populated
-   # Look for improved stability in fitness scores over generations
-   ```
-
-3. **Test Combined Features**:
-   ```bash
-   # Run a full training session with both features enabled
-   python3 train_wandb.py --config configs/default_config.yaml
-   
-   # Monitor:
-   # - Search depth impact on game quality
-   # - Hall of Fame size growth
-   # - Fitness progression stability
-   ```
-
-4. **Verify Backward Compatibility**:
-   - Existing training scripts (train_wandb.py) should work without modification
-   - Set `use_minimax = false` and `hall_of_fame_ratio = 0.0` to get original behavior
-
-## Expected Improvements
-
-1. **With Minimax Search**:
-   - More strategic play (looking ahead 2-3 moves)
-   - Better tactical awareness (avoiding simple blunders)
-   - Slightly longer games due to better defense
-
-2. **With Hall of Fame**:
-   - More stable fitness progression (less cycling)
-   - Better generalization (playing against diverse opponents)
-   - Preservation of good strategies discovered in earlier generations
-
-## Performance Considerations
-
-- Minimax search increases computation time per move (roughly 20-50x for depth 2)
-- Consider reducing population size or games per individual if training is too slow
-- Hall of Fame has minimal performance impact (just stores best networks)
-
-## Change 3: Round-Robin Tournament Selection
-
-### What was implemented:
-- Added tournament-based fitness evaluation system in `ai/training_manager.gd`
-- Individuals now play against a structured set of opponents instead of random selection
-- Tournament results (wins/draws/losses) determine fitness scores
-- Support for both round-robin and Swiss-system tournaments
-
-### Key features:
-
-1. **Round-Robin Mode**:
-   - Each individual plays against K opponents selected from different fitness quintiles
-   - Ensures diverse matchups between strong and weak agents
-   - Configurable number of opponents per individual (default: 4-6)
-   - Final fitness = tournament score (1pt win, 0.5pt draw, 0pt loss) + 10% material/position bonus
-
-2. **Swiss-System Mode**:
-   - After round 1, pairs individuals with similar scores
-   - More efficient for large populations than full round-robin
-   - Reduces total game count while maintaining accuracy
-
-3. **Backward Compatibility**:
-   - `use_tournament = false` flag to revert to original random opponent selection
-   - Existing training scripts work without modification
-
-### Configuration:
-```gdscript
-# In training_manager.gd:
-var use_tournament: bool = true              # Enable tournament mode
-var tournament_mode: String = "round_robin"  # "round_robin" or "swiss"
-var tournament_opponents: int = 4            # Opponents per individual
-
-# In sweep_config.py:
-'tournament_opponents': {'values': [4, 5, 6]},
-'use_tournament': {'value': True},
-'tournament_mode': {'value': 'round_robin'},
-```
-
-## Testing Instructions for Tournament Mode
-
-1. **Test Round-Robin Tournament**:
-   ```bash
-   # Create a test config with tournament enabled
-   cat > test_tournament.json << EOF
-   {
-     "population_size": 10,
-     "hidden_size": 64,
-     "use_tournament": true,
-     "tournament_mode": "round_robin",
-     "tournament_opponents": 4,
-     "max_generations": 5
-   }
-   EOF
-   
-   # Run training with tournament mode
-   python3 train_wandb.py --config test_tournament.json
-   ```
-
-2. **Test Swiss-System Tournament**:
-   ```bash
-   # Modify config for Swiss mode
-   cat > test_swiss.json << EOF
-   {
-     "population_size": 20,
-     "hidden_size": 64,
-     "use_tournament": true,
-     "tournament_mode": "swiss",
-     "tournament_opponents": 4,
-     "max_generations": 5
-   }
-   EOF
-   
-   python3 train_wandb.py --config test_swiss.json
-   ```
-
-3. **Compare with Random Selection**:
-   ```bash
-   # Run with tournaments disabled
-   cat > test_random.json << EOF
-   {
-     "population_size": 10,
-     "hidden_size": 64,
-     "use_tournament": false,
-     "games_per_individual": 4,
-     "max_generations": 5
-   }
-   EOF
-   
-   python3 train_wandb.py --config test_random.json
-   ```
-
-## Expected Improvements with Tournaments
-
-1. **More Reliable Fitness Rankings**:
-   - Each individual's fitness is based on performance against multiple diverse opponents
-   - Reduces variance from lucky/unlucky random pairings
-   - Better identification of truly strong individuals
-
-2. **Balanced Competition**:
-   - Quintile-based pairing ensures weak and strong agents both get appropriate challenges
-   - Prevents situations where weak agents only play other weak agents
-
-3. **Tournament Metrics**:
-   - Clear win/draw/loss records provide interpretable progress tracking
-   - Swiss system adapts difficulty as the tournament progresses
+- **4096-output architecture** — replaced 64+64 factored encoder with full from-to output space
+- **Tournament evaluation** — round-robin and Swiss-system opponent pairing
+- **Minimax player** — optional alpha-beta search wrapper over NN evaluation
+- **Hall of Fame coevolution** — historical opponents prevent cycling
+- **Curriculum learning** — 4-stage fitness weight schedule
+- **Global Elite Pool** — cross-run genome sharing across parallel workers
+- **Adaptive mutation** — auto-tighten on improvement, loosen on stagnation
+- **Rust GA operators** — PyO3 bindings for selection, mutation, crossover
+- **Worker health monitor** — auto-spawn with WhatsApp alerts

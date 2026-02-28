@@ -1,5 +1,7 @@
 # Training Guide
 
+> For hyperparameter tuning advice, diagnosing training issues, and performance tips, see [Improving Training](IMPROVING_TRAINING.md).
+
 ## Prerequisites
 
 1. **Godot 4.2+** with `--headless` support
@@ -48,20 +50,23 @@ All keys are optional; defaults shown.
   "population_size":        30,     // Genomes per side per generation
   "hidden_size":            64,     // Hidden layer neurons (standard NE)
   "input_size":             389,    // Input vector size (don't change)
-  "output_size":            128,    // Output size (don't change)
-  "elite_count":            3,      // Elites preserved unchanged
-  "mutation_rate":          0.15,   // Per-weight mutation probability
-  "mutation_strength":      0.2,    // Gaussian std dev for mutations
+  "output_size":            4096,   // 64×64 from-to output space (don't change)
+  "elite_count":            2,      // Elites preserved unchanged
+  "mutation_rate":          0.25,   // Per-weight mutation probability
+  "mutation_strength":      0.12,   // Gaussian std dev for mutations
   "crossover_rate":         0.70,   // Fraction using crossover (vs. clone+mutate)
   "games_per_individual":   2,      // Games each individual plays per gen
   "max_moves_per_game":     100,    // Hard cap on game length
-  "max_generations":        100,    // Stop after this many generations
+  "max_generations":        50,     // Stop after this many generations
   "use_neat":               false,  // Use NEAT instead of standard NE
   "use_minimax":            false,  // Use minimax search for move selection
   "minimax_depth":          2,      // Minimax search depth
   "use_tournament":         true,   // Tournament evaluation mode
   "tournament_mode":        "round_robin",
-  "tournament_opponents":   2       // Opponents per individual per gen
+  "tournament_opponents":   2,      // Opponents per individual per gen
+  "immigration_rate":       0.1,    // Fraction of population replaced with random individuals
+  "fitness_sharing_sigma":  0.08,   // RMS genetic distance threshold for fitness sharing
+  "tournament_k":           2       // Tournament selection size
 }
 ```
 
@@ -134,6 +139,11 @@ Written to `user://metrics.json` (snapshot) and `user://metrics.jsonl` (appended
 | `black_tournament_score_best/avg` | Same for black |
 | `white_material_avg` / `black_material_avg` | Mean material at game end |
 | `generation_time_sec` | Wall time for this generation |
+| `combined_best` | `min(white_best, black_best)` — balanced optimization metric |
+| `white_hof_avg_elo` / `black_hof_avg_elo` | Mean Elo in Hall of Fame |
+| `white_hof_top_elo` / `black_hof_top_elo` | Top Elo in Hall of Fame |
+| `white_elo_min/p25/median/p75/max` | White Elo distribution |
+| `black_elo_min/p25/median/p75/max` | Black Elo distribution |
 
 ---
 
@@ -199,20 +209,26 @@ wait
 
 ## Sweep Hyperparameter Ranges
 
-The Bayesian sweep (`sweep_config.yaml`) maximises `best_fitness` with early stopping.
+The Bayesian sweep (`sweep_config.py`) maximises `combined_best = min(white_best, black_best)` for balanced improvement.
 
 | Parameter | Type | Range / Values |
 |-----------|------|----------------|
-| `population_size` | values | 20, 30, 50 |
-| `hidden_size` | values | 32, 64, 128 |
-| `elite_count` | values | 2, 3, 5 |
-| `mutation_rate` | uniform | [0.05, 0.35] |
-| `mutation_strength` | uniform | [0.05, 0.4] |
-| `crossover_rate` | uniform | [0.5, 0.9] |
-| `games_per_individual` | values | 1, 2, 3 |
-| `max_moves_per_game` | values | 60, 100, 150 |
-| `max_generations` | fixed | 50 |
-| `tournament_opponents` | values | 2, 3, 5 |
+| `population_size` | values | 30, 50 |
+| `hidden_size` | values | 32, 64 |
+| `elite_count` | fixed | 2 |
+| `mutation_rate` | uniform | [0.15, 0.40] |
+| `mutation_strength` | uniform | [0.05, 0.20] |
+| `crossover_rate` | uniform | [0.60, 0.85] |
+| `games_per_individual` | values | 2, 3 |
+| `max_moves_per_game` | fixed | 100 |
+| `max_generations` | fixed | 10 |
+| `tournament_opponents` | fixed | 5 |
+| `immigration_rate` | uniform | [0.05, 0.20] |
+| `fitness_sharing_sigma` | uniform | [0.03, 0.15] |
+| `tournament_k` | fixed | 2 |
+
+See `sweep_config.py` for alternative profiles (`sweep_config_quick`, `sweep_config_deep`).
+For guidance on tuning these parameters, see [Improving Training](IMPROVING_TRAINING.md).
 
 ---
 

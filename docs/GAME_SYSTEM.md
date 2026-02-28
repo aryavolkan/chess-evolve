@@ -165,12 +165,12 @@ The encoder caches its result on the `BoardState` to avoid redundant recomputati
 `ChessEncoder.decode_move(outputs, legal_moves) → int`
 
 ```
-For each legal move (from, to):
-    score = outputs[from] + outputs[to+64]
+For each legal move (from_sq, to_sq):
+    score = outputs[from_sq * 64 + to_sq]
 return legal_move with highest score
 ```
 
-This factored 128-output scheme (64 from-scores + 64 to-scores) approximates a full 4096-output policy head while using far fewer parameters.
+Each of the 4096 outputs corresponds to one (from_square, to_square) pair. Only legal moves are scored; illegal move outputs are ignored.
 
 ---
 

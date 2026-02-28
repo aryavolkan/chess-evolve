@@ -11,14 +11,14 @@ Chess-Evolve uses **coevolutionary neuroevolution**: two separate populations (w
 ### Architecture
 
 ```
-Inputs (389)  →  Hidden (tanh, default 64)  →  Outputs (tanh, 128)
+Inputs (389)  →  Hidden (tanh, default 64)  →  Outputs (tanh, 4096)
 ```
 
 | Layer | Default size | Notes |
 |-------|-------------|-------|
 | Input | 389 | Board encoding (see below) |
 | Hidden | 64 (configurable) | Single hidden layer, tanh activation |
-| Output | 128 | from-square logits (64) + to-square logits (64) |
+| Output | 4096 | One logit per (from_square × 64 + to_square) pair |
 
 ### Board Encoding (389 inputs)
 
@@ -33,16 +33,13 @@ The encoder also caches the result on the `BoardState` object and marks it dirty
 ### Move Decoding
 
 ```
-outputs[0..63]  = from-square logits
-outputs[64..127] = to-square logits
-
-For each legal move (packed as from*64+to):
-    score = outputs[from_sq] + outputs[to_sq]
+For each legal move (packed as from_sq * 64 + to_sq):
+    score = outputs[from_sq * 64 + to_sq]
 
 best_move = legal_moves.argmax(score)
 ```
 
-This avoids needing a full 4096-element output plane — the 128-element factored representation covers all 64×64 from/to combinations with only 128 outputs.
+Each of the 4096 outputs corresponds to one (from_square, to_square) pair. Only legal moves are considered — illegal move outputs are ignored. This replaces an earlier 128-output factored scheme and allows the network to express move-specific preferences.
 
 ### Weight Initialisation
 - `weights_ih` / `weights_ho`: He initialisation, scale = `sqrt(2 / fan_in)`
@@ -177,7 +174,7 @@ Higher-rated entries are more likely to be selected, encouraging agents to learn
 
 When `use_neat = true`, `ChessNeatEvolution` replaces `ChessEvolution`. NEAT uses the same two-population coevolution structure but with sparse, variable-topology networks.
 
-- Input/output sizes: same as standard NE (389 / 128)
+- Input/output sizes: same as standard NE (389 / 4096, though NEAT config currently defaults to 128)
 - Speciation with compatibility threshold (default configurable)
 - Node mutation: split existing connection → insert hidden node
 - Connection mutation: add random new connection

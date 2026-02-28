@@ -9,7 +9,7 @@ godot --headless --script test/test_runner.gd
 
 ## Project Conventions
 
-- **Pure GDScript** — no C#, no GDExtension, no external dependencies
+- **GDScript + optional Rust GDExtension** — no C#, no external GDScript dependencies. Rust crates in `rust/` provide optional acceleration.
 - **RefCounted base** for non-scene classes (no manual memory management)
 - **Tests for everything** — if you add logic, add tests in `test/`
 - **Constants in one place** — piece types, values, and symbols live in `chess/constants.gd`
@@ -30,9 +30,9 @@ godot --headless --script test/test_runner.gd
 ## Key Design Decisions
 
 - **Signed piece planes** (±1) instead of 12 separate planes — keeps input size manageable at 389
-- **From+To output decoding** — simpler than 4096 (64×64) output; works with legal move filtering
+- **4096 (64×64) output space** — one logit per from-to pair, masked to legal moves
 - **Independent white/black evolution** — allows asymmetric specialization
-- **Fitness averaging** over multiple games — reduces variance from random pairings
+- **Tournament evaluation** over multiple opponents — reduces variance from random pairings
 
 ## Pull Request Process
 
