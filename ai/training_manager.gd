@@ -83,7 +83,7 @@ var curriculum_stages: Array = [
 ]
 
 # Move generation configuration
-var use_bitboard_movegen: bool = false  # Use BitboardState for fast legal move generation
+var use_bitboard_movegen: bool = true  # Use BitboardState for fast legal move generation
 
 # Hall of Fame configuration
 var hall_of_fame_ratio: float = 0.5  # Ratio of games against Hall of Fame opponents (0.0-1.0)

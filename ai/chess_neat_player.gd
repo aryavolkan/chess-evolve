@@ -27,28 +27,4 @@ func select_move(board: BoardStateScript) -> int:
 
     var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(board)
     var outputs: PackedFloat32Array = network.forward(inputs)
-    var count: int = mini(legal_moves.size(), outputs.size())
-    if count <= 0:
-        return legal_moves[0]
-
-    var max_logit := -INF
-    for i in count:
-        max_logit = maxf(max_logit, outputs[i])
-
-    var best_idx := 0
-    var best_prob := -INF
-    var exp_sum := 0.0
-    var exp_vals := PackedFloat32Array()
-    exp_vals.resize(count)
-    for i in count:
-        var exp_val := exp(outputs[i] - max_logit)
-        exp_vals[i] = exp_val
-        exp_sum += exp_val
-
-    for i in count:
-        var prob := exp_vals[i] / exp_sum if exp_sum > 0.0 else 0.0
-        if prob > best_prob:
-            best_prob = prob
-            best_idx = i
-
-    return legal_moves[best_idx]
+    return ChessEncoderScript.decode_move(outputs, legal_moves)

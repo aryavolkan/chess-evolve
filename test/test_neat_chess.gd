@@ -44,7 +44,7 @@ func _run_tests() -> void:
     _test("select_move returns valid legal move", func():
         var config := NeatConfigScript.new()
         config.input_count = 389
-        config.output_count = 218
+        config.output_count = 4096
         var tracker := NeatInnovationScript.new(config.input_count + config.output_count)
         var genome := NeatGenomeScript.create(config, tracker)
         genome.create_basic()
@@ -59,7 +59,7 @@ func _run_tests() -> void:
     _test("select_move works from starting position", func():
         var config := NeatConfigScript.new()
         config.input_count = 389
-        config.output_count = 218
+        config.output_count = 4096
         var tracker := NeatInnovationScript.new(config.input_count + config.output_count)
         var genome := NeatGenomeScript.create(config, tracker)
         genome.create_basic()
@@ -75,7 +75,7 @@ func _run_tests() -> void:
     _test("select_move works with a single legal move", func():
         var config := NeatConfigScript.new()
         config.input_count = 389
-        config.output_count = 218
+        config.output_count = 4096
         var tracker := NeatInnovationScript.new(config.input_count + config.output_count)
         var genome := NeatGenomeScript.create(config, tracker)
         genome.create_basic()
@@ -100,7 +100,7 @@ func _run_tests() -> void:
     _test("select_move works with zero weights", func():
         var config := NeatConfigScript.new()
         config.input_count = 389
-        config.output_count = 218
+        config.output_count = 4096
         var tracker := NeatInnovationScript.new(config.input_count + config.output_count)
         var genome := NeatGenomeScript.create(config, tracker)
         genome.create_basic()

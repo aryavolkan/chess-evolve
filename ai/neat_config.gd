@@ -8,7 +8,7 @@ class_name NeatConfig
 # ============================================================
 
 var input_count: int = 389
-var output_count: int = 128
+var output_count: int = 4096
 var use_bias: bool = false
 var allow_recurrent: bool = false
 
@@ -59,7 +59,7 @@ var min_species_protected: int = 2
 # INITIAL POPULATION
 # ============================================================
 
-var initial_connections_per_output: int = 10  ## Sparse initial topology (K inputs per output)
+var initial_connections_per_output: int = 5  ## Sparse initial topology (K inputs per output)
 
 # ============================================================
 # PARSIMONY (optional complexity penalty)

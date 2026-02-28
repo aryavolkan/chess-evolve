@@ -5,10 +5,11 @@ extends RefCounted
 ## position evaluation function. Instead of the network directly picking moves,
 ## we search the game tree and use the network to evaluate leaf positions.
 ##
-## Design decision: Since the current network architecture outputs 128 values
+## Design decision: Since the current network architecture outputs 4096 values
 ## (policy network for move preferences), we'll adapt it to work as a value
-## network by summing the outputs to get a single position score. This avoids
-## breaking the existing network structure while transitioning to search-based play.
+## network by taking the mean of the outputs to get a single position score.
+## This avoids breaking the existing network structure while transitioning to
+## search-based play.
 
 const BoardStateScript = preload("res://chess/board_state.gd")
 const ChessEncoderScript = preload("res://chess/encoder.gd")
@@ -100,16 +101,13 @@ func _evaluate_position(state: BoardStateScript) -> float:
     var outputs: PackedFloat32Array = neural_network.forward(inputs)
 
     # Convert policy network output to position score
-    # Since we have 128 outputs (from/to move preferences), we'll interpret
-    # the sum of outputs as a position score. The network learns to output
-    # higher values for better positions.
+    # Take the mean of all 4096 outputs (tanh, range -1 to 1) to get a single
+    # position score in [-1, +1], then scale by 10 to [-10, +10].
     var score := 0.0
-    for i in outputs.size():
+    var n := outputs.size()
+    for i in n:
         score += outputs[i]
-
-    # Normalize to reasonable range and adjust for side to move
-    # Network outputs are tanh (-1 to 1), so sum is roughly -128 to 128
-    score = score / 10.0  # Scale to roughly -12.8 to 12.8
+    score = (score / maxf(1.0, float(n))) * 10.0
 
     # Flip score if it's black's turn (since network sees from current player's view)
     if state.side_to_move == 1:

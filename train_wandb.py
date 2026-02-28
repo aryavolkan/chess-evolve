@@ -41,9 +41,9 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # Default config (overridden by W&B sweep)
 DEFAULT_CONFIG = {
-    "population_size": 20,
+    "population_size": 30,
     "hidden_size": 64,
-    "elite_count": 3,
+    "elite_count": 2,
     "crossover_rate": 0.70,
     "mutation_rate": 0.25,
     "mutation_strength": 0.12,
@@ -54,7 +54,7 @@ DEFAULT_CONFIG = {
     "output_size": 4096,
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
     "use_tournament": True,
-    "tournament_opponents": 2,   # 2 opponents/individual keeps gen time ~10s
+    "tournament_opponents": 5,   # 5 opponents/individual for stronger selection pressure
     "immigration_rate": 0.1,     # fraction of population replaced with random individuals each gen
     "fitness_sharing_sigma": 0.08, # RMS genetic distance threshold for fitness sharing
     "tournament_k": 2,           # tournament selection size (2 = less pressure than 3)
