@@ -38,7 +38,7 @@ var hall_of_fame: Array = []
 var black_hall_of_fame: Array = []
 
 
-func _init(p_pop_size = 50, p_config: NeatConfig = null) -> void:
+func _init(p_pop_size = 50, p_config: NeatConfig = null, p_seed_genome: NeatGenome = null) -> void:
     var config: NeatConfig
     if p_pop_size is NeatConfig:
         config = p_pop_size
@@ -47,8 +47,8 @@ func _init(p_pop_size = 50, p_config: NeatConfig = null) -> void:
         population_size = int(p_pop_size)
         config = p_config if p_config else NeatConfigScript.new()
         config.population_size = population_size
-    white_evolution = NeatEvolutionScript.new(config.duplicate())
-    black_evolution = NeatEvolutionScript.new(config.duplicate())
+    white_evolution = NeatEvolutionScript.new(config.duplicate(), p_seed_genome)
+    black_evolution = NeatEvolutionScript.new(config.duplicate(), p_seed_genome)
 
     white_fitness.resize(population_size)
     black_fitness.resize(population_size)

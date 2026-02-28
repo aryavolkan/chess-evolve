@@ -8,6 +8,8 @@ const Dashboard = preload("res://ui/training_dashboard.gd")
 const ChessEvolution = preload("res://ai/evolution.gd")
 const ChessNeatEvolution = preload("res://ai/chess_neat_evolution.gd")
 const NeatConfig = preload("res://ai/neat_config.gd")
+const NeatGenomeScript = preload("res://ai/neat_genome.gd")
+const NeatInnovationScript = preload("res://ai/neat_innovation.gd")
 const NeatNetwork = preload("res://ai/neat_network.gd")
 const TrainingManager = preload("res://ai/training_manager.gd")
 const ChessEncoder = preload("res://chess/encoder.gd")
@@ -59,7 +61,9 @@ func _ready() -> void:
         neat_config.population_size = config.get("population_size", 30)
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
-        evo = ChessNeatEvolution.new(neat_config)
+        _apply_neat_config(neat_config, config)
+        var seed_genome := _load_seed_genome(config)
+        evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(
             config.get("population_size", 30),
@@ -335,6 +339,110 @@ func _load_config() -> Dictionary:
     return config
 
 
+func _apply_neat_config(neat_config: NeatConfig, config: Dictionary) -> void:
+    ## Apply NEAT-specific config overrides from the training config dictionary.
+    if config.has("neat_add_node_rate"):
+        neat_config.add_node_rate = config["neat_add_node_rate"]
+    if config.has("neat_add_connection_rate"):
+        neat_config.add_connection_rate = config["neat_add_connection_rate"]
+    if config.has("neat_initial_connections_per_output"):
+        neat_config.initial_connections_per_output = int(config["neat_initial_connections_per_output"])
+    if config.has("neat_weight_mutate_rate"):
+        neat_config.weight_mutate_rate = config["neat_weight_mutate_rate"]
+    if config.has("neat_weight_perturb_strength"):
+        neat_config.weight_perturb_strength = config["neat_weight_perturb_strength"]
+    if config.has("neat_compatibility_threshold"):
+        neat_config.compatibility_threshold = config["neat_compatibility_threshold"]
+    if config.has("neat_target_species_count"):
+        neat_config.target_species_count = int(config["neat_target_species_count"])
+    if config.has("neat_crossover_rate"):
+        neat_config.crossover_rate = config["neat_crossover_rate"]
+    if config.has("neat_elite_fraction"):
+        neat_config.elite_fraction = config["neat_elite_fraction"]
+    if config.has("neat_stagnation_threshold"):
+        neat_config.stagnation_threshold = int(config["neat_stagnation_threshold"])
+    if config.has("neat_parsimony_coefficient"):
+        neat_config.parsimony_coefficient = config["neat_parsimony_coefficient"]
+
+
+func _load_seed_genome(config: Dictionary) -> NeatGenome:
+    ## Load a seed genome from the path specified in config, or return null.
+    var path: String = config.get("neat_seed_genome_path", "")
+    if path.is_empty():
+        return null
+
+    if not FileAccess.file_exists(path):
+        push_warning("Seed genome file not found: %s" % path)
+        return null
+
+    var file := FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        push_warning("Could not open seed genome: %s" % path)
+        return null
+
+    var json := JSON.new()
+    if json.parse(file.get_as_text()) != OK:
+        file.close()
+        push_warning("Failed to parse seed genome JSON: %s" % path)
+        return null
+    file.close()
+
+    var data: Dictionary = json.get_data()
+    # Create a temporary tracker for deserialization; the real tracker will be seeded later
+    var tmp_config := NeatConfig.new()
+    tmp_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
+    tmp_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
+    var tmp_tracker := NeatInnovationScript.new()
+    var genome := NeatGenomeScript.deserialize(data, tmp_config, tmp_tracker)
+
+    var hidden_count := 0
+    for node in genome.node_genes:
+        if node.type == 1:
+            hidden_count += 1
+    print("Loaded seed genome: %d nodes (%d hidden), %d connections" % [
+        genome.node_genes.size(), hidden_count, genome.connection_genes.size()
+    ])
+    return genome
+
+
+func _save_best_genome(config: Dictionary) -> void:
+    ## Save the best all-time genome to disk.
+    if training_manager == null or training_manager.evolution == null:
+        return
+    var evo = training_manager.evolution
+    if not evo is ChessNeatEvolution:
+        return
+
+    var best_genome: NeatGenome = null
+    var best_fitness: float = -INF
+
+    if evo.all_time_best_white != null and evo.all_time_best_white_fitness > best_fitness:
+        best_genome = evo.all_time_best_white
+        best_fitness = evo.all_time_best_white_fitness
+    if evo.all_time_best_black != null and evo.all_time_best_black_fitness > best_fitness:
+        best_genome = evo.all_time_best_black
+        best_fitness = evo.all_time_best_black_fitness
+
+    if best_genome == null:
+        return
+
+    var save_path: String = config.get("neat_save_genome_path", "user://neat_best_genome.json")
+    var data := best_genome.serialize()
+    data["metadata"] = {
+        "generation": evo.generation,
+        "fitness": best_fitness,
+        "population_size": evo.population_size,
+    }
+
+    var file := FileAccess.open(save_path, FileAccess.WRITE)
+    if file == null:
+        push_warning("Could not save genome to: %s" % save_path)
+        return
+    file.store_string(JSON.stringify(data, "\t"))
+    file.close()
+    print("Saved best genome (fitness=%.2f) to %s" % [best_fitness, save_path])
+
+
 func _run_auto_train() -> void:
     ## Run headless training without UI (for sweep/overnight runs)
     print("Starting auto-train mode...")
@@ -352,7 +460,9 @@ func _run_auto_train() -> void:
         neat_config.population_size = config.get("population_size", 30)
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
-        evo = ChessNeatEvolution.new(neat_config)
+        _apply_neat_config(neat_config, config)
+        var seed_genome := _load_seed_genome(config)
+        evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(
             config.get("population_size", 30),
@@ -448,6 +558,10 @@ func _run_auto_train() -> void:
     if not use_neat:
         evo.write_elite_contrib(worker_id)
 
+    # Save best NEAT genome for seeding future runs
+    if use_neat:
+        _save_best_genome(config)
+
     print("Auto-train complete!")
     get_tree().quit()
 
@@ -499,7 +613,9 @@ func _run_human_play_mode() -> void:
         neat_config.population_size = config.get("population_size", 30)
         neat_config.input_count = config.get("input_size", ChessEncoder.INPUT_SIZE)
         neat_config.output_count = config.get("output_size", ChessEncoder.MOVE_OUTPUT_SIZE)
-        evo = ChessNeatEvolution.new(neat_config)
+        _apply_neat_config(neat_config, config)
+        var seed_genome := _load_seed_genome(config)
+        evo = ChessNeatEvolution.new(neat_config, null, seed_genome)
     else:
         evo = ChessEvolution.new(
             config.get("population_size", 30),

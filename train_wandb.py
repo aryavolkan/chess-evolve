@@ -61,6 +61,14 @@ DEFAULT_CONFIG = {
     "use_opening_book": True,
     "opening_book_depth": 6,
     "move_temperature": 0.5,     # softmax temperature for move selection (0 = deterministic)
+    # NEAT-specific defaults
+    "use_neat": False,
+    "neat_add_node_rate": 0.15,
+    "neat_add_connection_rate": 0.25,
+    "neat_initial_connections_per_output": 10,
+    "neat_target_species_count": 5,
+    "neat_seed_genome_path": "",
+    "neat_save_genome_path": "user://neat_best_genome.json",
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -118,6 +126,10 @@ CHESS_LOG_KEYS = [
     "black_elo_median",
     "black_elo_p75",
     "black_elo_max",
+    # NEAT topology metrics
+    "neat_hidden_nodes_avg",
+    "neat_connections_avg",
+    "neat_species_count",
 ]
 
 

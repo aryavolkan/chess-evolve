@@ -31,8 +31,8 @@ var weight_mutate_rate: float = 0.8
 var weight_perturb_rate: float = 0.9
 var weight_perturb_strength: float = 0.3
 var weight_reset_range: float = 2.0
-var add_node_rate: float = 0.03
-var add_connection_rate: float = 0.05
+var add_node_rate: float = 0.10
+var add_connection_rate: float = 0.20
 var disable_connection_rate: float = 0.01
 
 # ============================================================
@@ -59,7 +59,7 @@ var min_species_protected: int = 2
 # INITIAL POPULATION
 # ============================================================
 
-var initial_connections_per_output: int = 5  ## Sparse initial topology (K inputs per output)
+var initial_connections_per_output: int = 10  ## Sparse initial topology (K inputs per output)
 
 # ============================================================
 # PARSIMONY (optional complexity penalty)

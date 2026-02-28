@@ -67,6 +67,32 @@ static func create(p_config: NeatConfig, p_tracker: NeatInnovation) -> NeatGenom
     return genome
 
 
+static func create_from_topology(
+    template: NeatGenome, p_config: NeatConfig, p_tracker: NeatInnovation
+) -> NeatGenome:
+    ## Clone a template genome's topology (nodes, connections, innovation numbers)
+    ## but randomize weights and biases for population diversity.
+    var genome := NeatGenome.new()
+    genome.config = p_config
+    genome.innovation_tracker = p_tracker
+
+    for node in template.node_genes:
+        var new_node := NodeGene.new(node.id, node.type)
+        new_node.bias = randf_range(-1.0, 1.0)
+        genome.node_genes.append(new_node)
+
+    for conn in template.connection_genes:
+        var new_conn := ConnectionGene.new(
+            conn.in_id, conn.out_id,
+            randf_range(-2.0, 2.0),
+            conn.innovation
+        )
+        new_conn.enabled = conn.enabled
+        genome.connection_genes.append(new_conn)
+
+    return genome
+
+
 func create_basic() -> void:
     ## Sparse initial topology: connect each output to K random inputs.
     var input_ids: Array[int] = []

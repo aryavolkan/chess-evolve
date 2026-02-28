@@ -18,22 +18,30 @@ var best_genome: NeatGenome = null
 var all_time_best_fitness: float = -INF
 var all_time_best_genome: NeatGenome = null
 
+var seed_genome: NeatGenome = null
 var _next_species_id: int = 0
 
 
-func _init(p_config: NeatConfig) -> void:
+func _init(p_config: NeatConfig, p_seed_genome: NeatGenome = null) -> void:
     config = p_config
     population_size = config.population_size
     var node_count := config.input_count + config.output_count + int(config.use_bias)
     innovation_tracker = NeatInnovation.new(node_count)
+    seed_genome = p_seed_genome
+    if seed_genome:
+        innovation_tracker.seed_from_genome(seed_genome)
     _initialize_population()
 
 
 func _initialize_population() -> void:
     population.clear()
     for i in config.population_size:
-        var genome := NeatGenome.create(config, innovation_tracker)
-        genome.create_basic()
+        var genome: NeatGenome
+        if seed_genome:
+            genome = NeatGenome.create_from_topology(seed_genome, config, innovation_tracker)
+        else:
+            genome = NeatGenome.create(config, innovation_tracker)
+            genome.create_basic()
         population.append(genome)
     population_size = config.population_size
     generation = 0

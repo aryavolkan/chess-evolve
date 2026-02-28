@@ -36,5 +36,21 @@ func get_next_node_id() -> int:
     return _next_node_id
 
 
+func seed_from_genome(genome) -> void:
+    ## Seed tracker state from an existing genome so new mutations get
+    ## consistent innovation numbers that don't collide with the template.
+    # Set _next_node_id past max node ID in genome
+    for node in genome.node_genes:
+        if node.id >= _next_node_id:
+            _next_node_id = node.id + 1
+
+    # Set _next_innovation past max innovation number and populate cache
+    for conn in genome.connection_genes:
+        if conn.innovation >= _next_innovation:
+            _next_innovation = conn.innovation + 1
+        var key := "%d:%d" % [conn.in_id, conn.out_id]
+        _innovation_cache[key] = conn.innovation
+
+
 func reset_generation_cache() -> void:
     _innovation_cache.clear()

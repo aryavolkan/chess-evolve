@@ -1018,6 +1018,11 @@ func get_stats() -> Dictionary:
         "games_per_sec": games_per_sec,
         "moves_per_sec": moves_per_sec,
 
+        # NEAT topology stats
+        "neat_hidden_nodes_avg": _get_neat_hidden_nodes_avg(),
+        "neat_connections_avg": _get_neat_connections_avg(),
+        "neat_species_count": _get_neat_species_count(),
+
         # MAP-Elites stats
         "use_map_elites": use_map_elites,
         "map_elites_occupied": (
@@ -1050,6 +1055,38 @@ func _get_elo_distribution(hof: Array) -> Dictionary:
         "p75": elos[3 * n / 4],
         "max_elo": elos[n - 1],
     }
+
+
+func _get_neat_hidden_nodes_avg() -> float:
+    if not use_neat or evolution == null:
+        return 0.0
+    var pop: Array = evolution.white_evolution.population
+    if pop.is_empty():
+        return 0.0
+    var total := 0
+    for genome in pop:
+        for node in genome.node_genes:
+            if node.type == 1:
+                total += 1
+    return float(total) / pop.size()
+
+
+func _get_neat_connections_avg() -> float:
+    if not use_neat or evolution == null:
+        return 0.0
+    var pop: Array = evolution.white_evolution.population
+    if pop.is_empty():
+        return 0.0
+    var total := 0
+    for genome in pop:
+        total += genome.get_enabled_connection_count()
+    return float(total) / pop.size()
+
+
+func _get_neat_species_count() -> int:
+    if not use_neat or evolution == null:
+        return 0
+    return evolution.white_evolution.species_list.size()
 
 
 func _update_map_elites_archive() -> void:
