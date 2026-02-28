@@ -59,7 +59,7 @@ var min_species_protected: int = 2
 # INITIAL POPULATION
 # ============================================================
 
-var initial_connections_per_output: int = 10  ## Sparse initial topology (K inputs per output)
+var initial_connections_per_output: int = 5  ## Sparse initial topology (K inputs per output)
 
 # ============================================================
 # PARSIMONY (optional complexity penalty)

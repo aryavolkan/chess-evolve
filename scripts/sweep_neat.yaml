@@ -19,13 +19,13 @@ parameters:
     max: 0.40
 
   neat_initial_connections_per_output:
-    values: [5, 10]
+    value: 5
 
   neat_target_species_count:
     values: [3, 5, 8]
 
   population_size:
-    value: 50
+    values: [30, 50]
 
   tournament_opponents:
     values: [3, 5]
