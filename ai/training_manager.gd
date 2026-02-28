@@ -34,9 +34,12 @@ var record_replays: bool = false  # Enable to save every game as a replay file
 var use_minimax: bool = false  # Use minimax search instead of direct network output
 var minimax_depth: int = 2    # Search depth for minimax (2-3 recommended)
 
+# Move selection temperature (0.0 = deterministic argmax, >0 = softmax sampling)
+var move_temperature: float = 0.5
+
 # Curriculum configuration
 # Opening book configuration
-var use_opening_book: bool = false
+var use_opening_book: bool = true
 var opening_book_depth: int = 6  # Max half-moves to use from book
 
 var use_curriculum: bool = true
@@ -773,7 +776,7 @@ func _play_game(
                 else:
                     var inputs2: PackedFloat32Array = ChessEncoderScript.encode_board(state)
                     outputs = net.forward(inputs2)
-                chosen = ChessEncoderScript.decode_move(outputs, legal_moves)
+                chosen = ChessEncoderScript.decode_move(outputs, legal_moves, move_temperature)
 
         if chosen == -1:
             break  # Invalid move

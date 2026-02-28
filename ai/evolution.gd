@@ -228,11 +228,24 @@ func _apply_fitness_sharing(pop: Array, fitness: PackedFloat32Array) -> PackedFl
     ## on how many neighbors are within genetic distance sigma. This penalizes
     ## clusters of identical genotypes and rewards unique strategies.
     ## Returns a new fitness array (does not modify the original).
+    ## Handles negative fitness by shifting to non-negative before sharing,
+    ## then shifting back, so that sharing always penalizes crowded individuals.
     if fitness_sharing_sigma <= 0.0 or pop.size() < 2:
         return fitness.duplicate()
 
-    var shared := fitness.duplicate()
     var n := pop.size()
+
+    # Find minimum fitness to shift values non-negative before sharing.
+    # Without this, dividing negative fitness by niche count would make it
+    # less negative (closer to 0), incorrectly rewarding crowded losers.
+    var min_fitness: float = fitness[0]
+    for i in range(1, n):
+        min_fitness = minf(min_fitness, fitness[i])
+
+    var shift: float = -min_fitness if min_fitness < 0.0 else 0.0
+
+    var shared := PackedFloat32Array()
+    shared.resize(n)
 
     # Precompute weight vectors (use only hidden biases for speed — they are
     # compact and sufficient to distinguish genotypes)
@@ -247,7 +260,9 @@ func _apply_fitness_sharing(pop: Array, fitness: PackedFloat32Array) -> PackedFl
             if dist < fitness_sharing_sigma:
                 niche_count += 1.0 - (dist / fitness_sharing_sigma)
         if niche_count > 0.0:
-            shared[i] = fitness[i] / niche_count
+            shared[i] = (fitness[i] + shift) / niche_count - shift
+        else:
+            shared[i] = fitness[i]
     return shared
 
 

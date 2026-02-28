@@ -37,7 +37,7 @@ func _run_tests() -> void:
         assert_eq(evo.black_pop.size(), 6)
     )
 
-    _test("fitness values are non-negative after generation", func():
+    _test("fitness values are finite after generation", func():
         var evo = ChessEvolutionScript.new(6, 389, 16, 128, 2, 0.15, 0.2, 0.7)
         var tm = TrainingManagerScript.new(evo, 2, 50)
         tm.use_minimax = false
@@ -50,10 +50,10 @@ func _run_tests() -> void:
                 var b_idx: int = randi() % int(evo.population_size)
                 _play_test_game(evo, w_idx, b_idx, 50)
 
-        # Check all fitness values are non-negative
+        # Check all fitness values are finite (negative values allowed for losers)
         for i in evo.population_size:
-            assert_true(evo.white_fitness[i] >= 0.0, "White fitness[%d] should be >= 0" % i)
-            assert_true(evo.black_fitness[i] >= 0.0, "Black fitness[%d] should be >= 0" % i)
+            assert_true(is_finite(evo.white_fitness[i]), "White fitness[%d] should be finite" % i)
+            assert_true(is_finite(evo.black_fitness[i]), "Black fitness[%d] should be finite" % i)
     )
 
     _test("best fitness tracked across generations", func():

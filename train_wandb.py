@@ -58,6 +58,9 @@ DEFAULT_CONFIG = {
     "immigration_rate": 0.1,     # fraction of population replaced with random individuals each gen
     "fitness_sharing_sigma": 0.08, # RMS genetic distance threshold for fitness sharing
     "tournament_k": 2,           # tournament selection size (2 = less pressure than 3)
+    "use_opening_book": True,
+    "opening_book_depth": 6,
+    "move_temperature": 0.5,     # softmax temperature for move selection (0 = deterministic)
 }
 
 _PROJECT_PATH_DEFAULT = next(

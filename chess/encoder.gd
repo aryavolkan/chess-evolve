@@ -57,22 +57,51 @@ static func encode_board(state) -> PackedFloat32Array:
     return inputs
 
 
-static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Array) -> int:
+static func decode_move(outputs: PackedFloat32Array, legal_moves: PackedInt32Array, temperature: float = 0.0) -> int:
     ## Decode network output into a legal move.
     ## Each from-to pair has a unique output: index = from_sq * 64 + to_sq.
+    ## When temperature <= 0.0, uses argmax (deterministic). When > 0.0, uses
+    ## softmax sampling for stochastic exploration.
     if legal_moves.is_empty():
         return -1
 
-    var best_move := legal_moves[0]
-    var best_score := -INF
-
-    for move in legal_moves:
+    # Collect scores for legal moves
+    var scores := PackedFloat32Array()
+    scores.resize(legal_moves.size())
+    for i in legal_moves.size():
+        var move := legal_moves[i]
         var from_sq := BoardState.move_from(move)
         var to_sq := BoardState.move_to(move)
         var idx := from_sq * 64 + to_sq
-        var score: float = outputs[idx] if idx < outputs.size() else 0.0
-        if score > best_score:
-            best_score = score
-            best_move = move
+        scores[i] = outputs[idx] if idx < outputs.size() else 0.0
 
-    return best_move
+    # Argmax (temperature=0 or single move)
+    if temperature <= 0.0 or legal_moves.size() == 1:
+        var best_i := 0
+        for i in range(1, scores.size()):
+            if scores[i] > scores[best_i]:
+                best_i = i
+        return legal_moves[best_i]
+
+    # Softmax sampling with temperature
+    var max_score := scores[0]
+    for i in range(1, scores.size()):
+        max_score = maxf(max_score, scores[i])
+
+    var inv_temp := 1.0 / temperature
+    var exp_sum := 0.0
+    var exp_vals := PackedFloat32Array()
+    exp_vals.resize(scores.size())
+    for i in scores.size():
+        var v := exp((scores[i] - max_score) * inv_temp)
+        exp_vals[i] = v
+        exp_sum += v
+
+    # Weighted random sample
+    var r := randf() * exp_sum
+    var acc := 0.0
+    for i in exp_vals.size():
+        acc += exp_vals[i]
+        if r <= acc:
+            return legal_moves[i]
+    return legal_moves[legal_moves.size() - 1]

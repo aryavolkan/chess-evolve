@@ -8,7 +8,7 @@ const EndgameHintsScript = preload("res://chess/endgame_hints.gd")
 # Weights for fitness components (mutable for curriculum)
 static var win_bonus: float = 10.0
 static var draw_bonus: float = 3.0
-static var loss_penalty: float = 0.0
+static var loss_penalty: float = -2.0
 static var material_weight: float = 1.0
 static var mobility_weight: float = 0.05
 static var king_safety_weight: float = 0.5
@@ -69,7 +69,7 @@ static func evaluate(state, color: int, move_count: int) -> float:
     # Reward for longer games (encourages learning to play)
     fitness += move_count * move_count_bonus
 
-    return maxf(fitness, 0.0)
+    return fitness
 
 
 static func evaluate_from_metrics(

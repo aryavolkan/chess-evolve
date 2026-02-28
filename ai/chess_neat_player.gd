@@ -20,11 +20,11 @@ func refresh_network() -> void:
     network = NeatNetworkScript.from_genome(genome)
 
 
-func select_move(board: BoardStateScript) -> int:
+func select_move(board: BoardStateScript, temperature: float = 0.0) -> int:
     var legal_moves := board.generate_legal_moves()
     if legal_moves.is_empty():
         return -1
 
     var inputs: PackedFloat32Array = ChessEncoderScript.encode_board(board)
     var outputs: PackedFloat32Array = network.forward(inputs)
-    return ChessEncoderScript.decode_move(outputs, legal_moves)
+    return ChessEncoderScript.decode_move(outputs, legal_moves, temperature)

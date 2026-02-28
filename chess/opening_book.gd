@@ -14,7 +14,7 @@ static var _initialized: bool = false
 static func lookup(state) -> int:
 	## Look up a position in the opening book. Returns an encoded move or -1.
 	_ensure_initialized()
-	var key := state.get_position_key()
+	var key = state.get_position_key()
 	if not _book.has(key):
 		return -1
 	var candidates: Array = _book[key]
@@ -41,7 +41,7 @@ static func has_position(state) -> bool:
 static func get_candidates(state) -> Array:
 	## Returns all book moves for a position as Array of {move: int, weight: float}.
 	_ensure_initialized()
-	var key := state.get_position_key()
+	var key = state.get_position_key()
 	if not _book.has(key):
 		return []
 	return _book[key]
