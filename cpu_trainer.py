@@ -45,6 +45,11 @@ class CPUTrainer:
         self.immigration_rate = config.get("immigration_rate", 0.1)
         self.tournament_opponents = config.get("tournament_opponents", 5)
 
+        # Speciation (weight-distance based, via evolve_ga).
+        # Uses dynamic threshold adjustment to hit target species count,
+        # matching NEAT's approach. Threshold adapts each generation.
+        self.target_species = config.get("target_species", 20)
+
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
@@ -66,10 +71,21 @@ class CPUTrainer:
         bo = self.output_size
         self.genome_size = ih + bh + ho + bo
 
+        # Initialize speciation threshold to the expected L2 distance between
+        # random Xavier-initialized individuals: E[||a-b||] = 2*sqrt(N/I).
+        # Dynamic adjustment each generation will tune this to hit target_species.
+        expected_l2 = 2.0 * (self.genome_size / self.input_size) ** 0.5
+        self.white_spec_threshold = expected_l2
+        self.black_spec_threshold = expected_l2
+
         # Hall of Fame (stored as numpy arrays)
         self.white_hof: list[tuple[float, np.ndarray]] = []
         self.black_hof: list[tuple[float, np.ndarray]] = []
         self.hof_max_size = 10
+
+        # Species representatives (persisted across generations)
+        self.white_species_reps: list[list[float]] | None = None
+        self.black_species_reps: list[list[float]] | None = None
 
     def _init_population(self) -> np.ndarray:
         """Initialize a population as numpy float32 array (pop_size × genome_size)."""
@@ -241,17 +257,48 @@ class CPUTrainer:
         total = max(1, wins + draws + losses)
         return wins / total, draws / total, losses / total
 
-    def _np_to_list_and_evolve(
-        self, population: np.ndarray, fitness: list[float]
-    ) -> np.ndarray:
-        """Convert numpy population to list for evolve_ga, then back to numpy.
+    def _speciate_and_evolve(
+        self,
+        population: np.ndarray,
+        fitness: list[float],
+        species_reps: list[list[float]] | None,
+        threshold: float,
+    ) -> tuple[np.ndarray, int, list[list[float]], float]:
+        """Assign species, apply fitness sharing, evolve.
 
-        Done one population at a time to limit peak memory.
+        Returns (new_pop, species_count, new_reps, adjusted_threshold).
+        Dynamically adjusts threshold to converge on target_species.
         """
         pop_list = population.tolist()
+
+        # Speciation: assign individuals to species by weight-vector distance
+        species_ids, new_reps = evolve_ga.assign_species(
+            pop_list,
+            threshold=threshold,
+            representatives=species_reps,
+        )
+
+        # Prune empty species: only keep representatives that have members.
+        active = set(species_ids)
+        pruned_reps = [rep for sid, rep in enumerate(new_reps) if sid in active]
+        species_count = len(pruned_reps)
+
+        # Dynamic threshold adjustment (matching NEAT approach):
+        # Proportional step: the farther from target, the bigger the adjustment.
+        if species_count > self.target_species:
+            ratio = species_count / max(1, self.target_species)
+            threshold *= 1.0 + 0.2 * (ratio - 1.0)
+        elif species_count < self.target_species:
+            ratio = self.target_species / max(1, species_count)
+            threshold *= 1.0 / (1.0 + 0.2 * (ratio - 1.0))
+        threshold = max(1.0, threshold)  # floor
+
+        # Shared fitness: divide by species size to encourage diversity
+        shared_fit = evolve_ga.shared_fitness(fitness, species_ids, min_species_size=1)
+
         new_pop_list = evolve_ga.evolve_generation(
             pop_list,
-            fitness,
+            shared_fit,
             elite_count=self.elite_count,
             mutation_rate=self.mutation_rate,
             mutation_strength=self.mutation_strength,
@@ -262,7 +309,7 @@ class CPUTrainer:
         result = np.array(new_pop_list, dtype=np.float32)
         del new_pop_list
         gc.collect()
-        return result
+        return result, species_count, pruned_reps, threshold
 
     def train(
         self,
@@ -322,10 +369,21 @@ class CPUTrainer:
             self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
             self.black_hof = self._update_hof(self.black_hof, black_pop, black_fitness)
 
-            # Evolve populations via Rust GA operators.
-            # Convert numpy → list one at a time to limit peak memory.
-            white_pop = self._np_to_list_and_evolve(white_pop, white_fitness)
-            black_pop = self._np_to_list_and_evolve(black_pop, black_fitness)
+            # Speciate + evolve populations via Rust GA operators.
+            # Fitness sharing encourages diversity by penalizing crowded species.
+            # Threshold adapts dynamically to hit target_species.
+            white_pop, w_species_count, self.white_species_reps, self.white_spec_threshold = (
+                self._speciate_and_evolve(
+                    white_pop, white_fitness, self.white_species_reps,
+                    self.white_spec_threshold,
+                )
+            )
+            black_pop, b_species_count, self.black_species_reps, self.black_spec_threshold = (
+                self._speciate_and_evolve(
+                    black_pop, black_fitness, self.black_species_reps,
+                    self.black_spec_threshold,
+                )
+            )
 
             # Immigration
             white_pop = self._apply_immigration(white_pop)
@@ -392,10 +450,10 @@ class CPUTrainer:
                 "black_elo_median": 0,
                 "black_elo_p75": 0,
                 "black_elo_max": 0,
-                # NEAT placeholders
-                "neat_hidden_nodes_avg": 0,
-                "neat_connections_avg": 0,
-                "neat_species_count": 0,
+                # Species metrics (weight-distance speciation, not NEAT topology)
+                "neat_hidden_nodes_avg": 0,  # fixed topology — no hidden node growth
+                "neat_connections_avg": self.genome_size,  # fixed topology — all connections
+                "neat_species_count": w_species_count + b_species_count,
             }
 
             # Write metrics line to file
