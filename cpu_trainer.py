@@ -49,6 +49,7 @@ class CPUTrainer:
         # Uses dynamic threshold adjustment to hit target species count,
         # matching NEAT's approach. Threshold adapts each generation.
         self.target_species = config.get("target_species", 20)
+        self.use_fitness_sharing = config.get("use_fitness_sharing", True)
 
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
@@ -293,12 +294,16 @@ class CPUTrainer:
             threshold *= 1.0 / (1.0 + 0.2 * (ratio - 1.0))
         threshold = max(1.0, threshold)  # floor
 
-        # Shared fitness: divide by species size to encourage diversity
-        shared_fit = evolve_ga.shared_fitness(fitness, species_ids, min_species_size=1)
+        # Optionally apply fitness sharing (divide by species size).
+        # When disabled, still track species for metrics but use raw fitness.
+        if self.use_fitness_sharing:
+            selection_fit = evolve_ga.shared_fitness(fitness, species_ids, min_species_size=1)
+        else:
+            selection_fit = fitness
 
         new_pop_list = evolve_ga.evolve_generation(
             pop_list,
-            shared_fit,
+            selection_fit,
             elite_count=self.elite_count,
             mutation_rate=self.mutation_rate,
             mutation_strength=self.mutation_strength,
