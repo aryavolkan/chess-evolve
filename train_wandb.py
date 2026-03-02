@@ -246,6 +246,17 @@ def _detect_rust() -> bool:
         return False
 
 
+def _detect_neat_rust() -> bool:
+    """Check if NEAT Rust crate (neat_ga) is available for NEAT training."""
+    try:
+        import importlib.util
+        return (importlib.util.find_spec("neat_ga") is not None
+                and importlib.util.find_spec("chess_cpu") is not None
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "neat_cpu_trainer.py")))
+    except Exception:
+        return False
+
+
 def _detect_pytorch() -> bool:
     """Check if PyTorch + python-chess + gpu_trainer are importable."""
     try:
@@ -259,18 +270,22 @@ def _detect_pytorch() -> bool:
 
 
 _USE_RUST = _detect_rust()
+_USE_NEAT_RUST = _detect_neat_rust()
 _USE_PYTORCH = _detect_pytorch()
 
 
 # --- Training backends ---
 
 def _run_rust_training(run, config, max_gens, elite_pool):
-    """Run training via Rust CPU trainer (chess_cpu + evolve_ga)."""
-    from cpu_trainer import CPUTrainer
-
-    print("🦀 Rust CPU training mode")
-
-    trainer = CPUTrainer(config, _worker.metrics_path)
+    """Run training via Rust CPU trainer (chess_cpu + evolve_ga or neat_ga)."""
+    if config.get("use_neat", False) and _USE_NEAT_RUST:
+        from neat_cpu_trainer import NeatCPUTrainer
+        print("🦀 Rust NEAT CPU training mode")
+        trainer = NeatCPUTrainer(config, _worker.metrics_path)
+    else:
+        from cpu_trainer import CPUTrainer
+        print("🦀 Rust CPU training mode")
+        trainer = CPUTrainer(config, _worker.metrics_path)
 
     def on_generation(metrics):
         log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}

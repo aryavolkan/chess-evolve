@@ -8,6 +8,7 @@ mod encode;
 mod evaluate;
 mod nn;
 mod simulate;
+mod sparse_nn;
 
 /// Reinterpret a byte slice as f32 slice (native endian).
 fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
@@ -165,6 +166,65 @@ fn simulate_games_batch(
         .collect()
 }
 
+/// Simulate a batch of NEAT chess games in parallel using rayon.
+///
+/// NEAT genomes are variable-topology, passed as JSON strings.
+/// Each rayon thread: parse JSON -> build SparseNetwork -> simulate game.
+#[pyfunction]
+#[pyo3(signature = (
+    white_genomes,
+    black_genomes,
+    pairings,
+    output_size = 4096,
+    max_moves = 100,
+    temperature = 0.5,
+    mercy_min_moves = 30,
+    mercy_material_threshold = 20.0,
+))]
+fn simulate_neat_games_batch(
+    py: Python<'_>,
+    white_genomes: Vec<String>,
+    black_genomes: Vec<String>,
+    pairings: Vec<(usize, usize)>,
+    output_size: usize,
+    max_moves: usize,
+    temperature: f32,
+    mercy_min_moves: usize,
+    mercy_material_threshold: f32,
+) -> PyResult<Vec<Py<PyDict>>> {
+    // Release the GIL during heavy computation
+    let results = py.detach(move || {
+        simulate::simulate_neat_games_batch(
+            &white_genomes,
+            &black_genomes,
+            &pairings,
+            output_size,
+            max_moves,
+            temperature,
+            mercy_min_moves,
+            mercy_material_threshold,
+        )
+    });
+
+    results
+        .into_iter()
+        .map(|gr| {
+            let dict = PyDict::new(py);
+            dict.set_item("white_idx", gr.white_idx)?;
+            dict.set_item("black_idx", gr.black_idx)?;
+            dict.set_item("result", gr.result)?;
+            dict.set_item("move_count", gr.move_count)?;
+            dict.set_item("white_material", gr.white_material)?;
+            dict.set_item("black_material", gr.black_material)?;
+            dict.set_item("white_mobility", gr.white_mobility)?;
+            dict.set_item("black_mobility", gr.black_mobility)?;
+            dict.set_item("white_king_safety", gr.white_king_safety)?;
+            dict.set_item("black_king_safety", gr.black_king_safety)?;
+            Ok(dict.into())
+        })
+        .collect()
+}
+
 /// Encode a FEN string into the neural network input vector (389 floats).
 /// Useful for debugging and testing.
 #[pyfunction]
@@ -182,6 +242,7 @@ fn encode_board_fen(fen: &str) -> PyResult<Vec<f32>> {
 fn chess_cpu(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(simulate_game, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_games_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(simulate_neat_games_batch, m)?)?;
     m.add_function(wrap_pyfunction!(encode_board_fen, m)?)?;
     Ok(())
 }
