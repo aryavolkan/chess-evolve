@@ -142,19 +142,77 @@ def _chess_metric_transform(log_data: dict) -> dict:
 
 
 def do_training(config=None, visible=False):
-    """Run a single training session."""
+    """Run a single training session.
+
+    Auto-detects backend: Rust CPU > PyTorch GPU > PyTorch CPU > Godot.
+    """
+    global _worker
     merged = DEFAULT_CONFIG.copy()
     if config:
         merged.update(config)
-    run_training(
-        config=merged,
-        project_path=PROJECT_PATH,
-        app_name="Chess Evolve",
-        wandb_project="chess-evolve",
-        wandb_tags=["chess", "neuroevolution", "coevolution"],
-        visible=visible,
-        log_keys=CHESS_LOG_KEYS,
-    )
+
+    # Check if a non-Godot backend is available
+    _has_cuda = False
+    if _USE_PYTORCH and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
+        try:
+            import torch
+            _has_cuda = torch.cuda.is_available()
+        except ImportError:
+            pass
+
+    if _has_cuda or _USE_RUST or _USE_PYTORCH:
+        # Use sweep infrastructure for worker isolation + W&B logging
+        _worker = SweepWorker(USER_DIR)
+        run = wandb.init(project="chess-evolve", tags=["chess", "neuroevolution", "coevolution"])
+        define_step_metric()
+        run.config.update(merged)
+        max_gens = merged.get("max_generations", 50)
+        _worker.clear_metrics()
+        _worker.write_config(merged)
+
+        elite_pool = GlobalElitePool(USER_DIR)
+        seed_path = elite_pool.write_seed_file(_worker.worker_id)
+        if seed_path:
+            pool_stats = elite_pool.stats()
+            print(
+                f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
+                f"{pool_stats['contributor_count']} run(s), "
+                f"top fitness={pool_stats['top_fitness']:.2f}"
+            )
+        else:
+            print("🧬 No global elites found; starting fresh")
+
+        print(f"\n🎮 Training: pop={merged.get('population_size')}, gens={max_gens}")
+
+        try:
+            if _has_cuda:
+                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cuda")
+            elif _USE_RUST:
+                _run_rust_training(run, merged, max_gens, elite_pool)
+            elif _USE_PYTORCH:
+                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cpu")
+        except KeyboardInterrupt:
+            print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
+            run.finish(exit_code=130)
+        except Exception as e:
+            print(f"\n❌ Worker {_worker.worker_id}: error: {e}")
+            import traceback
+            traceback.print_exc()
+            run.finish(exit_code=1)
+        finally:
+            elite_pool.cleanup_seed_file(_worker.worker_id)
+            _worker.cleanup()
+    else:
+        # Godot fallback
+        run_training(
+            config=merged,
+            project_path=PROJECT_PATH,
+            app_name="Chess Evolve",
+            wandb_project="chess-evolve",
+            wandb_tags=["chess", "neuroevolution", "coevolution"],
+            visible=visible,
+            log_keys=CHESS_LOG_KEYS,
+        )
 
 
 GODOT_PATH = os.environ.get(

@@ -1,0 +1,414 @@
+"""
+CPU-based chess neuroevolution trainer using Rust backends.
+
+Uses chess_cpu for parallel game simulation and evolve_ga for genetic operators.
+Drop-in replacement for Godot-based training, callable from train_wandb.py.
+"""
+import gc
+import json
+import random
+import time
+from pathlib import Path
+from typing import Callable, Optional
+
+import numpy as np
+
+import chess_cpu
+import evolve_ga
+
+
+class CPUTrainer:
+    """CPU-based training loop using Rust chess simulation + GA operators.
+
+    Populations are stored as numpy float32 arrays (pop_size × genome_size)
+    for memory efficiency (~4 bytes/weight vs ~28 bytes for Python floats).
+    """
+
+    def __init__(self, config: dict, metrics_path: Path):
+        self.config = config
+        self.metrics_path = Path(metrics_path)
+
+        # Population parameters
+        self.pop_size = config.get("population_size", 30)
+        self.input_size = config.get("input_size", 389)
+        self.hidden_size = config.get("hidden_size", 64)
+        self.output_size = config.get("output_size", 4096)
+        self.max_moves = config.get("max_moves_per_game", 100)
+        self.temperature = config.get("move_temperature", 0.5)
+
+        # GA parameters
+        self.elite_count = config.get("elite_count", 2)
+        self.crossover_rate = config.get("crossover_rate", 0.70)
+        self.mutation_rate = config.get("mutation_rate", 0.25)
+        self.mutation_strength = config.get("mutation_strength", 0.12)
+        self.tournament_k = config.get("tournament_k", 2)
+        self.immigration_rate = config.get("immigration_rate", 0.1)
+        self.tournament_opponents = config.get("tournament_opponents", 5)
+
+        # Mercy rule
+        self.mercy_min_moves = config.get("mercy_min_moves", 30)
+        self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
+
+        # Fitness weights (matching ai/fitness.gd)
+        self.win_bonus = 10.0
+        self.draw_bonus = 1.5
+        self.loss_penalty = -2.0
+        self.material_weight = 1.0
+        self.mobility_weight = 0.05
+        self.king_safety_weight = 0.5
+        self.move_count_penalty = -0.005
+        self.checkmate_bonus = 5.0
+
+        # Network weight count
+        ih = self.input_size * self.hidden_size
+        bh = self.hidden_size
+        ho = self.hidden_size * self.output_size
+        bo = self.output_size
+        self.genome_size = ih + bh + ho + bo
+
+        # Hall of Fame (stored as numpy arrays)
+        self.white_hof: list[tuple[float, np.ndarray]] = []
+        self.black_hof: list[tuple[float, np.ndarray]] = []
+        self.hof_max_size = 10
+
+    def _init_population(self) -> np.ndarray:
+        """Initialize a population as numpy float32 array (pop_size × genome_size)."""
+        scale = np.float32((2.0 / self.input_size) ** 0.5)  # Xavier init
+        return np.random.randn(self.pop_size, self.genome_size).astype(np.float32) * scale
+
+    def _random_individual_np(self) -> np.ndarray:
+        """Create a single random weight vector as numpy float32."""
+        scale = np.float32((2.0 / self.input_size) ** 0.5)
+        return np.random.randn(self.genome_size).astype(np.float32) * scale
+
+    def _generate_pairings(self) -> list[tuple[int, int]]:
+        """Generate round-robin pairings: each white plays tournament_opponents random blacks."""
+        pairings = []
+        for w_idx in range(self.pop_size):
+            opponents = random.sample(range(self.pop_size), min(self.tournament_opponents, self.pop_size))
+            for b_idx in opponents:
+                pairings.append((w_idx, b_idx))
+        return pairings
+
+    def _compute_fitness(
+        self,
+        results: list[dict],
+        pop_size: int,
+        color: int,
+    ) -> list[float]:
+        """Compute fitness for each individual of the given color.
+
+        Matches the formula in ai/fitness.gd:evaluate_from_metrics().
+        """
+        fitness = [0.0] * pop_size
+        game_counts = [0] * pop_size
+
+        for game in results:
+            if color == 0:
+                idx = game["white_idx"]
+                my_material = game["white_material"]
+                opp_material = game["black_material"]
+                my_king_safety = game["white_king_safety"]
+            else:
+                idx = game["black_idx"]
+                my_material = game["black_material"]
+                opp_material = game["white_material"]
+                my_king_safety = game["black_king_safety"]
+
+            result = game["result"]
+            move_count = game["move_count"]
+            f = 0.0
+
+            # Game result
+            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
+            is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
+
+            if result == 2:  # Draw
+                mat_adv = max(-1.0, min(1.0, (my_material - opp_material) / 10.0))
+                f += self.draw_bonus * (0.5 + 0.5 * mat_adv)
+            elif is_win:
+                f += self.win_bonus
+                f += self.checkmate_bonus
+            elif is_loss:
+                f += self.loss_penalty
+
+            # Material difference
+            f += (my_material - opp_material) * self.material_weight
+
+            # King safety
+            f += my_king_safety * self.king_safety_weight
+
+            # Move count penalty
+            f += move_count * self.move_count_penalty
+
+            fitness[idx] += f
+            game_counts[idx] += 1
+
+        # Average fitness over games played
+        for i in range(pop_size):
+            if game_counts[i] > 0:
+                fitness[i] /= game_counts[i]
+
+        return fitness
+
+    def _compute_tournament_scores(
+        self,
+        results: list[dict],
+        pop_size: int,
+        color: int,
+    ) -> list[float]:
+        """Compute tournament scores: 1.0 for win, 0.5+material_bonus for draw, 0.0 for loss."""
+        scores = [0.0] * pop_size
+        counts = [0] * pop_size
+
+        for game in results:
+            if color == 0:
+                idx = game["white_idx"]
+                my_mat = game["white_material"]
+                opp_mat = game["black_material"]
+            else:
+                idx = game["black_idx"]
+                my_mat = game["black_material"]
+                opp_mat = game["white_material"]
+
+            result = game["result"]
+            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
+
+            if is_win:
+                scores[idx] += 1.0
+            elif result == 2:
+                mat_bonus = max(-0.25, min(0.25, (my_mat - opp_mat) / 40.0))
+                scores[idx] += 0.5 + mat_bonus
+            # loss = 0.0
+
+            counts[idx] += 1
+
+        # Average
+        for i in range(pop_size):
+            if counts[i] > 0:
+                scores[i] /= counts[i]
+
+        return scores
+
+    def _update_hof(
+        self,
+        hof: list[tuple[float, np.ndarray]],
+        population: np.ndarray,
+        fitness: list[float],
+    ) -> list[tuple[float, np.ndarray]]:
+        """Update Hall of Fame with best individuals from current generation."""
+        best_idx = max(range(len(fitness)), key=lambda i: fitness[i])
+        best_fit = fitness[best_idx]
+        best_genome = population[best_idx].copy()
+
+        # Add if HoF not full or better than worst in HoF
+        if len(hof) < self.hof_max_size or best_fit > hof[-1][0]:
+            hof.append((best_fit, best_genome))
+            hof.sort(key=lambda x: -x[0])
+            if len(hof) > self.hof_max_size:
+                hof.pop()
+
+        return hof
+
+    def _apply_immigration(self, population: np.ndarray) -> np.ndarray:
+        """Replace a fraction of the population with random individuals."""
+        n_immigrants = max(1, int(self.pop_size * self.immigration_rate))
+        # Don't replace elites (first elite_count individuals after evolution)
+        replaceable = list(range(self.elite_count, self.pop_size))
+        if len(replaceable) <= n_immigrants:
+            return population
+        targets = random.sample(replaceable, n_immigrants)
+        scale = np.float32((2.0 / self.input_size) ** 0.5)
+        for idx in targets:
+            population[idx] = np.random.randn(self.genome_size).astype(np.float32) * scale
+        return population
+
+    def _compute_outcome_rates(
+        self, results: list[dict], color: int
+    ) -> tuple[float, float, float]:
+        """Compute win/draw/loss rates for a color."""
+        wins = draws = losses = 0
+        for game in results:
+            r = game["result"]
+            is_win = (r == 1 and color == 0) or (r == -1 and color == 1)
+            is_loss = (r == -1 and color == 0) or (r == 1 and color == 1)
+            if is_win:
+                wins += 1
+            elif r == 2:
+                draws += 1
+            elif is_loss:
+                losses += 1
+        total = max(1, wins + draws + losses)
+        return wins / total, draws / total, losses / total
+
+    def _np_to_list_and_evolve(
+        self, population: np.ndarray, fitness: list[float]
+    ) -> np.ndarray:
+        """Convert numpy population to list for evolve_ga, then back to numpy.
+
+        Done one population at a time to limit peak memory.
+        """
+        pop_list = population.tolist()
+        new_pop_list = evolve_ga.evolve_generation(
+            pop_list,
+            fitness,
+            elite_count=self.elite_count,
+            mutation_rate=self.mutation_rate,
+            mutation_strength=self.mutation_strength,
+            crossover_rate=self.crossover_rate,
+            tournament_k=self.tournament_k,
+        )
+        del pop_list
+        result = np.array(new_pop_list, dtype=np.float32)
+        del new_pop_list
+        gc.collect()
+        return result
+
+    def train(
+        self,
+        max_generations: int,
+        on_generation: Optional[Callable[[dict], None]] = None,
+    ) -> dict:
+        """Run the training loop.
+
+        Args:
+            max_generations: Number of generations to train.
+            on_generation: Callback called after each generation with metrics dict.
+
+        Returns:
+            Final metrics dict from the last generation.
+        """
+        white_pop = self._init_population()
+        black_pop = self._init_population()
+
+        last_metrics = {}
+        total_games = 0
+
+        for gen in range(1, max_generations + 1):
+            gen_start = time.time()
+
+            # Generate pairings
+            pairings = self._generate_pairings()
+
+            # Simulate all games in parallel via Rust.
+            # Pass numpy arrays as bytes for memory efficiency.
+            results = chess_cpu.simulate_games_batch(
+                white_pop.tobytes(),
+                black_pop.tobytes(),
+                self.genome_size,
+                pairings,
+                input_size=self.input_size,
+                hidden_size=self.hidden_size,
+                output_size=self.output_size,
+                max_moves=self.max_moves,
+                temperature=self.temperature,
+                mercy_min_moves=self.mercy_min_moves,
+                mercy_material_threshold=self.mercy_material_threshold,
+            )
+
+            gen_time = time.time() - gen_start
+            num_games = len(results)
+            total_games += num_games
+
+            # Compute fitness
+            white_fitness = self._compute_fitness(results, self.pop_size, color=0)
+            black_fitness = self._compute_fitness(results, self.pop_size, color=1)
+
+            # Tournament scores
+            white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)
+            black_tourn = self._compute_tournament_scores(results, self.pop_size, color=1)
+
+            # Update Hall of Fame
+            self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
+            self.black_hof = self._update_hof(self.black_hof, black_pop, black_fitness)
+
+            # Evolve populations via Rust GA operators.
+            # Convert numpy → list one at a time to limit peak memory.
+            white_pop = self._np_to_list_and_evolve(white_pop, white_fitness)
+            black_pop = self._np_to_list_and_evolve(black_pop, black_fitness)
+
+            # Immigration
+            white_pop = self._apply_immigration(white_pop)
+            black_pop = self._apply_immigration(black_pop)
+
+            # Outcome rates
+            w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
+            b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
+
+            # Average game length
+            total_moves = sum(g["move_count"] for g in results)
+            avg_game_length = total_moves / max(1, num_games)
+
+            # Material averages
+            w_mat_avg = sum(g["white_material"] for g in results) / max(1, num_games)
+            b_mat_avg = sum(g["black_material"] for g in results) / max(1, num_games)
+
+            # Games/moves per second
+            games_per_sec = num_games / max(0.001, gen_time)
+            moves_per_sec = total_moves / max(0.001, gen_time)
+
+            # Build metrics dict matching CHESS_LOG_KEYS
+            metrics = {
+                "generation": gen,
+                "white_best": max(white_fitness),
+                "white_avg": sum(white_fitness) / len(white_fitness),
+                "black_best": max(black_fitness),
+                "black_avg": sum(black_fitness) / len(black_fitness),
+                "best_fitness": max(max(white_fitness), max(black_fitness)),
+                "avg_fitness": (sum(white_fitness) + sum(black_fitness)) / (2 * self.pop_size),
+                "games_played": total_games,
+                "total_games_this_gen": num_games,
+                "avg_game_length": avg_game_length,
+                "games_per_sec": games_per_sec,
+                "moves_per_sec": moves_per_sec,
+                "white_win_rate": w_win,
+                "white_draw_rate": w_draw,
+                "white_loss_rate": w_loss,
+                "black_win_rate": b_win,
+                "black_draw_rate": b_draw,
+                "black_loss_rate": b_loss,
+                "white_hof_size": len(self.white_hof),
+                "black_hof_size": len(self.black_hof),
+                "white_tournament_score_best": max(white_tourn) if white_tourn else 0,
+                "white_tournament_score_avg": sum(white_tourn) / max(1, len(white_tourn)),
+                "black_tournament_score_best": max(black_tourn) if black_tourn else 0,
+                "black_tournament_score_avg": sum(black_tourn) / max(1, len(black_tourn)),
+                "white_material_avg": w_mat_avg,
+                "black_material_avg": b_mat_avg,
+                "generation_time_sec": gen_time,
+                "combined_best": min(max(white_fitness), max(black_fitness)),
+                # Elo tracking placeholders (not implemented in CPU trainer)
+                "white_hof_avg_elo": 0,
+                "black_hof_avg_elo": 0,
+                "white_hof_top_elo": 0,
+                "black_hof_top_elo": 0,
+                "white_elo_min": 0,
+                "white_elo_p25": 0,
+                "white_elo_median": 0,
+                "white_elo_p75": 0,
+                "white_elo_max": 0,
+                "black_elo_min": 0,
+                "black_elo_p25": 0,
+                "black_elo_median": 0,
+                "black_elo_p75": 0,
+                "black_elo_max": 0,
+                # NEAT placeholders
+                "neat_hidden_nodes_avg": 0,
+                "neat_connections_avg": 0,
+                "neat_species_count": 0,
+            }
+
+            # Write metrics line to file
+            try:
+                with open(self.metrics_path, "a") as f:
+                    f.write(json.dumps(metrics) + "\n")
+            except OSError:
+                pass
+
+            # Callback
+            if on_generation is not None:
+                on_generation(metrics)
+
+            last_metrics = metrics
+
+        return last_metrics

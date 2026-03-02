@@ -1,0 +1,22 @@
+{
+    "population_size": 200,
+    "hidden_size": 128,
+    "elite_count": 5,
+    "crossover_rate": 0.70,
+    "mutation_rate": 0.20,
+    "mutation_strength": 0.15,
+    "games_per_individual": 2,
+    "max_generations": 150,
+    "max_moves_per_game": 150,
+    "input_size": 389,
+    "output_size": 4096,
+    "use_minimax": false,
+    "use_tournament": true,
+    "tournament_opponents": 5,
+    "immigration_rate": 0.1,
+    "fitness_sharing_sigma": 0.08,
+    "tournament_k": 2,
+    "use_opening_book": true,
+    "opening_book_depth": 6,
+    "move_temperature": 0.5
+}
