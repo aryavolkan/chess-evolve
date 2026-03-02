@@ -72,6 +72,8 @@ class NeatCPUTrainer:
             "add_connection_rate": config.get("add_connection_rate",
                                                config.get("neat_add_connection_rate", 0.20)),
             "disable_connection_rate": config.get("disable_connection_rate", 0.01),
+            "add_node_count": config.get("add_node_count", 1),
+            "add_connection_count": config.get("add_connection_count", 1),
             "elite_fraction": config.get("elite_fraction", 0.1),
             "survival_fraction": config.get("survival_fraction", 0.5),
             "crossover_rate": config.get("crossover_rate", 0.75),

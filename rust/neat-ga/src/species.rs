@@ -127,11 +127,17 @@ pub fn total_adjusted_fitness(population: &[NeatGenome], species: &Species) -> f
 }
 
 /// Adjust compatibility threshold to converge on target species count.
+///
+/// Uses proportional control with clamping to prevent the wild oscillation
+/// (2-190 species) caused by the old fixed-step approach.
 pub fn adjust_threshold(species_count: usize, config: &mut NeatConfig) {
-    if species_count < config.target_species_count {
-        config.compatibility_threshold -= config.threshold_step;
-    } else if species_count > config.target_species_count {
-        config.compatibility_threshold += config.threshold_step;
+    let target = config.target_species_count as f32;
+    let actual = species_count as f32;
+    if target > 0.0 && (actual - target).abs() > 0.5 {
+        let error = (actual - target) / target;
+        let adjustment = error * config.threshold_step;
+        let clamped = adjustment.clamp(-0.5, 0.5);
+        config.compatibility_threshold += clamped;
     }
     config.compatibility_threshold = config.compatibility_threshold.max(0.3);
 }

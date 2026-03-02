@@ -41,6 +41,10 @@ pub struct NeatConfig {
     pub add_connection_rate: f32,
     #[serde(default = "default_disable_connection_rate")]
     pub disable_connection_rate: f32,
+    #[serde(default = "default_add_node_count")]
+    pub add_node_count: usize,
+    #[serde(default = "default_add_connection_count")]
+    pub add_connection_count: usize,
 
     // Reproduction
     #[serde(default = "default_elite_fraction")]
@@ -64,7 +68,7 @@ pub struct NeatConfig {
 }
 
 fn default_input_count() -> usize { 389 }
-fn default_output_count() -> usize { 4096 }
+fn default_output_count() -> usize { 128 }
 fn default_population_size() -> usize { 50 }
 fn default_initial_connections_per_output() -> usize { 5 }
 fn default_compatibility_threshold() -> f32 { 3.0 }
@@ -80,6 +84,8 @@ fn default_weight_reset_range() -> f32 { 2.0 }
 fn default_add_node_rate() -> f32 { 0.10 }
 fn default_add_connection_rate() -> f32 { 0.20 }
 fn default_disable_connection_rate() -> f32 { 0.01 }
+fn default_add_node_count() -> usize { 1 }
+fn default_add_connection_count() -> usize { 1 }
 fn default_elite_fraction() -> f32 { 0.1 }
 fn default_survival_fraction() -> f32 { 0.5 }
 fn default_crossover_rate() -> f32 { 0.75 }
@@ -109,6 +115,8 @@ impl Default for NeatConfig {
             add_node_rate: default_add_node_rate(),
             add_connection_rate: default_add_connection_rate(),
             disable_connection_rate: default_disable_connection_rate(),
+            add_node_count: default_add_node_count(),
+            add_connection_count: default_add_connection_count(),
             elite_fraction: default_elite_fraction(),
             survival_fraction: default_survival_fraction(),
             crossover_rate: default_crossover_rate(),

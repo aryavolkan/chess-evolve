@@ -106,6 +106,61 @@ pub fn decode_move(
     *legal_moves.last().unwrap()
 }
 
+/// Decode network output into a legal move using factored from+to scoring.
+///
+/// With 128 outputs: outputs[0..64] are from-square scores, outputs[64..128] are to-square scores.
+/// Score for a move = outputs[from_sq] + outputs[64 + to_sq].
+pub fn decode_move_factored(
+    outputs: &[f32],
+    legal_moves: &[u32],
+    temperature: f32,
+    rng: &mut impl rand::Rng,
+) -> u32 {
+    debug_assert!(!legal_moves.is_empty());
+
+    let scores: Vec<f32> = legal_moves
+        .iter()
+        .map(|&mv| {
+            let from = ((mv >> 6) & 0x3f) as usize;
+            let to = (mv & 0x3f) as usize;
+            let from_score = if from < outputs.len() { outputs[from] } else { 0.0 };
+            let to_score = if 64 + to < outputs.len() { outputs[64 + to] } else { 0.0 };
+            from_score + to_score
+        })
+        .collect();
+
+    if temperature <= 0.0 || legal_moves.len() == 1 {
+        let mut best_i = 0;
+        let mut best_score = scores[0];
+        for (i, &s) in scores.iter().enumerate().skip(1) {
+            if s > best_score {
+                best_score = s;
+                best_i = i;
+            }
+        }
+        return legal_moves[best_i];
+    }
+
+    let max_score = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let inv_temp = 1.0 / temperature;
+
+    let exp_vals: Vec<f32> = scores
+        .iter()
+        .map(|&s| ((s - max_score) * inv_temp).exp())
+        .collect();
+    let exp_sum: f32 = exp_vals.iter().sum();
+
+    let r: f32 = rng.gen::<f32>() * exp_sum;
+    let mut acc = 0.0;
+    for (i, &e) in exp_vals.iter().enumerate() {
+        acc += e;
+        if r <= acc {
+            return legal_moves[i];
+        }
+    }
+    *legal_moves.last().unwrap()
+}
+
 /// Build a DenseNetwork from a flat weight vector.
 ///
 /// Layout: [weights_ih | biases_h | weights_ho | biases_o]

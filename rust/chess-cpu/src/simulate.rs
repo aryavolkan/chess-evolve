@@ -4,7 +4,7 @@ use rand::SeedableRng;
 use rayon::prelude::*;
 
 use crate::board::ChessBoard;
-use crate::encode::{decode_move, dense_from_flat_weights, encode_board};
+use crate::encode::{decode_move, decode_move_factored, dense_from_flat_weights, encode_board};
 use crate::evaluate::{king_safety_score, material_score, mobility_score};
 use crate::sparse_nn::SparseNetwork;
 
@@ -242,7 +242,11 @@ pub fn simulate_neat_game(
         } else {
             black_net.forward_into(&inputs, &mut b_activations, &mut output);
         }
-        let chosen = decode_move(&output, &legal_moves, temperature, rng);
+        let chosen = if output_size <= 128 {
+            decode_move_factored(&output, &legal_moves, temperature, rng)
+        } else {
+            decode_move(&output, &legal_moves, temperature, rng)
+        };
         board = board.make_move(chosen);
         move_count += 1;
 

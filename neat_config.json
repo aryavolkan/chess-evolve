@@ -3,14 +3,16 @@
     "max_generations": 150,
     "max_moves_per_game": 100,
     "input_size": 389,
-    "output_size": 4096,
+    "output_size": 128,
     "use_neat": true,
     "tournament_opponents": 8,
     "move_temperature": 0.5,
     "initial_connections_per_output": 1,
     "add_node_rate": 0.30,
     "add_connection_rate": 0.40,
-    "target_species_count": 4,
+    "add_node_count": 1,
+    "add_connection_count": 3,
+    "target_species_count": 10,
     "stagnation_threshold": 15,
     "weight_mutate_rate": 0.8,
     "weight_perturb_strength": 0.5,
@@ -18,5 +20,6 @@
     "elite_fraction": 0.1,
     "survival_fraction": 0.5,
     "mercy_min_moves": 30,
-    "mercy_material_threshold": 20.0
+    "mercy_material_threshold": 20.0,
+    "threshold_step": 0.1
 }

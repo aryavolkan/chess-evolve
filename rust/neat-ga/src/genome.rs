@@ -159,10 +159,14 @@ impl NeatGenome {
             self.mutate_weights(config, rng);
         }
         if rng.gen::<f32>() < config.add_connection_rate {
-            self.mutate_add_connection(tracker, rng);
+            for _ in 0..config.add_connection_count {
+                self.mutate_add_connection(tracker, rng);
+            }
         }
         if rng.gen::<f32>() < config.add_node_rate {
-            self.mutate_add_node(tracker, rng);
+            for _ in 0..config.add_node_count {
+                self.mutate_add_node(tracker, rng);
+            }
         }
         if rng.gen::<f32>() < config.disable_connection_rate {
             self.mutate_disable_connection(rng);
