@@ -173,10 +173,12 @@ impl NeatGenome {
     pub fn mutate_weights(&mut self, config: &NeatConfig, rng: &mut impl Rng) {
         let normal = Normal::new(0.0f32, config.weight_perturb_strength).unwrap();
         for conn in &mut self.connections {
-            if rng.gen::<f32>() < config.weight_perturb_rate {
-                conn.weight += normal.sample(rng);
-            } else {
-                conn.weight = rng.gen_range(-config.weight_reset_range..config.weight_reset_range);
+            if rng.gen::<f32>() < config.weight_mutate_rate {
+                if rng.gen::<f32>() < config.weight_perturb_rate {
+                    conn.weight += normal.sample(rng);
+                } else {
+                    conn.weight = rng.gen_range(-config.weight_reset_range..config.weight_reset_range);
+                }
             }
         }
     }
