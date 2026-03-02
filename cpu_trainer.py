@@ -55,15 +55,17 @@ class CPUTrainer:
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
 
-        # Fitness weights (matching ai/fitness.gd)
-        self.win_bonus = 10.0
-        self.draw_bonus = 1.5
-        self.loss_penalty = -2.0
-        self.material_weight = 1.0
-        self.mobility_weight = 0.05
+        # Fitness weights — tuned for continuous selection signal.
+        # With 90% draws, win/loss is essentially random noise.
+        # Material and mobility provide consistent per-game gradient.
+        self.win_bonus = 3.0
+        self.draw_bonus = 1.0
+        self.loss_penalty = -1.0
+        self.material_weight = 3.0
+        self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
-        self.move_count_penalty = -0.005
-        self.checkmate_bonus = 5.0
+        self.move_count_penalty = -0.002
+        self.checkmate_bonus = 1.0
 
         # Network weight count
         ih = self.input_size * self.hidden_size
@@ -87,6 +89,59 @@ class CPUTrainer:
         # Species representatives (persisted across generations)
         self.white_species_reps: list[list[float]] | None = None
         self.black_species_reps: list[list[float]] | None = None
+
+        # Fixed random benchmark population for measuring absolute progress.
+        # Without this, coevolutionary metrics hide improvement because both
+        # sides improve simultaneously, keeping relative metrics flat.
+        self.benchmark_size = 20
+        self.benchmark_pop = self._init_benchmark()
+
+    def _init_benchmark(self) -> np.ndarray:
+        """Create a fixed random population for absolute progress measurement."""
+        scale = np.float32((2.0 / self.input_size) ** 0.5)
+        return np.random.randn(self.benchmark_size, self.genome_size).astype(np.float32) * scale
+
+    def _benchmark_vs_random(
+        self, white_pop: np.ndarray, black_pop: np.ndarray,
+    ) -> tuple[float, float, float, float]:
+        """Test top individuals from each population against fixed random benchmark.
+
+        Returns (white_win_rate, white_material_adv, black_win_rate, black_material_adv).
+        """
+        # Use top 10 individuals (by recent fitness) vs all benchmark opponents
+        n_test = min(10, self.pop_size)
+        pairings = [(w, b) for w in range(n_test) for b in range(self.benchmark_size)]
+
+        # White evolved vs random benchmark (as black)
+        w_results = chess_cpu.simulate_games_batch(
+            white_pop[:n_test].tobytes(),
+            self.benchmark_pop.tobytes(),
+            self.genome_size,
+            pairings,
+            input_size=self.input_size, hidden_size=self.hidden_size,
+            output_size=self.output_size, max_moves=self.max_moves,
+            temperature=self.temperature,
+        )
+        w_wins = sum(1 for r in w_results if r["result"] == 1)
+        w_mat = sum(r["white_material"] - r["black_material"] for r in w_results) / max(1, len(w_results))
+        w_wr = w_wins / max(1, len(w_results))
+
+        # Benchmark (as white) vs black evolved
+        b_pairings = [(w, b) for w in range(self.benchmark_size) for b in range(n_test)]
+        b_results = chess_cpu.simulate_games_batch(
+            self.benchmark_pop.tobytes(),
+            black_pop[:n_test].tobytes(),
+            self.genome_size,
+            b_pairings,
+            input_size=self.input_size, hidden_size=self.hidden_size,
+            output_size=self.output_size, max_moves=self.max_moves,
+            temperature=self.temperature,
+        )
+        b_wins = sum(1 for r in b_results if r["result"] == -1)
+        b_mat = sum(r["black_material"] - r["white_material"] for r in b_results) / max(1, len(b_results))
+        b_wr = b_wins / max(1, len(b_results))
+
+        return w_wr, w_mat, b_wr, b_mat
 
     def _init_population(self) -> np.ndarray:
         """Initialize a population as numpy float32 array (pop_size × genome_size)."""
@@ -126,17 +181,21 @@ class CPUTrainer:
                 my_material = game["white_material"]
                 opp_material = game["black_material"]
                 my_king_safety = game["white_king_safety"]
+                my_mobility = game["white_mobility"]
+                opp_mobility = game["black_mobility"]
             else:
                 idx = game["black_idx"]
                 my_material = game["black_material"]
                 opp_material = game["white_material"]
                 my_king_safety = game["black_king_safety"]
+                my_mobility = game["black_mobility"]
+                opp_mobility = game["white_mobility"]
 
             result = game["result"]
             move_count = game["move_count"]
             f = 0.0
 
-            # Game result
+            # Game result (kept small — wins are rare and mostly random)
             is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
             is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
 
@@ -149,8 +208,11 @@ class CPUTrainer:
             elif is_loss:
                 f += self.loss_penalty
 
-            # Material difference
+            # Material difference — primary continuous signal
             f += (my_material - opp_material) * self.material_weight
+
+            # Mobility advantage — rewards piece activity
+            f += (my_mobility - opp_mobility) * self.mobility_weight
 
             # King safety
             f += my_king_safety * self.king_safety_weight
@@ -410,6 +472,14 @@ class CPUTrainer:
             games_per_sec = num_games / max(0.001, gen_time)
             moves_per_sec = total_moves / max(0.001, gen_time)
 
+            # Benchmark vs fixed random opponents (absolute progress measure).
+            # Sort populations by fitness so top individuals are first.
+            w_order = sorted(range(self.pop_size), key=lambda i: white_fitness[i], reverse=True)
+            b_order = sorted(range(self.pop_size), key=lambda i: black_fitness[i], reverse=True)
+            w_bench_wr, w_bench_mat, b_bench_wr, b_bench_mat = self._benchmark_vs_random(
+                white_pop[w_order], black_pop[b_order],
+            )
+
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
                 "generation": gen,
@@ -455,6 +525,11 @@ class CPUTrainer:
                 "black_elo_median": 0,
                 "black_elo_p75": 0,
                 "black_elo_max": 0,
+                # Benchmark vs random (absolute progress — NOT relative to opponent)
+                "bench_white_win_rate": w_bench_wr,
+                "bench_white_material_adv": w_bench_mat,
+                "bench_black_win_rate": b_bench_wr,
+                "bench_black_material_adv": b_bench_mat,
                 # Species metrics (weight-distance speciation, not NEAT topology)
                 "neat_hidden_nodes_avg": 0,  # fixed topology — no hidden node growth
                 "neat_connections_avg": self.genome_size,  # fixed topology — all connections
