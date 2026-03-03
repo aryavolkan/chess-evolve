@@ -203,6 +203,48 @@ fn evolve_neat_generation(
     Ok(result.into())
 }
 
+/// Create a seeded NEAT population from a template genome.
+///
+/// Clones the template topology for all individuals but randomizes weights/biases.
+/// The tracker is initialized from the template to avoid innovation number collisions.
+#[pyfunction]
+fn create_seeded_population(
+    py: Python<'_>,
+    config_json: &str,
+    seed_genome_json: &str,
+) -> PyResult<Py<PyDict>> {
+    let config: config::NeatConfig = serde_json::from_str(config_json).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid config JSON: {e}"))
+    })?;
+    let seed: genome::NeatGenome = serde_json::from_str(seed_genome_json).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid seed genome JSON: {e}"))
+    })?;
+
+    let node_count = seed.nodes.iter().map(|n| n.id).max().unwrap_or(0) + 1;
+    let mut tracker = innovation::InnovationTracker::new(node_count);
+    tracker.seed_from_genome(&seed);
+    let mut rng = rand::rngs::SmallRng::from_entropy();
+
+    let mut pop = Vec::with_capacity(config.population_size);
+    for _ in 0..config.population_size {
+        let g = genome::NeatGenome::create_from_topology(&seed, &mut rng);
+        let json = serde_json::to_string(&g).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+        })?;
+        pop.push(json);
+    }
+
+    let tracker_json = serde_json::to_string(&tracker).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize tracker error: {e}"))
+    })?;
+
+    let result = PyDict::new(py);
+    result.set_item("population", pop)?;
+    result.set_item("tracker", tracker_json)?;
+
+    Ok(result.into())
+}
+
 /// Compute compatibility distance between two genomes (for debugging).
 #[pyfunction]
 fn compatibility_distance(
@@ -227,6 +269,7 @@ fn compatibility_distance(
 fn neat_ga(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_population, m)?)?;
     m.add_function(wrap_pyfunction!(create_population_with_tracker, m)?)?;
+    m.add_function(wrap_pyfunction!(create_seeded_population, m)?)?;
     m.add_function(wrap_pyfunction!(evolve_neat_generation, m)?)?;
     m.add_function(wrap_pyfunction!(compatibility_distance, m)?)?;
     Ok(())

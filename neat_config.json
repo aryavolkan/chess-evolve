@@ -1,6 +1,6 @@
 {
     "population_size": 200,
-    "max_generations": 500,
+    "max_generations": 1000,
     "max_moves_per_game": 100,
     "input_size": 389,
     "output_size": 128,

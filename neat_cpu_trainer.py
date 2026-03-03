@@ -92,9 +92,38 @@ class NeatCPUTrainer:
         # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
 
+        # Seed genome paths: if set, initialize population from saved best topology
+        self.seed_genome_path = Path(config.get("seed_genome_path", ""))
+        self.save_genome_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
+
         # Fixed random benchmark population for absolute progress measurement.
         self.benchmark_size = 20
         self.benchmark_genomes = self._init_benchmark()
+
+    def _load_seed(self) -> dict | None:
+        """Load seed genomes from file if it exists."""
+        if self.seed_genome_path and self.seed_genome_path.exists():
+            try:
+                return json.loads(self.seed_genome_path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  Warning: could not load seed genome: {e}")
+        return None
+
+    def _save_best(self, white_pop: list[str], black_pop: list[str],
+                   white_fitness: list[float], black_fitness: list[float],
+                   bench_wr: float):
+        """Save best white and black genomes + benchmark win rate for seeding next run."""
+        w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
+        b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
+        data = {
+            "white": white_pop[w_best_idx],
+            "black": black_pop[b_best_idx],
+            "bench_white_win_rate": bench_wr,
+        }
+        try:
+            self.save_genome_path.write_text(json.dumps(data))
+        except OSError as e:
+            print(f"  Warning: could not save best genomes: {e}")
 
     def _init_benchmark(self) -> list[str]:
         """Create a fixed random NEAT population for absolute progress measurement."""
@@ -351,14 +380,23 @@ class NeatCPUTrainer:
         """
         config_json = json.dumps(self.neat_config)
 
-        # Initialize populations via Rust
-        init_result = neat_ga.create_population_with_tracker(config_json)
-        white_pop: list[str] = init_result["population"]
-        white_tracker_json: str = init_result["tracker"]
-
-        init_result = neat_ga.create_population_with_tracker(config_json)
-        black_pop: list[str] = init_result["population"]
-        black_tracker_json: str = init_result["tracker"]
+        # Initialize populations via Rust (seeded or random)
+        seed = self._load_seed()
+        if seed and "white" in seed:
+            print(f"  Seeding from {self.seed_genome_path}")
+            init_result = neat_ga.create_seeded_population(config_json, seed["white"])
+            white_pop: list[str] = init_result["population"]
+            white_tracker_json: str = init_result["tracker"]
+            init_result = neat_ga.create_seeded_population(config_json, seed["black"])
+            black_pop: list[str] = init_result["population"]
+            black_tracker_json: str = init_result["tracker"]
+        else:
+            init_result = neat_ga.create_population_with_tracker(config_json)
+            white_pop: list[str] = init_result["population"]
+            white_tracker_json: str = init_result["tracker"]
+            init_result = neat_ga.create_population_with_tracker(config_json)
+            black_pop: list[str] = init_result["population"]
+            black_tracker_json: str = init_result["tracker"]
 
         white_species_json = "[]"
         black_species_json = "[]"
@@ -523,5 +561,9 @@ class NeatCPUTrainer:
                 on_generation(metrics)
 
             last_metrics = metrics
+
+        # Save best genomes for seeding next run
+        self._save_best(white_pop, black_pop, white_fitness, black_fitness,
+                        last_metrics.get("bench_white_win_rate", 0))
 
         return last_metrics

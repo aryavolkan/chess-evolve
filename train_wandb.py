@@ -492,11 +492,65 @@ def sweep_agent(sweep_id: str, count: int = 50):
     wandb.agent(sweep_id, function=sweep_train_fn, count=count, project="chess-evolve")
 
 
+def do_chained_training(config=None, visible=False, max_chains=10):
+    """Run training in a loop, seeding each run from the previous best.
+
+    Stops when benchmark win rate does not improve between runs.
+    """
+    save_path = Path(config.get("save_genome_path", "neat_best_genomes.json")) if config else Path("neat_best_genomes.json")
+    best_bench_wr = 0.0
+
+    # Check if seed file already has a baseline
+    if save_path.exists():
+        try:
+            prev = json.loads(save_path.read_text())
+            best_bench_wr = prev.get("bench_white_win_rate", 0.0)
+            print(f"  Seed file found: previous bench_white_win_rate={best_bench_wr:.3f}")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    for chain_idx in range(max_chains):
+        print(f"\n{'='*60}")
+        print(f"  Chain run {chain_idx + 1}/{max_chains}")
+        print(f"  Previous best bench_white_win_rate: {best_bench_wr:.3f}")
+        print(f"{'='*60}\n")
+
+        # Point seed_genome_path at save file (if it exists from prior run)
+        run_config = dict(config) if config else {}
+        if save_path.exists() and chain_idx > 0:
+            run_config["seed_genome_path"] = str(save_path)
+
+        do_training(run_config, visible=visible)
+
+        # Check if benchmark improved
+        if save_path.exists():
+            try:
+                result = json.loads(save_path.read_text())
+                new_bench_wr = result.get("bench_white_win_rate", 0.0)
+                print(f"\n  Chain run {chain_idx + 1} bench_white_win_rate: {new_bench_wr:.3f} (prev: {best_bench_wr:.3f})")
+                if new_bench_wr > best_bench_wr + 0.01:
+                    best_bench_wr = new_bench_wr
+                    print(f"  Improvement! Continuing to next chain run...")
+                else:
+                    print(f"  No improvement (delta={new_bench_wr - best_bench_wr:.3f}). Stopping chain.")
+                    break
+            except (json.JSONDecodeError, OSError):
+                print("  Could not read save file. Stopping chain.")
+                break
+        else:
+            print("  No save file produced. Stopping chain.")
+            break
+
+    print(f"\n  Chained training complete. Best bench_white_win_rate: {best_bench_wr:.3f}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Chess-Evolve W&B training")
     parser.add_argument("--sweep", type=str, help="W&B sweep ID to join")
     parser.add_argument("--visible", action="store_true", help="Show Godot window")
     parser.add_argument("--config", type=str, help="JSON config file")
+    parser.add_argument("--chain", type=int, default=0, metavar="N",
+                        help="Auto-chain up to N runs, seeding each from previous best")
     args = parser.parse_args()
 
     custom_config = None
@@ -508,5 +562,7 @@ if __name__ == "__main__":
     if args.sweep:
         print(f"🔄 Joining W&B sweep: {args.sweep}")
         sweep_agent(args.sweep)
+    elif args.chain > 0:
+        do_chained_training(custom_config, visible=args.visible, max_chains=args.chain)
     else:
         do_training(custom_config, visible=args.visible)
