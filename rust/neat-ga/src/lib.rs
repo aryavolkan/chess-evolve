@@ -192,6 +192,8 @@ fn evolve_neat_generation(
     stats_dict.set_item("avg_nodes", stats.avg_nodes)?;
     stats_dict.set_item("best_connections", stats.best_connections)?;
     stats_dict.set_item("best_nodes", stats.best_nodes)?;
+    stats_dict.set_item("avg_depth", stats.avg_depth)?;
+    stats_dict.set_item("avg_width", stats.avg_width)?;
 
     let result = PyDict::new(py);
     result.set_item("population", new_pop_json)?;

@@ -600,10 +600,19 @@ class NeatCPUTrainer:
                 "black_elo_median": 0,
                 "black_elo_p75": 0,
                 "black_elo_max": 0,
-                # NEAT topology metrics
+                # NEAT topology metrics (combined, backward-compatible)
                 "neat_hidden_nodes_avg": avg_nodes - self.input_size - self.output_size,
                 "neat_connections_avg": avg_conns,
                 "neat_species_count": w_stats["species_count"] + b_stats["species_count"],
+                # Per-color topology metrics
+                "white_depth_avg": w_stats.get("avg_depth", 0),
+                "black_depth_avg": b_stats.get("avg_depth", 0),
+                "white_width_avg": w_stats.get("avg_width", 0),
+                "black_width_avg": b_stats.get("avg_width", 0),
+                "white_connections_avg": w_stats["avg_connections"],
+                "black_connections_avg": b_stats["avg_connections"],
+                "white_hidden_nodes_avg": w_stats["avg_nodes"] - self.input_size - self.output_size,
+                "black_hidden_nodes_avg": b_stats["avg_nodes"] - self.input_size - self.output_size,
                 # Benchmark vs random
                 "bench_white_win_rate": w_bench_wr,
                 "bench_white_material_adv": w_bench_mat,

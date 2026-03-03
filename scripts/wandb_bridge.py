@@ -67,6 +67,15 @@ CHESS_LOG_KEYS = [
     "neat_hidden_nodes_avg",
     "neat_connections_avg",
     "neat_species_count",
+    # Per-color topology metrics
+    "white_depth_avg",
+    "black_depth_avg",
+    "white_width_avg",
+    "black_width_avg",
+    "white_connections_avg",
+    "black_connections_avg",
+    "white_hidden_nodes_avg",
+    "black_hidden_nodes_avg",
     # Benchmark vs random (absolute progress)
     "bench_white_win_rate",
     "bench_white_material_adv",

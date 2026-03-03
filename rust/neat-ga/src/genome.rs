@@ -520,6 +520,81 @@ impl NeatGenome {
     pub fn hidden_node_count(&self) -> usize {
         self.nodes.iter().filter(|n| n.node_type == 1).count()
     }
+
+    /// Compute network depth (longest input→output path) and width (max nodes at any depth level).
+    ///
+    /// Depth is measured via topological BFS through enabled connections.
+    /// Input nodes have depth 0. Each downstream node gets max(predecessor depths) + 1.
+    /// Returns (max_depth_of_output_nodes, max_nodes_at_any_depth_level).
+    pub fn topology_depth_width(&self) -> (usize, usize) {
+        let node_ids: HashSet<u32> = self.nodes.iter().map(|n| n.id).collect();
+
+        // Build adjacency (forward) and in-degree from enabled connections
+        let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut in_degree: HashMap<u32, usize> = HashMap::new();
+        for &id in &node_ids {
+            in_degree.insert(id, 0);
+        }
+        for conn in &self.connections {
+            if !conn.enabled {
+                continue;
+            }
+            if !node_ids.contains(&conn.in_id) || !node_ids.contains(&conn.out_id) {
+                continue;
+            }
+            adj.entry(conn.in_id).or_default().push(conn.out_id);
+            *in_degree.entry(conn.out_id).or_insert(0) += 1;
+        }
+
+        // Kahn's BFS — assign depth per node
+        let mut depth: HashMap<u32, usize> = HashMap::new();
+        let mut queue: Vec<u32> = Vec::new();
+        for (&id, &deg) in &in_degree {
+            if deg == 0 {
+                depth.insert(id, 0);
+                queue.push(id);
+            }
+        }
+
+        let mut head = 0;
+        while head < queue.len() {
+            let cur = queue[head];
+            head += 1;
+            let cur_depth = depth[&cur];
+            if let Some(neighbors) = adj.get(&cur) {
+                for &nxt in neighbors {
+                    // Update depth to max of all predecessors + 1
+                    let new_depth = cur_depth + 1;
+                    let entry = depth.entry(nxt).or_insert(0);
+                    if new_depth > *entry {
+                        *entry = new_depth;
+                    }
+                    let deg = in_degree.get_mut(&nxt).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        queue.push(nxt);
+                    }
+                }
+            }
+        }
+
+        // Depth = max depth among output nodes (or all nodes if no outputs reached)
+        let max_depth = self.nodes.iter()
+            .filter(|n| n.node_type == 2)
+            .filter_map(|n| depth.get(&n.id))
+            .copied()
+            .max()
+            .unwrap_or(0);
+
+        // Width = max count of nodes sharing the same depth
+        let mut level_counts: HashMap<usize, usize> = HashMap::new();
+        for &d in depth.values() {
+            *level_counts.entry(d).or_insert(0) += 1;
+        }
+        let max_width = level_counts.values().copied().max().unwrap_or(0);
+
+        (max_depth, max_width)
+    }
 }
 
 /// DFS cycle check: would adding an edge from `from_id` to `to_id` create a cycle?

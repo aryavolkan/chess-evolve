@@ -16,6 +16,8 @@ pub struct EvolutionStats {
     pub avg_nodes: f32,
     pub best_connections: usize,
     pub best_nodes: usize,
+    pub avg_depth: f32,
+    pub avg_width: f32,
 }
 
 /// Run one generation of NEAT evolution.
@@ -200,6 +202,8 @@ fn compute_stats(population: &[NeatGenome], species_list: &[Species]) -> Evoluti
     let mut total_nodes: usize = 0;
     let mut best_conns: usize = 0;
     let mut best_nodes: usize = 0;
+    let mut total_depth: usize = 0;
+    let mut total_width: usize = 0;
 
     for genome in population {
         if genome.fitness > best_fitness {
@@ -210,6 +214,9 @@ fn compute_stats(population: &[NeatGenome], species_list: &[Species]) -> Evoluti
         total_fitness += genome.fitness;
         total_conns += genome.enabled_connection_count();
         total_nodes += genome.nodes.len();
+        let (depth, width) = genome.topology_depth_width();
+        total_depth += depth;
+        total_width += width;
     }
 
     let n = population.len().max(1) as f32;
@@ -222,5 +229,7 @@ fn compute_stats(population: &[NeatGenome], species_list: &[Species]) -> Evoluti
         avg_nodes: total_nodes as f32 / n,
         best_connections: best_conns,
         best_nodes,
+        avg_depth: total_depth as f32 / n,
+        avg_width: total_width as f32 / n,
     }
 }
