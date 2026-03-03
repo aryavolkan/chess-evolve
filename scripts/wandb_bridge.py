@@ -63,6 +63,15 @@ CHESS_LOG_KEYS = [
     "black_elo_median",
     "black_elo_p75",
     "black_elo_max",
+    # NEAT topology metrics
+    "neat_hidden_nodes_avg",
+    "neat_connections_avg",
+    "neat_species_count",
+    # Benchmark vs random (absolute progress)
+    "bench_white_win_rate",
+    "bench_white_material_adv",
+    "bench_black_win_rate",
+    "bench_black_material_adv",
 ]
 
 
