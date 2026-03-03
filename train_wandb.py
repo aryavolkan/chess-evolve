@@ -537,7 +537,7 @@ def do_chained_training(config=None, visible=False, max_chains=10):
                     best_bench_wr = new_bench_wr
                     # Promote candidate to best
                     candidate_path.rename(save_path)
-                    print(f"  Improvement! Saved as best seed. Continuing to next chain run...")
+                    print("  Improvement! Saved as best seed. Continuing to next chain run...")
                 else:
                     # Discard candidate, keep previous best
                     candidate_path.unlink(missing_ok=True)
