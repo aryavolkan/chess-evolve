@@ -171,6 +171,9 @@ impl NeatGenome {
         if rng.gen::<f32>() < config.disable_connection_rate {
             self.mutate_disable_connection(rng);
         }
+        if rng.gen::<f32>() < config.prune_rate {
+            self.prune();
+        }
     }
 
     /// Perturb or reset connection weights.
@@ -452,6 +455,62 @@ impl NeatGenome {
         (config.c1_excess * excess as f32 / n)
             + (config.c2_disjoint * disjoint as f32 / n)
             + (config.c3_weight_diff * avg_weight_diff)
+    }
+
+    /// Remove disabled connections and orphaned hidden nodes.
+    /// Orphans = hidden nodes not on any enabled path from an input to an output.
+    pub fn prune(&mut self) {
+        // Drop disabled connections
+        self.connections.retain(|c| c.enabled);
+
+        // Build forward and reverse adjacency from enabled connections
+        let mut fwd: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut rev: HashMap<u32, Vec<u32>> = HashMap::new();
+        for c in &self.connections {
+            fwd.entry(c.in_id).or_default().push(c.out_id);
+            rev.entry(c.out_id).or_default().push(c.in_id);
+        }
+
+        let input_ids: HashSet<u32> = self.nodes.iter()
+            .filter(|n| n.node_type == 0).map(|n| n.id).collect();
+        let output_ids: HashSet<u32> = self.nodes.iter()
+            .filter(|n| n.node_type == 2).map(|n| n.id).collect();
+
+        // Forward reachable from inputs
+        let mut fwd_reach = input_ids.clone();
+        let mut stack: Vec<u32> = input_ids.iter().copied().collect();
+        while let Some(n) = stack.pop() {
+            if let Some(neighbors) = fwd.get(&n) {
+                for &nxt in neighbors {
+                    if fwd_reach.insert(nxt) {
+                        stack.push(nxt);
+                    }
+                }
+            }
+        }
+
+        // Backward reachable from outputs
+        let mut bwd_reach = output_ids.clone();
+        let mut stack: Vec<u32> = output_ids.iter().copied().collect();
+        while let Some(n) = stack.pop() {
+            if let Some(neighbors) = rev.get(&n) {
+                for &prev in neighbors {
+                    if bwd_reach.insert(prev) {
+                        stack.push(prev);
+                    }
+                }
+            }
+        }
+
+        // Keep inputs, outputs, and hidden nodes on an active path
+        self.nodes.retain(|n| {
+            n.node_type == 0 || n.node_type == 2
+                || (fwd_reach.contains(&n.id) && bwd_reach.contains(&n.id))
+        });
+
+        // Also drop connections referencing removed nodes
+        let live_ids: HashSet<u32> = self.nodes.iter().map(|n| n.id).collect();
+        self.connections.retain(|c| live_ids.contains(&c.in_id) && live_ids.contains(&c.out_id));
     }
 
     pub fn enabled_connection_count(&self) -> usize {

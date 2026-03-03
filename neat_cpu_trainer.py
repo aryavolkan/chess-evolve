@@ -74,6 +74,8 @@ class NeatCPUTrainer:
             "disable_connection_rate": config.get("disable_connection_rate", 0.01),
             "add_node_count": config.get("add_node_count", 1),
             "add_connection_count": config.get("add_connection_count", 1),
+            "prune_rate": config.get("prune_rate", 0.1),
+            "complexity_cost": config.get("complexity_cost", 0.0),
             "elite_fraction": config.get("elite_fraction", 0.1),
             "survival_fraction": config.get("survival_fraction", 0.5),
             "crossover_rate": config.get("crossover_rate", 0.75),
@@ -457,6 +459,18 @@ class NeatCPUTrainer:
                 b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
                 white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit)]
                 black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit)]
+
+            # Parsimony pressure: penalize complexity (enabled connections)
+            cc = self.neat_config.get("complexity_cost", 0.0)
+            if cc > 0:
+                for i, gj in enumerate(white_pop):
+                    g = json.loads(gj)
+                    n_conns = sum(1 for c in g["connections"] if c["enabled"])
+                    white_fitness[i] -= cc * n_conns
+                for i, gj in enumerate(black_pop):
+                    g = json.loads(gj)
+                    n_conns = sum(1 for c in g["connections"] if c["enabled"])
+                    black_fitness[i] -= cc * n_conns
 
             # Tournament scores
             white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)

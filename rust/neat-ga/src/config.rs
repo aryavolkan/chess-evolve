@@ -46,6 +46,12 @@ pub struct NeatConfig {
     #[serde(default = "default_add_connection_count")]
     pub add_connection_count: usize,
 
+    // Pruning & parsimony
+    #[serde(default = "default_prune_rate")]
+    pub prune_rate: f32,
+    #[serde(default = "default_complexity_cost")]
+    pub complexity_cost: f32,
+
     // Reproduction
     #[serde(default = "default_elite_fraction")]
     pub elite_fraction: f32,
@@ -86,6 +92,8 @@ fn default_add_connection_rate() -> f32 { 0.20 }
 fn default_disable_connection_rate() -> f32 { 0.01 }
 fn default_add_node_count() -> usize { 1 }
 fn default_add_connection_count() -> usize { 1 }
+fn default_prune_rate() -> f32 { 0.1 }
+fn default_complexity_cost() -> f32 { 0.0 }
 fn default_elite_fraction() -> f32 { 0.1 }
 fn default_survival_fraction() -> f32 { 0.5 }
 fn default_crossover_rate() -> f32 { 0.75 }
@@ -117,6 +125,8 @@ impl Default for NeatConfig {
             disable_connection_rate: default_disable_connection_rate(),
             add_node_count: default_add_node_count(),
             add_connection_count: default_add_connection_count(),
+            prune_rate: default_prune_rate(),
+            complexity_cost: default_complexity_cost(),
             elite_fraction: default_elite_fraction(),
             survival_fraction: default_survival_fraction(),
             crossover_rate: default_crossover_rate(),

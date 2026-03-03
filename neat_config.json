@@ -22,5 +22,7 @@
     "mercy_min_moves": 30,
     "mercy_material_threshold": 20.0,
     "threshold_step": 0.1,
-    "benchmark_fitness_weight": 0.3
+    "benchmark_fitness_weight": 0.3,
+    "prune_rate": 0.10,
+    "complexity_cost": 0.005
 }
