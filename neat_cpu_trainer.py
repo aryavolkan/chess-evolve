@@ -93,7 +93,8 @@ class NeatCPUTrainer:
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
 
         # Seed genome paths: if set, initialize population from saved best topology
-        self.seed_genome_path = Path(config.get("seed_genome_path", ""))
+        _seed = config.get("seed_genome_path", "")
+        self.seed_genome_path = Path(_seed) if _seed else None
         self.save_genome_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
 
         # Fixed random benchmark population for absolute progress measurement.
@@ -111,14 +112,16 @@ class NeatCPUTrainer:
 
     def _save_best(self, white_pop: list[str], black_pop: list[str],
                    white_fitness: list[float], black_fitness: list[float],
-                   bench_wr: float):
-        """Save best white and black genomes + benchmark win rate for seeding next run."""
+                   bench_w_wr: float, bench_b_wr: float):
+        """Save best white and black genomes + benchmark win rates for seeding next run."""
         w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
         b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
         data = {
             "white": white_pop[w_best_idx],
             "black": black_pop[b_best_idx],
-            "bench_white_win_rate": bench_wr,
+            "bench_white_win_rate": bench_w_wr,
+            "bench_black_win_rate": bench_b_wr,
+            "bench_avg_win_rate": (bench_w_wr + bench_b_wr) / 2,
         }
         try:
             self.save_genome_path.write_text(json.dumps(data))
@@ -564,6 +567,7 @@ class NeatCPUTrainer:
 
         # Save best genomes for seeding next run
         self._save_best(white_pop, black_pop, white_fitness, black_fitness,
-                        last_metrics.get("bench_white_win_rate", 0))
+                        last_metrics.get("bench_white_win_rate", 0),
+                        last_metrics.get("bench_black_win_rate", 0))
 
         return last_metrics

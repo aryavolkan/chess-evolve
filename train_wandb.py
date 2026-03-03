@@ -496,16 +496,19 @@ def do_chained_training(config=None, visible=False, max_chains=10):
     """Run training in a loop, seeding each run from the previous best.
 
     Stops when benchmark win rate does not improve between runs.
+    Only overwrites the seed file when the new run improves on the previous best.
     """
     save_path = Path(config.get("save_genome_path", "neat_best_genomes.json")) if config else Path("neat_best_genomes.json")
+    # Trainer writes to this temp path; we promote to save_path only on improvement
+    candidate_path = save_path.with_suffix(".candidate.json")
     best_bench_wr = 0.0
 
     # Check if seed file already has a baseline
     if save_path.exists():
         try:
             prev = json.loads(save_path.read_text())
-            best_bench_wr = prev.get("bench_white_win_rate", 0.0)
-            print(f"  Seed file found: previous bench_white_win_rate={best_bench_wr:.3f}")
+            best_bench_wr = prev.get("bench_avg_win_rate", prev.get("bench_white_win_rate", 0.0))
+            print(f"  Seed file found: previous bench_avg_win_rate={best_bench_wr:.3f}")
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -515,23 +518,29 @@ def do_chained_training(config=None, visible=False, max_chains=10):
         print(f"  Previous best bench_white_win_rate: {best_bench_wr:.3f}")
         print(f"{'='*60}\n")
 
-        # Point seed_genome_path at save file (if it exists from prior run)
+        # Point seed_genome_path at best-so-far save file (if it exists)
         run_config = dict(config) if config else {}
         if save_path.exists() and chain_idx > 0:
             run_config["seed_genome_path"] = str(save_path)
+        # Trainer saves to candidate path so we don't overwrite best on regression
+        run_config["save_genome_path"] = str(candidate_path)
 
         do_training(run_config, visible=visible)
 
         # Check if benchmark improved
-        if save_path.exists():
+        if candidate_path.exists():
             try:
-                result = json.loads(save_path.read_text())
-                new_bench_wr = result.get("bench_white_win_rate", 0.0)
-                print(f"\n  Chain run {chain_idx + 1} bench_white_win_rate: {new_bench_wr:.3f} (prev: {best_bench_wr:.3f})")
+                result = json.loads(candidate_path.read_text())
+                new_bench_wr = result.get("bench_avg_win_rate", result.get("bench_white_win_rate", 0.0))
+                print(f"\n  Chain run {chain_idx + 1} bench_avg_win_rate: {new_bench_wr:.3f} (prev: {best_bench_wr:.3f})")
                 if new_bench_wr > best_bench_wr + 0.01:
                     best_bench_wr = new_bench_wr
-                    print(f"  Improvement! Continuing to next chain run...")
+                    # Promote candidate to best
+                    candidate_path.rename(save_path)
+                    print(f"  Improvement! Saved as best seed. Continuing to next chain run...")
                 else:
+                    # Discard candidate, keep previous best
+                    candidate_path.unlink(missing_ok=True)
                     print(f"  No improvement (delta={new_bench_wr - best_bench_wr:.3f}). Stopping chain.")
                     break
             except (json.JSONDecodeError, OSError):
@@ -541,7 +550,7 @@ def do_chained_training(config=None, visible=False, max_chains=10):
             print("  No save file produced. Stopping chain.")
             break
 
-    print(f"\n  Chained training complete. Best bench_white_win_rate: {best_bench_wr:.3f}")
+    print(f"\n  Chained training complete. Best bench_avg_win_rate: {best_bench_wr:.3f}")
 
 
 if __name__ == "__main__":
