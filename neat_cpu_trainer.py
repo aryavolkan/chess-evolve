@@ -354,22 +354,38 @@ class NeatCPUTrainer:
         n = len(population)
         if color == 0:
             pairings = [(w, b) for w in range(n) for b in range(num_opp)]
-            results = chess_cpu.simulate_neat_games_batch(
-                population, opponents, pairings,
-                output_size=self.output_size, max_moves=self.max_moves,
-                temperature=self.temperature,
-                mercy_min_moves=self.mercy_min_moves,
-                mercy_material_threshold=self.mercy_material_threshold,
-            )
         else:
             pairings = [(w, b) for w in range(num_opp) for b in range(n)]
-            results = chess_cpu.simulate_neat_games_batch(
-                opponents, population, pairings,
-                output_size=self.output_size, max_moves=self.max_moves,
-                temperature=self.temperature,
-                mercy_min_moves=self.mercy_min_moves,
-                mercy_material_threshold=self.mercy_material_threshold,
-            )
+
+        try:
+            if color == 0:
+                results = chess_cpu.simulate_neat_games_batch(
+                    population, opponents, pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
+                    temperature=self.temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+            else:
+                results = chess_cpu.simulate_neat_games_batch(
+                    opponents, population, pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
+                    temperature=self.temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+        except Exception as e:
+            print(f"  ⚠ Rust benchmark panic, using fallback draws: {e}")
+            results = [
+                {
+                    "white_idx": w, "black_idx": b, "result": 2,
+                    "move_count": 0, "white_material": 0.0,
+                    "black_material": 0.0, "white_mobility": 0,
+                    "black_mobility": 0, "white_king_safety": 0.0,
+                    "black_king_safety": 0.0,
+                }
+                for w, b in pairings
+            ]
 
         return self._compute_fitness(results, n, color=color)
 
@@ -433,16 +449,29 @@ class NeatCPUTrainer:
             pairings = self._generate_pairings()
 
             # Simulate all games in parallel via Rust
-            results = chess_cpu.simulate_neat_games_batch(
-                white_pop,
-                black_pop,
-                pairings,
-                output_size=self.output_size,
-                max_moves=self.max_moves,
-                temperature=self.temperature,
-                mercy_min_moves=self.mercy_min_moves,
-                mercy_material_threshold=self.mercy_material_threshold,
-            )
+            try:
+                results = chess_cpu.simulate_neat_games_batch(
+                    white_pop,
+                    black_pop,
+                    pairings,
+                    output_size=self.output_size,
+                    max_moves=self.max_moves,
+                    temperature=self.temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+            except Exception as e:
+                print(f"  ⚠ Rust batch panic at gen {gen}, using fallback draws: {e}")
+                results = [
+                    {
+                        "white_idx": w, "black_idx": b, "result": 2,
+                        "move_count": 0, "white_material": 0.0,
+                        "black_material": 0.0, "white_mobility": 0,
+                        "black_mobility": 0, "white_king_safety": 0.0,
+                        "black_king_safety": 0.0,
+                    }
+                    for w, b in pairings
+                ]
 
             gen_time = time.time() - gen_start
             num_games = len(results)

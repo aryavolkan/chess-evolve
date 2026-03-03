@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::panic;
 
 use rand::SeedableRng;
 use rayon::prelude::*;
@@ -297,53 +298,63 @@ pub fn simulate_neat_games_batch(
         .par_iter()
         .enumerate()
         .map(|(game_idx, &(w_idx, b_idx))| {
-            let w_json = &white_genomes_json[w_idx];
-            let b_json = &black_genomes_json[b_idx];
+            let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                let w_json = &white_genomes_json[w_idx];
+                let b_json = &black_genomes_json[b_idx];
 
-            let w_net = match SparseNetwork::from_genome_json(w_json) {
-                Some(net) => net,
-                None => {
-                    return GameResult {
-                        white_idx: w_idx, black_idx: b_idx,
-                        result: -1, move_count: 0,
-                        white_material: 0.0, black_material: 39.0,
-                        white_mobility: 0, black_mobility: 20,
-                        white_king_safety: 0.0, black_king_safety: 0.0,
-                    };
-                }
-            };
-            let b_net = match SparseNetwork::from_genome_json(b_json) {
-                Some(net) => net,
-                None => {
-                    return GameResult {
-                        white_idx: w_idx, black_idx: b_idx,
-                        result: 1, move_count: 0,
-                        white_material: 39.0, black_material: 0.0,
-                        white_mobility: 20, black_mobility: 0,
-                        white_king_safety: 0.0, black_king_safety: 0.0,
-                    };
-                }
-            };
+                let w_net = match SparseNetwork::from_genome_json(w_json) {
+                    Some(net) => net,
+                    None => {
+                        return GameResult {
+                            white_idx: w_idx, black_idx: b_idx,
+                            result: -1, move_count: 0,
+                            white_material: 0.0, black_material: 39.0,
+                            white_mobility: 0, black_mobility: 20,
+                            white_king_safety: 0.0, black_king_safety: 0.0,
+                        };
+                    }
+                };
+                let b_net = match SparseNetwork::from_genome_json(b_json) {
+                    Some(net) => net,
+                    None => {
+                        return GameResult {
+                            white_idx: w_idx, black_idx: b_idx,
+                            result: 1, move_count: 0,
+                            white_material: 39.0, black_material: 0.0,
+                            white_mobility: 20, black_mobility: 0,
+                            white_king_safety: 0.0, black_king_safety: 0.0,
+                        };
+                    }
+                };
 
-            let mut rng = rand::rngs::SmallRng::seed_from_u64(
-                (game_idx as u64)
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407),
-            );
+                let mut rng = rand::rngs::SmallRng::seed_from_u64(
+                    (game_idx as u64)
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407),
+                );
 
-            let mut gr = simulate_neat_game(
-                &w_net,
-                &b_net,
-                output_size,
-                max_moves,
-                temperature,
-                mercy_min_moves,
-                mercy_material_threshold,
-                &mut rng,
-            );
-            gr.white_idx = w_idx;
-            gr.black_idx = b_idx;
-            gr
+                let mut gr = simulate_neat_game(
+                    &w_net,
+                    &b_net,
+                    output_size,
+                    max_moves,
+                    temperature,
+                    mercy_min_moves,
+                    mercy_material_threshold,
+                    &mut rng,
+                );
+                gr.white_idx = w_idx;
+                gr.black_idx = b_idx;
+                gr
+            }));
+
+            result.unwrap_or(GameResult {
+                white_idx: w_idx, black_idx: b_idx,
+                result: 2, move_count: 0,
+                white_material: 0.0, black_material: 0.0,
+                white_mobility: 0, black_mobility: 0,
+                white_king_safety: 0.0, black_king_safety: 0.0,
+            })
         })
         .collect()
 }

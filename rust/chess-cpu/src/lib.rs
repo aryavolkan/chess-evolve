@@ -1,5 +1,7 @@
 #![allow(clippy::needless_range_loop)]
 
+use std::panic;
+
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -192,18 +194,43 @@ fn simulate_neat_games_batch(
     mercy_min_moves: usize,
     mercy_material_threshold: f32,
 ) -> PyResult<Vec<Py<PyDict>>> {
-    // Release the GIL during heavy computation
+    // Release the GIL during heavy computation.
+    // Wrap in catch_unwind so ANY panic returns empty results instead of crashing.
+    let pairings_clone = pairings.clone();
     let results = py.detach(move || {
-        simulate::simulate_neat_games_batch(
-            &white_genomes,
-            &black_genomes,
-            &pairings,
-            output_size,
-            max_moves,
-            temperature,
-            mercy_min_moves,
-            mercy_material_threshold,
-        )
+        let batch_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            simulate::simulate_neat_games_batch(
+                &white_genomes,
+                &black_genomes,
+                &pairings,
+                output_size,
+                max_moves,
+                temperature,
+                mercy_min_moves,
+                mercy_material_threshold,
+            )
+        }));
+        match batch_result {
+            Ok(results) => results,
+            Err(_) => {
+                // Entire batch panicked — return all draws
+                pairings_clone
+                    .iter()
+                    .map(|&(w_idx, b_idx)| simulate::GameResult {
+                        white_idx: w_idx,
+                        black_idx: b_idx,
+                        result: 2,
+                        move_count: 0,
+                        white_material: 0.0,
+                        black_material: 0.0,
+                        white_mobility: 0,
+                        black_mobility: 0,
+                        white_king_safety: 0.0,
+                        black_king_safety: 0.0,
+                    })
+                    .collect()
+            }
+        }
     });
 
     results
