@@ -432,6 +432,13 @@ def sweep_train_fn():
     config.update(dict(run.config))
     max_gens = config.get("max_generations", 50)
 
+    # Seed NEAT trials from best genome if available
+    if config.get("use_neat", False):
+        _seed_path = Path("neat_best_genomes.json")
+        if _seed_path.exists():
+            config["seed_genome_path"] = str(_seed_path)
+            print(f"🧬 Seeding NEAT population from {_seed_path}")
+
     _worker.clear_metrics()
     _worker.write_config(config)
 
