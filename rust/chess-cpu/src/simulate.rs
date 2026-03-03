@@ -300,10 +300,30 @@ pub fn simulate_neat_games_batch(
             let w_json = &white_genomes_json[w_idx];
             let b_json = &black_genomes_json[b_idx];
 
-            let w_net = SparseNetwork::from_genome_json(w_json)
-                .expect("Failed to parse white genome JSON");
-            let b_net = SparseNetwork::from_genome_json(b_json)
-                .expect("Failed to parse black genome JSON");
+            let w_net = match SparseNetwork::from_genome_json(w_json) {
+                Some(net) => net,
+                None => {
+                    return GameResult {
+                        white_idx: w_idx, black_idx: b_idx,
+                        result: -1, move_count: 0,
+                        white_material: 0.0, black_material: 39.0,
+                        white_mobility: 0, black_mobility: 20,
+                        white_king_safety: 0.0, black_king_safety: 0.0,
+                    };
+                }
+            };
+            let b_net = match SparseNetwork::from_genome_json(b_json) {
+                Some(net) => net,
+                None => {
+                    return GameResult {
+                        white_idx: w_idx, black_idx: b_idx,
+                        result: 1, move_count: 0,
+                        white_material: 39.0, black_material: 0.0,
+                        white_mobility: 20, black_mobility: 0,
+                        white_king_safety: 0.0, black_king_safety: 0.0,
+                    };
+                }
+            };
 
             let mut rng = rand::rngs::SmallRng::seed_from_u64(
                 (game_idx as u64)

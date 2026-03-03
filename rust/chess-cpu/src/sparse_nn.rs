@@ -173,29 +173,44 @@ impl SparseNetwork {
 
     /// Forward pass with tanh activation. Writes outputs into `outputs`.
     pub fn forward_into(&self, inputs: &[f32], activations: &mut [f32], outputs: &mut [f32]) {
+        // Zero activations
+        for a in activations.iter_mut() {
+            *a = 0.0;
+        }
+
         // Set input activations
         for (i, &input_id) in self.input_ids.iter().enumerate() {
-            let pos = self.id_to_pos[input_id as usize];
-            activations[pos] = if i < inputs.len() { inputs[i] } else { 0.0 };
+            if let Some(&pos) = self.id_to_pos.get(input_id as usize) {
+                if pos < activations.len() {
+                    activations[pos] = if i < inputs.len() { inputs[i] } else { 0.0 };
+                }
+            }
         }
 
         // Evaluate non-input nodes in topological order
         for &pos_u32 in &self.eval_order {
             let pos = pos_u32 as usize;
+            if pos + 1 >= self.edge_offsets.len() || pos >= activations.len() {
+                continue;
+            }
             let start = self.edge_offsets[pos];
             let end = self.edge_offsets[pos + 1];
-            let mut sum = self.biases[pos];
+            let mut sum = self.biases.get(pos).copied().unwrap_or(0.0);
             for e in start..end {
-                sum += activations[self.edge_sources[e]] * self.edge_weights[e];
+                let src = self.edge_sources.get(e).copied().unwrap_or(0);
+                let w = self.edge_weights.get(e).copied().unwrap_or(0.0);
+                let a = activations.get(src).copied().unwrap_or(0.0);
+                sum += a * w;
             }
             activations[pos] = sum.tanh();
         }
 
         // Read output activations
         for (i, &out_id) in self.output_ids.iter().enumerate() {
-            let pos = self.id_to_pos[out_id as usize];
-            if i < outputs.len() {
-                outputs[i] = activations[pos];
+            if let Some(&pos) = self.id_to_pos.get(out_id as usize) {
+                if i < outputs.len() && pos < activations.len() {
+                    outputs[i] = activations[pos];
+                }
             }
         }
     }
