@@ -89,6 +89,9 @@ class NeatCPUTrainer:
         self.black_hof: list[tuple[float, str]] = []
         self.hof_max_size = 10
 
+        # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
+        self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
+
         # Fixed random benchmark population for absolute progress measurement.
         self.benchmark_size = 20
         self.benchmark_genomes = self._init_benchmark()
@@ -281,6 +284,46 @@ class NeatCPUTrainer:
 
         return w_wr, w_mat, b_wr, b_mat
 
+    def _benchmark_fitness_all(
+        self, population: list[str], color: int,
+    ) -> list[float]:
+        """Compute per-individual fitness from games against benchmark opponents.
+
+        Opponents = fixed random benchmark + Hall of Fame from the opposing color.
+        As HoF accumulates stronger genomes, the benchmark escalates automatically.
+        """
+        # Build opponent pool: random benchmark + opposing HoF
+        opponents = list(self.benchmark_genomes)
+        if color == 0:
+            # white individuals need black opponents → use black HoF
+            opponents.extend(genome for _, genome in self.black_hof)
+        else:
+            # black individuals need white opponents → use white HoF
+            opponents.extend(genome for _, genome in self.white_hof)
+        num_opp = len(opponents)
+
+        n = len(population)
+        if color == 0:
+            pairings = [(w, b) for w in range(n) for b in range(num_opp)]
+            results = chess_cpu.simulate_neat_games_batch(
+                population, opponents, pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+                mercy_min_moves=self.mercy_min_moves,
+                mercy_material_threshold=self.mercy_material_threshold,
+            )
+        else:
+            pairings = [(w, b) for w in range(num_opp) for b in range(n)]
+            results = chess_cpu.simulate_neat_games_batch(
+                opponents, population, pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+                mercy_min_moves=self.mercy_min_moves,
+                mercy_material_threshold=self.mercy_material_threshold,
+            )
+
+        return self._compute_fitness(results, n, color=color)
+
     def _genome_stats(self, population: list[str]) -> tuple[float, float]:
         """Compute average connections and nodes across population."""
         total_conns = 0
@@ -347,9 +390,17 @@ class NeatCPUTrainer:
             num_games = len(results)
             total_games += num_games
 
-            # Compute fitness
+            # Compute coevolution fitness
             white_fitness = self._compute_fitness(results, self.pop_size, color=0)
             black_fitness = self._compute_fitness(results, self.pop_size, color=1)
+
+            # Blend benchmark fitness into selection signal
+            bw = self.benchmark_fitness_weight
+            if bw > 0:
+                w_bench_fit = self._benchmark_fitness_all(white_pop, color=0)
+                b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
+                white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit)]
+                black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit)]
 
             # Tournament scores
             white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)

@@ -1,6 +1,6 @@
 {
     "population_size": 200,
-    "max_generations": 150,
+    "max_generations": 500,
     "max_moves_per_game": 100,
     "input_size": 389,
     "output_size": 128,
@@ -21,5 +21,6 @@
     "survival_fraction": 0.5,
     "mercy_min_moves": 30,
     "mercy_material_threshold": 20.0,
-    "threshold_step": 0.1
+    "threshold_step": 0.1,
+    "benchmark_fitness_weight": 0.3
 }
