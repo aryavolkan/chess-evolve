@@ -14,20 +14,33 @@ import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
-# Mock Rust extension modules before importing CPUTrainer
+# Mock Rust extension modules before importing CPUTrainer.
+# Track which modules we inject so we can remove them afterwards to avoid
+# polluting sys.modules for other test files (e.g. test_evolve_ga.py which
+# uses a skipif guard based on whether the *real* evolve_ga is importable).
 # ---------------------------------------------------------------------------
+
+_injected = []
 
 _chess_cpu_mock = types.ModuleType("chess_cpu")
 _chess_cpu_mock.simulate_games_batch = MagicMock(return_value=[])
-sys.modules.setdefault("chess_cpu", _chess_cpu_mock)
+if "chess_cpu" not in sys.modules:
+    sys.modules["chess_cpu"] = _chess_cpu_mock
+    _injected.append("chess_cpu")
 
 _evolve_ga_mock = types.ModuleType("evolve_ga")
 _evolve_ga_mock.assign_species = MagicMock(return_value=([0] * 10, [[0.0] * 10]))
 _evolve_ga_mock.shared_fitness = MagicMock(side_effect=lambda f, *a, **kw: f)
 _evolve_ga_mock.evolve_generation = MagicMock(side_effect=lambda pop, *a, **kw: pop)
-sys.modules.setdefault("evolve_ga", _evolve_ga_mock)
+if "evolve_ga" not in sys.modules:
+    sys.modules["evolve_ga"] = _evolve_ga_mock
+    _injected.append("evolve_ga")
 
 from cpu_trainer import CPUTrainer  # noqa: E402
+
+# Clean up mocks so test_evolve_ga.py can detect the real module is missing
+for _mod in _injected:
+    sys.modules.pop(_mod, None)
 
 
 # ---------------------------------------------------------------------------

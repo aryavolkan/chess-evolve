@@ -15,39 +15,53 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Load train_wandb module safely via runpy to avoid heavy imports
+# Load train_wandb module safely via runpy to avoid heavy imports.
+# Track injected mocks so we can clean them up afterwards.
 # ---------------------------------------------------------------------------
 
-# Ensure mocks for all heavy dependencies
-for mod_name in ("chess_cpu", "evolve_ga", "neat_ga", "torch", "chess"):
-    sys.modules.setdefault(mod_name, types.ModuleType(mod_name))
+_injected = []
 
-_wandb_mock = types.SimpleNamespace(
-    init=MagicMock(), agent=MagicMock(), define_metric=MagicMock(),
-    sweep=MagicMock(return_value="test_sweep_id"),
-    Artifact=MagicMock(), log=MagicMock(),
-)
-sys.modules.setdefault("wandb", _wandb_mock)
+for mod_name in ("chess_cpu", "evolve_ga", "neat_ga", "torch", "chess"):
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = types.ModuleType(mod_name)
+        _injected.append(mod_name)
+
+if "wandb" not in sys.modules:
+    _wandb_mock = types.SimpleNamespace(
+        init=MagicMock(), agent=MagicMock(), define_metric=MagicMock(),
+        sweep=MagicMock(return_value="test_sweep_id"),
+        Artifact=MagicMock(), log=MagicMock(),
+    )
+    sys.modules["wandb"] = _wandb_mock
+    _injected.append("wandb")
 
 # Mock godot_wandb with required exports
-_godot_wandb_mock = types.ModuleType("godot_wandb")
-_godot_wandb_mock.SweepWorker = MagicMock
-_godot_wandb_mock.define_step_metric = MagicMock()
-_godot_wandb_mock.godot_user_dir = MagicMock(return_value=Path("/tmp/test"))
-_godot_wandb_mock.launch_godot = MagicMock()
-_godot_wandb_mock.log_final_summary = MagicMock()
-_godot_wandb_mock.poll_metrics = MagicMock(return_value={})
-_godot_wandb_mock.run_training = MagicMock()
-_godot_wandb_mock.wait_for_metrics = MagicMock(return_value=True)
-sys.modules.setdefault("godot_wandb", _godot_wandb_mock)
+if "godot_wandb" not in sys.modules:
+    _godot_wandb_mock = types.ModuleType("godot_wandb")
+    _godot_wandb_mock.SweepWorker = MagicMock
+    _godot_wandb_mock.define_step_metric = MagicMock()
+    _godot_wandb_mock.godot_user_dir = MagicMock(return_value=Path("/tmp/test"))
+    _godot_wandb_mock.launch_godot = MagicMock()
+    _godot_wandb_mock.log_final_summary = MagicMock()
+    _godot_wandb_mock.poll_metrics = MagicMock(return_value={})
+    _godot_wandb_mock.run_training = MagicMock()
+    _godot_wandb_mock.wait_for_metrics = MagicMock(return_value=True)
+    sys.modules["godot_wandb"] = _godot_wandb_mock
+    _injected.append("godot_wandb")
 
 # Mock global_elite
-_global_elite_mock = types.ModuleType("global_elite")
-_global_elite_mock.GlobalElitePool = MagicMock
-sys.modules.setdefault("global_elite", _global_elite_mock)
+if "global_elite" not in sys.modules:
+    _global_elite_mock = types.ModuleType("global_elite")
+    _global_elite_mock.GlobalElitePool = MagicMock
+    sys.modules["global_elite"] = _global_elite_mock
+    _injected.append("global_elite")
 
 # Now load the module
 _MODULE = runpy.run_path("train_wandb.py", run_name="__train_wandb_test__")
+
+# Clean up mocks so other test files can detect real modules as missing
+for _mod in _injected:
+    sys.modules.pop(_mod, None)
 
 
 # ===========================================================================

@@ -14,12 +14,18 @@ from unittest.mock import MagicMock
 import pytest
 
 # ---------------------------------------------------------------------------
-# Mock Rust extension modules before importing NeatCPUTrainer
+# Mock Rust extension modules before importing NeatCPUTrainer.
+# Track injected mocks so we can clean them up afterwards to avoid
+# polluting sys.modules for other test files.
 # ---------------------------------------------------------------------------
+
+_injected = []
 
 _chess_cpu_mock = types.ModuleType("chess_cpu")
 _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=[])
-sys.modules.setdefault("chess_cpu", _chess_cpu_mock)
+if "chess_cpu" not in sys.modules:
+    sys.modules["chess_cpu"] = _chess_cpu_mock
+    _injected.append("chess_cpu")
 
 _neat_ga_mock = types.ModuleType("neat_ga")
 _neat_ga_mock.create_population = MagicMock(return_value=["{}"] * 20)
@@ -38,14 +44,19 @@ _neat_ga_mock.evolve_neat_generation = MagicMock(
         "stats": {"avg_connections": 10, "avg_nodes": 400, "species_count": 3, "avg_depth": 2, "avg_width": 5},
     }
 )
-sys.modules.setdefault("neat_ga", _neat_ga_mock)
+if "neat_ga" not in sys.modules:
+    sys.modules["neat_ga"] = _neat_ga_mock
+    _injected.append("neat_ga")
 
-# Also ensure evolve_ga is present (imported transitively in some setups)
 if "evolve_ga" not in sys.modules:
-    _evolve_ga_mock = types.ModuleType("evolve_ga")
-    sys.modules["evolve_ga"] = _evolve_ga_mock
+    sys.modules["evolve_ga"] = types.ModuleType("evolve_ga")
+    _injected.append("evolve_ga")
 
 from neat_cpu_trainer import NeatCPUTrainer  # noqa: E402
+
+# Clean up mocks so other test files can detect real modules as missing
+for _mod in _injected:
+    sys.modules.pop(_mod, None)
 
 
 # ---------------------------------------------------------------------------
