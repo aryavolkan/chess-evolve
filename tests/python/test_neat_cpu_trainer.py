@@ -333,3 +333,159 @@ class TestInitialization:
 
     def test_benchmark_genomes_created(self, trainer):
         assert len(trainer.benchmark_genomes) == 20
+
+
+# ===========================================================================
+# _compute_outcome_rates – edge cases
+# ===========================================================================
+
+class TestComputeOutcomeRatesEdgeCases:
+    def test_all_wins(self, trainer):
+        results = [_make_game_result(result=1) for _ in range(5)]
+        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        assert w == 1.0
+        assert d == 0.0
+        assert l == 0.0
+
+    def test_all_draws(self, trainer):
+        results = [_make_game_result(result=2) for _ in range(5)]
+        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        assert w == 0.0
+        assert d == 1.0
+        assert l == 0.0
+
+    def test_all_losses(self, trainer):
+        results = [_make_game_result(result=-1) for _ in range(5)]
+        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        assert w == 0.0
+        assert d == 0.0
+        assert l == 1.0
+
+    def test_black_perspective(self, trainer):
+        """result=-1 is black win; result=1 is black loss."""
+        results = [_make_game_result(result=-1)]
+        w, d, l = trainer._compute_outcome_rates(results, color=1)
+        assert w == 1.0
+        assert l == 0.0
+
+    def test_rates_sum_to_one(self, trainer):
+        results = [_make_game_result(result=r) for r in [1, 2, -1, 2, 1]]
+        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        assert abs(w + d + l - 1.0) < 1e-6
+
+
+# ===========================================================================
+# _benchmark_vs_random
+# ===========================================================================
+
+class TestBenchmarkVsRandom:
+    def test_returns_four_floats(self, trainer):
+        mock_results = [
+            {"result": 1, "white_material": 15.0, "black_material": 10.0}
+            for _ in range(10)
+        ]
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=mock_results)
+
+        white_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        black_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        white_fitness = [float(i) for i in range(trainer.pop_size)]
+        black_fitness = [float(i) for i in range(trainer.pop_size)]
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(
+            white_pop, black_pop, white_fitness, black_fitness,
+        )
+        assert isinstance(w_wr, float)
+        assert isinstance(w_mat, float)
+        assert isinstance(b_wr, float)
+        assert isinstance(b_mat, float)
+
+    def test_all_white_wins(self, trainer):
+        mock_results = [
+            {"result": 1, "white_material": 20.0, "black_material": 5.0}
+            for _ in range(10)
+        ]
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=mock_results)
+
+        white_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        black_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        fitness = [float(i) for i in range(trainer.pop_size)]
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(
+            white_pop, black_pop, fitness, fitness,
+        )
+        assert w_wr == 1.0
+        assert w_mat > 0
+
+    def test_empty_results(self, trainer):
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=[])
+
+        white_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        black_pop = [_make_genome() for _ in range(trainer.pop_size)]
+        fitness = [1.0] * trainer.pop_size
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(
+            white_pop, black_pop, fitness, fitness,
+        )
+        assert w_wr == 0.0
+        assert b_wr == 0.0
+
+
+# ===========================================================================
+# _benchmark_fitness_all
+# ===========================================================================
+
+class TestBenchmarkFitnessAll:
+    def test_returns_fitness_list(self, trainer):
+        mock_results = [
+            _make_game_result(white_idx=i % trainer.pop_size, result=1)
+            for i in range(20)
+        ]
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=mock_results)
+
+        pop = [_make_genome() for _ in range(trainer.pop_size)]
+        fitness = trainer._benchmark_fitness_all(pop, color=0)
+        assert isinstance(fitness, list)
+        assert len(fitness) == trainer.pop_size
+
+    def test_includes_hof_opponents(self, trainer):
+        """When HoF has entries, opponent pool should grow."""
+        trainer.black_hof = [(10.0, _make_genome()), (5.0, _make_genome())]
+        mock_results = [_make_game_result(result=2) for _ in range(50)]
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=mock_results)
+
+        pop = [_make_genome() for _ in range(trainer.pop_size)]
+        trainer._benchmark_fitness_all(pop, color=0)
+
+        # Verify simulate was called with more opponents (benchmark + HoF)
+        call_args = _chess_cpu_mock.simulate_neat_games_batch.call_args
+        opponents = call_args[0][1]  # second positional arg
+        assert len(opponents) == trainer.benchmark_size + 2
+
+    def test_fallback_on_rust_panic(self, trainer):
+        """On Rust exception, should return draw-based fallback fitness."""
+        _chess_cpu_mock.simulate_neat_games_batch = MagicMock(
+            side_effect=RuntimeError("Rust panic"),
+        )
+        pop = [_make_genome() for _ in range(trainer.pop_size)]
+        fitness = trainer._benchmark_fitness_all(pop, color=0)
+        assert isinstance(fitness, list)
+        assert len(fitness) == trainer.pop_size
+
+
+# ===========================================================================
+# _compute_fitness – loss result
+# ===========================================================================
+
+class TestComputeFitnessLoss:
+    def test_loss_gives_lower_fitness(self, trainer):
+        win = [_make_game_result(result=1)]
+        loss = [_make_game_result(result=-1)]
+        f_win = trainer._compute_fitness(win, pop_size=2, color=0)
+        f_loss = trainer._compute_fitness(loss, pop_size=2, color=0)
+        assert f_win[0] > f_loss[0]
+
+    def test_black_loss_from_result_one(self, trainer):
+        """result=1 (white wins) should be a loss for black."""
+        results = [_make_game_result(result=1)]
+        fitness = trainer._compute_fitness(results, pop_size=2, color=1)
+        # Black should get loss penalty + negative material diff
+        assert fitness[1] < 0 or fitness[1] < trainer._compute_fitness(
+            [_make_game_result(result=-1)], pop_size=2, color=1,
+        )[1]

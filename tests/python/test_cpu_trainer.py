@@ -10,8 +10,9 @@ import sys
 import types
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy", reason="numpy required for CPUTrainer tests")
 
 # ---------------------------------------------------------------------------
 # Mock Rust extension modules before importing CPUTrainer.
@@ -354,3 +355,162 @@ class TestInitialization:
         assert t.pop_size == 30
         assert t.elite_count == 2
         assert t.mutation_rate == 0.25
+
+    def test_speciation_threshold_initialized(self, trainer):
+        assert trainer.white_spec_threshold > 0
+        assert trainer.black_spec_threshold > 0
+
+
+# ===========================================================================
+# _speciate_and_evolve
+# ===========================================================================
+
+class TestSpeciateAndEvolve:
+    def test_returns_correct_shapes(self, trainer):
+        pop = trainer._init_population()
+        fitness = [float(i) for i in range(trainer.pop_size)]
+        new_pop, sp_count, new_reps, threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, trainer.white_spec_threshold,
+        )
+        assert new_pop.shape == pop.shape
+        assert new_pop.dtype == np.float32
+        assert isinstance(sp_count, int)
+        assert isinstance(threshold, float)
+
+    def test_threshold_increases_when_too_many_species(self, trainer):
+        """If species_count > target_species, threshold should increase."""
+        # Mock assign_species to return many species
+        pop = trainer._init_population()
+        fitness = [1.0] * trainer.pop_size
+        many_species = list(range(trainer.pop_size))  # each individual = own species
+        reps = [[0.0]] * trainer.pop_size
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(many_species, reps))
+
+        trainer.target_species = 2  # force target much lower
+        initial_threshold = 10.0
+        _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, initial_threshold,
+        )
+        assert new_threshold > initial_threshold
+
+    def test_threshold_decreases_when_too_few_species(self, trainer):
+        """If species_count < target_species, threshold should decrease."""
+        pop = trainer._init_population()
+        fitness = [1.0] * trainer.pop_size
+        one_species = [0] * trainer.pop_size
+        reps = [[0.0]]
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+
+        trainer.target_species = 20
+        initial_threshold = 10.0
+        _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, initial_threshold,
+        )
+        assert new_threshold < initial_threshold
+
+    def test_threshold_floor_at_one(self, trainer):
+        pop = trainer._init_population()
+        fitness = [1.0] * trainer.pop_size
+        one_species = [0] * trainer.pop_size
+        reps = [[0.0]]
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+
+        trainer.target_species = 1000
+        _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, 0.5,  # below floor
+        )
+        assert new_threshold >= 1.0
+
+    def test_fitness_sharing_disabled(self, trainer):
+        """When use_fitness_sharing=False, raw fitness should be passed to evolve."""
+        trainer.use_fitness_sharing = False
+        pop = trainer._init_population()
+        fitness = [float(i) for i in range(trainer.pop_size)]
+        one_species = [0] * trainer.pop_size
+        reps = [[0.0]]
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        _evolve_ga_mock.shared_fitness.reset_mock()
+
+        trainer._speciate_and_evolve(pop, fitness, None, 10.0)
+        _evolve_ga_mock.shared_fitness.assert_not_called()
+
+    def test_fitness_sharing_enabled(self, trainer):
+        """When use_fitness_sharing=True, shared_fitness should be called."""
+        trainer.use_fitness_sharing = True
+        pop = trainer._init_population()
+        fitness = [float(i) for i in range(trainer.pop_size)]
+        one_species = [0] * trainer.pop_size
+        reps = [[0.0]]
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        _evolve_ga_mock.shared_fitness.reset_mock()
+
+        trainer._speciate_and_evolve(pop, fitness, None, 10.0)
+        _evolve_ga_mock.shared_fitness.assert_called_once()
+
+    def test_passes_species_reps(self, trainer):
+        """Previous representatives should be forwarded to assign_species."""
+        pop = trainer._init_population()
+        fitness = [1.0] * trainer.pop_size
+        prev_reps = [[1.0, 2.0], [3.0, 4.0]]
+        one_species = [0] * trainer.pop_size
+        reps = [[0.0]]
+        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+
+        trainer._speciate_and_evolve(pop, fitness, prev_reps, 10.0)
+        call_kwargs = _evolve_ga_mock.assign_species.call_args
+        assert call_kwargs[1]["representatives"] == prev_reps
+
+
+# ===========================================================================
+# _benchmark_vs_random
+# ===========================================================================
+
+class TestBenchmarkVsRandom:
+    def test_returns_four_floats(self, trainer):
+        # Mock simulate_games_batch to return game results
+        mock_results = [
+            {"result": 1, "white_material": 15.0, "black_material": 10.0}
+            for _ in range(20)
+        ]
+        _chess_cpu_mock.simulate_games_batch = MagicMock(return_value=mock_results)
+
+        white_pop = trainer._init_population()
+        black_pop = trainer._init_population()
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(white_pop, black_pop)
+        assert isinstance(w_wr, float)
+        assert isinstance(w_mat, float)
+        assert isinstance(b_wr, float)
+        assert isinstance(b_mat, float)
+
+    def test_all_white_wins_gives_full_win_rate(self, trainer):
+        mock_results = [
+            {"result": 1, "white_material": 20.0, "black_material": 5.0}
+            for _ in range(10)
+        ]
+        _chess_cpu_mock.simulate_games_batch = MagicMock(return_value=mock_results)
+
+        white_pop = trainer._init_population()
+        black_pop = trainer._init_population()
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(white_pop, black_pop)
+        assert w_wr == 1.0
+        assert w_mat > 0
+
+    def test_all_draws_gives_zero_win_rate(self, trainer):
+        mock_results = [
+            {"result": 2, "white_material": 10.0, "black_material": 10.0}
+            for _ in range(10)
+        ]
+        _chess_cpu_mock.simulate_games_batch = MagicMock(return_value=mock_results)
+
+        white_pop = trainer._init_population()
+        black_pop = trainer._init_population()
+        w_wr, _, b_wr, _ = trainer._benchmark_vs_random(white_pop, black_pop)
+        assert w_wr == 0.0
+
+    def test_empty_results(self, trainer):
+        _chess_cpu_mock.simulate_games_batch = MagicMock(return_value=[])
+        white_pop = trainer._init_population()
+        black_pop = trainer._init_population()
+        w_wr, w_mat, b_wr, b_mat = trainer._benchmark_vs_random(white_pop, black_pop)
+        assert w_wr == 0.0
+        assert b_wr == 0.0

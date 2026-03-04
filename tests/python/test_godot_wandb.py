@@ -23,7 +23,10 @@ from godot_wandb import (  # noqa: E402
     calc_training_timeout,
     compute_derived_metrics,
     godot_user_dir,
+    launch_godot,
+    log_final_summary,
     read_metrics,
+    wait_for_metrics,
     write_config,
 )
 
@@ -193,3 +196,87 @@ class TestCalcTrainingTimeout:
             parallel_count=0, max_generations=5,
         )
         assert result > 0  # should use max(1, 0)
+
+
+# ===========================================================================
+# log_final_summary
+# ===========================================================================
+
+class TestLogFinalSummary:
+    def test_empty_metrics_noop(self):
+        run = type("FakeRun", (), {"summary": {}})()
+        log_final_summary(run, {})
+        assert run.summary == {}
+
+    def test_none_metrics_noop(self):
+        run = type("FakeRun", (), {"summary": {}})()
+        log_final_summary(run, None)
+        assert run.summary == {}
+
+    def test_writes_final_prefix(self):
+        run = type("FakeRun", (), {"summary": {}})()
+        metrics = {"generation": 10, "best_fitness": 5.5, "name": "test"}
+        log_final_summary(run, metrics)
+        assert run.summary["final_generation"] == 10
+        assert run.summary["final_best_fitness"] == 5.5
+        assert "final_name" not in run.summary  # strings excluded
+
+    def test_custom_key_map(self):
+        run = type("FakeRun", (), {"summary": {}})()
+        metrics = {"best_fitness": 5.5, "avg_fitness": 3.0}
+        log_final_summary(run, metrics, key_map={"best_fitness": "top_score"})
+        assert run.summary["top_score"] == 5.5
+        assert "final_avg_fitness" not in run.summary  # key_map overrides
+
+
+# ===========================================================================
+# wait_for_metrics
+# ===========================================================================
+
+class TestWaitForMetrics:
+    def test_returns_true_when_file_exists(self, tmp_path):
+        metrics = tmp_path / "metrics.json"
+        metrics.write_text("{}")
+        assert wait_for_metrics(metrics, timeout=1.0) is True
+
+    def test_returns_false_on_timeout(self, tmp_path):
+        metrics = tmp_path / "metrics.json"
+        assert wait_for_metrics(metrics, timeout=0.1) is False
+
+
+# ===========================================================================
+# launch_godot
+# ===========================================================================
+
+class TestLaunchGodot:
+    def test_builds_headless_command(self):
+        with patch("godot_wandb.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = type("P", (), {"pid": 123})()
+            proc = launch_godot("/path/to/project", godot_path="/usr/bin/godot")
+            cmd = mock_popen.call_args[0][0]
+            assert "/usr/bin/godot" in cmd
+            assert "--headless" in cmd
+            assert "--path" in cmd
+            assert "--auto-train" in cmd
+
+    def test_visible_mode_no_headless(self):
+        with patch("godot_wandb.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = type("P", (), {"pid": 123})()
+            launch_godot("/path/to/project", godot_path="/usr/bin/godot", visible=True)
+            cmd = mock_popen.call_args[0][0]
+            assert "--headless" not in cmd
+
+    def test_worker_id_passed(self):
+        with patch("godot_wandb.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = type("P", (), {"pid": 123})()
+            launch_godot("/path", godot_path="/usr/bin/godot", worker_id="w123")
+            cmd = mock_popen.call_args[0][0]
+            assert "--worker-id=w123" in cmd
+
+    def test_clears_old_metrics(self, tmp_path):
+        metrics = tmp_path / "metrics.json"
+        metrics.write_text("{}")
+        with patch("godot_wandb.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = type("P", (), {"pid": 123})()
+            launch_godot("/path", godot_path="/usr/bin/godot", metrics_path=metrics)
+            assert not metrics.exists()

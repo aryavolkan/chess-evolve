@@ -216,3 +216,89 @@ class TestDoChainedTraining:
         finally:
             _globals["do_training"] = original
         assert call_count == 1
+
+
+# ===========================================================================
+# _harvest_elites
+# ===========================================================================
+
+class TestHarvestElites:
+    def test_no_contrib_file_noop(self, tmp_path):
+        """When no elite_contrib file exists, nothing should happen."""
+        harvest = _MODULE["_harvest_elites"]
+        # Set up required globals
+        _globals = harvest.__globals__
+        orig_worker = _globals.get("_worker")
+        orig_user_dir = _globals.get("USER_DIR")
+        mock_worker = type("W", (), {"worker_id": "test_w1"})()
+        _globals["_worker"] = mock_worker
+        _globals["USER_DIR"] = str(tmp_path)
+
+        mock_run = MagicMock()
+        mock_pool = MagicMock()
+        try:
+            harvest(mock_run, mock_pool)
+        finally:
+            _globals["_worker"] = orig_worker
+            _globals["USER_DIR"] = orig_user_dir
+
+        mock_pool.update_contrib.assert_not_called()
+
+    def test_harvests_valid_elites(self, tmp_path):
+        """When elite_contrib file exists with valid genomes, update pool."""
+        harvest = _MODULE["_harvest_elites"]
+        _globals = harvest.__globals__
+        orig_worker = _globals.get("_worker")
+        orig_user_dir = _globals.get("USER_DIR")
+        orig_wandb = _globals.get("wandb")
+        mock_worker = type("W", (), {"worker_id": "test_w2"})()
+        _globals["_worker"] = mock_worker
+        _globals["USER_DIR"] = str(tmp_path)
+        # Ensure wandb mock has Artifact
+        mock_wandb = types.SimpleNamespace(Artifact=MagicMock())
+        _globals["wandb"] = mock_wandb
+
+        # Write a valid contrib file
+        contrib = tmp_path / "elite_contrib_test_w2.json"
+        contrib.write_text(json.dumps({
+            "elites": [{"fitness": 5.0}, {"fitness": 3.0}],
+        }))
+
+        mock_run = MagicMock()
+        mock_pool = MagicMock()
+        mock_pool.update_contrib = MagicMock(return_value=2)
+
+        try:
+            harvest(mock_run, mock_pool)
+        finally:
+            _globals["_worker"] = orig_worker
+            _globals["USER_DIR"] = orig_user_dir
+            _globals["wandb"] = orig_wandb
+
+        mock_pool.update_contrib.assert_called_once_with(
+            "test_w2", [{"fitness": 5.0}, {"fitness": 3.0}],
+        )
+
+    def test_handles_corrupt_json(self, tmp_path):
+        """Corrupt contrib file should not crash."""
+        harvest = _MODULE["_harvest_elites"]
+        _globals = harvest.__globals__
+        orig_worker = _globals.get("_worker")
+        orig_user_dir = _globals.get("USER_DIR")
+        mock_worker = type("W", (), {"worker_id": "test_w3"})()
+        _globals["_worker"] = mock_worker
+        _globals["USER_DIR"] = str(tmp_path)
+
+        contrib = tmp_path / "elite_contrib_test_w3.json"
+        contrib.write_text("{bad json")
+
+        mock_run = MagicMock()
+        mock_pool = MagicMock()
+
+        try:
+            harvest(mock_run, mock_pool)  # should not raise
+        finally:
+            _globals["_worker"] = orig_worker
+            _globals["USER_DIR"] = orig_user_dir
+
+        mock_pool.update_contrib.assert_not_called()
