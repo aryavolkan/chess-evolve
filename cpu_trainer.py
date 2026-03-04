@@ -55,17 +55,18 @@ class CPUTrainer:
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
 
-        # Fitness weights — tuned for continuous selection signal.
-        # With 90% draws, win/loss is essentially random noise.
-        # Material and mobility provide consistent per-game gradient.
-        self.win_bonus = 3.0
+        # Fitness weights — tuned to prioritize winning over material hoarding.
+        # Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
+        # King safety rewards defending own king AND attacking opponent's king.
+        self.win_bonus = 10.0
         self.draw_bonus = 1.0
-        self.loss_penalty = -1.0
-        self.material_weight = 3.0
+        self.loss_penalty = -3.0
+        self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
+        self.opp_king_safety_weight = 0.5
         self.move_count_penalty = -0.002
-        self.checkmate_bonus = 1.0
+        self.checkmate_bonus = 10.0
 
         # Network weight count
         ih = self.input_size * self.hidden_size
@@ -181,6 +182,7 @@ class CPUTrainer:
                 my_material = game["white_material"]
                 opp_material = game["black_material"]
                 my_king_safety = game["white_king_safety"]
+                opp_king_safety = game["black_king_safety"]
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
             else:
@@ -188,6 +190,7 @@ class CPUTrainer:
                 my_material = game["black_material"]
                 opp_material = game["white_material"]
                 my_king_safety = game["black_king_safety"]
+                opp_king_safety = game["white_king_safety"]
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
 
@@ -195,7 +198,7 @@ class CPUTrainer:
             move_count = game["move_count"]
             f = 0.0
 
-            # Game result (kept small — wins are rare and mostly random)
+            # Game result — winning is the primary objective
             is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
             is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
 
@@ -208,14 +211,18 @@ class CPUTrainer:
             elif is_loss:
                 f += self.loss_penalty
 
-            # Material difference — primary continuous signal
+            # Material difference — secondary continuous signal
             f += (my_material - opp_material) * self.material_weight
 
             # Mobility advantage — rewards piece activity
             f += (my_mobility - opp_mobility) * self.mobility_weight
 
-            # King safety
+            # King safety — reward protecting own king
             f += my_king_safety * self.king_safety_weight
+
+            # Opponent king safety — reward exposing opponent's king
+            # opp_king_safety is high when opponent is safe, so subtract it
+            f -= opp_king_safety * self.opp_king_safety_weight
 
             # Move count penalty
             f += move_count * self.move_count_penalty
