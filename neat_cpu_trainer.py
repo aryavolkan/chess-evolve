@@ -40,14 +40,15 @@ class NeatCPUTrainer:
         self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
 
         # Fitness weights (same as cpu_trainer.py)
-        self.win_bonus = 3.0
+        self.win_bonus = 10.0
         self.draw_bonus = 1.0
-        self.loss_penalty = -1.0
-        self.material_weight = 3.0
+        self.loss_penalty = -3.0
+        self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
+        self.opp_king_safety_weight = 0.5
         self.move_count_penalty = -0.002
-        self.checkmate_bonus = 1.0
+        self.checkmate_bonus = 10.0
 
         # NEAT config for Rust
         self.neat_config = {
@@ -178,6 +179,7 @@ class NeatCPUTrainer:
                 my_material = game["white_material"]
                 opp_material = game["black_material"]
                 my_king_safety = game["white_king_safety"]
+                opp_king_safety = game["black_king_safety"]
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
             else:
@@ -185,6 +187,7 @@ class NeatCPUTrainer:
                 my_material = game["black_material"]
                 opp_material = game["white_material"]
                 my_king_safety = game["black_king_safety"]
+                opp_king_safety = game["white_king_safety"]
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
 
@@ -207,6 +210,7 @@ class NeatCPUTrainer:
             f += (my_material - opp_material) * self.material_weight
             f += (my_mobility - opp_mobility) * self.mobility_weight
             f += my_king_safety * self.king_safety_weight
+            f -= opp_king_safety * self.opp_king_safety_weight
             f += move_count * self.move_count_penalty
 
             fitness[idx] += f
