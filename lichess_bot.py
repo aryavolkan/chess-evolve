@@ -220,17 +220,47 @@ def pick_move(network: SparseNetwork, board: chess.Board,
     return best_move
 
 
+def pick_move_ensemble(networks: list[SparseNetwork], board: chess.Board,
+                       output_size: int = DEFAULT_OUTPUT_SIZE) -> chess.Move:
+    """Select the best legal move by soft-voting across multiple networks.
+
+    Each network scores all legal moves; scores are summed per move and the
+    move with the highest total wins.
+    """
+    inputs = encode_board(board)
+    legal_moves = list(board.legal_moves)
+    if not legal_moves:
+        raise ValueError("No legal moves available")
+
+    # Accumulate scores across all networks
+    move_scores = [0.0] * len(legal_moves)
+    for network in networks:
+        outputs = network.forward(inputs)
+        for i, move in enumerate(legal_moves):
+            from_sq = move.from_square
+            to_sq = move.to_square
+            if output_size <= 128:
+                score = outputs[from_sq] + outputs[64 + to_sq]
+            else:
+                idx = from_sq * 64 + to_sq
+                score = outputs[idx] if idx < len(outputs) else 0.0
+            move_scores[i] += score
+
+    best_idx = max(range(len(legal_moves)), key=lambda i: move_scores[i])
+    return legal_moves[best_idx]
+
+
 # ---------------------------------------------------------------------------
 # NeatLichessBot
 # ---------------------------------------------------------------------------
 
 class NeatLichessBot:
-    """Lichess bot powered by an evolved NEAT genome."""
+    """Lichess bot powered by an evolved NEAT genome ensemble."""
 
-    def __init__(self, token: str, genome_json: str,
+    def __init__(self, token: str, genome_jsons: list[str],
                  output_size: int = DEFAULT_OUTPUT_SIZE):
         self.output_size = output_size
-        self.network = SparseNetwork(json.loads(genome_json))
+        self.networks = [SparseNetwork(json.loads(gj)) for gj in genome_jsons]
         self.session = berserk.TokenSession(token)
         self.client = berserk.Client(self.session)
         self.bot_id = self.client.account.get()["id"]
@@ -239,7 +269,9 @@ class NeatLichessBot:
         self.stats = {"wins": 0, "losses": 0, "draws": 0, "games": []}
 
     def pick_move(self, board: chess.Board) -> chess.Move:
-        return pick_move(self.network, board, self.output_size)
+        if len(self.networks) == 1:
+            return pick_move(self.networks[0], board, self.output_size)
+        return pick_move_ensemble(self.networks, board, self.output_size)
 
     def play_game(self, game_id: str):
         """Stream a game and respond with moves."""
@@ -404,6 +436,32 @@ def load_genome(path: str, color: str = "white") -> tuple[str, int]:
     return genome_json, output_count
 
 
+def load_genomes(path: str, color: str = "white",
+                 top_n: int = 5) -> tuple[list[str], int]:
+    """Load best genome + HoF genomes (deduped), up to top_n.
+
+    Returns (list_of_genome_json_strings, output_size).
+    """
+    with open(path) as f:
+        data = json.load(f)
+
+    best_json = data[color]
+    genome = json.loads(best_json)
+    output_size = sum(1 for n in genome["nodes"] if n["node_type"] == 2)
+
+    # Collect unique genomes: best first, then HoF
+    seen = {best_json}
+    genomes = [best_json]
+
+    hof_key = f"{color}_hof"
+    for gj in data.get(hof_key, []):
+        if gj not in seen and len(genomes) < top_n:
+            seen.add(gj)
+            genomes.append(gj)
+
+    return genomes, output_size
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -421,28 +479,35 @@ def main():
                         help="Max games to play before stopping")
     parser.add_argument("--challenge", type=str, default=None,
                         help="Challenge this user/bot instead of waiting")
+    parser.add_argument("--top", type=int, default=5,
+                        help="Ensemble size: number of top genomes for voting (default: 5, 1=single genome)")
     parser.add_argument("--test", action="store_true",
                         help="Dry run: load genome, pick first move, exit")
     args = parser.parse_args()
 
-    # Load genome
-    genome_json, output_size = load_genome(args.genome, args.color)
-    genome = json.loads(genome_json)
-    n_hidden = sum(1 for n in genome["nodes"] if n["node_type"] == 1)
-    n_conns = sum(1 for c in genome["connections"] if c["enabled"])
-    print(f"Loaded {args.color} genome: {output_size} outputs, "
-          f"{n_hidden} hidden nodes, {n_conns} enabled connections")
+    # Load genomes (ensemble)
+    genome_jsons, output_size = load_genomes(args.genome, args.color, top_n=args.top)
+    for i, gj in enumerate(genome_jsons):
+        genome = json.loads(gj)
+        n_hidden = sum(1 for n in genome["nodes"] if n["node_type"] == 1)
+        n_conns = sum(1 for c in genome["connections"] if c["enabled"])
+        label = "best" if i == 0 else f"hof-{i}"
+        print(f"  [{label}] {n_hidden} hidden, {n_conns} connections")
+    print(f"Loaded {len(genome_jsons)} {args.color} genome(s), {output_size} outputs")
 
     if args.test:
-        # Dry run: build network, encode start position, pick a move
-        network = SparseNetwork(genome)
+        # Dry run: build networks, encode start position, pick a move
+        networks = [SparseNetwork(json.loads(gj)) for gj in genome_jsons]
         board = chess.Board()
         inputs = encode_board(board)
         print(f"Board encoding: {len(inputs)} floats, "
               f"sum={sum(inputs):.2f}")
 
-        move = pick_move(network, board, output_size)
-        print(f"First move (start position): {move.uci()}")
+        if len(networks) == 1:
+            move = pick_move(networks[0], board, output_size)
+        else:
+            move = pick_move_ensemble(networks, board, output_size)
+        print(f"First move (start position, ensemble={len(networks)}): {move.uci()}")
         assert move in board.legal_moves, f"{move.uci()} is not legal!"
         print("Test passed: move is legal.")
         return
@@ -455,7 +520,7 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    bot = NeatLichessBot(token, genome_json, output_size)
+    bot = NeatLichessBot(token, genome_jsons, output_size)
     print(f"Bot account: {bot.bot_id}")
 
     try:

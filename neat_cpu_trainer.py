@@ -149,6 +149,11 @@ class NeatCPUTrainer:
         else:
             print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
+        # Always persist top-5 Hall of Fame genomes for ensemble play
+        prev["white_hof"] = [genome for _, genome in self.white_hof[:5]]
+        prev["black_hof"] = [genome for _, genome in self.black_hof[:5]]
+        updated = True  # HoF update always triggers save
+
         if updated:
             prev["bench_avg_win_rate"] = (
                 prev.get("bench_white_win_rate", 0.0) + prev.get("bench_black_win_rate", 0.0)
