@@ -181,11 +181,13 @@ Training can run on four backends, auto-detected in this priority order:
 ### Rust Backend Setup
 
 ```bash
-# Build the GDExtension (for Godot integration)
-cargo build --release --manifest-path rust/chess-native/Cargo.toml
+# Build the PyO3 crates (for Python-driven Rust training — primary path)
+cd rust/chess-cpu && maturin develop --release && cd ../..
+cd rust/evolve-ga && maturin develop --release && cd ../..
+cd rust/neat-ga && maturin develop --release && cd ../..
 
-# Build the PyO3 bindings (for Python-driven Rust training)
-cd rust/evolve-ga && maturin develop --release
+# Build the GDExtension (for Godot integration — optional)
+cargo build --release --manifest-path rust/chess-native/Cargo.toml
 ```
 
 The Rust path accelerates:
@@ -203,26 +205,30 @@ The Rust path accelerates:
 
 ## Fitness Function Tuning
 
-The fitness function (`ai/fitness.gd`) combines multiple signals:
+The fitness function (defined in `cpu_trainer.py` / `neat_cpu_trainer.py`) combines multiple signals:
 
 ```
-fitness = win_bonus × win + checkmate_bonus × checkmate + draw_bonus × draw
-        + material_weight × (my_material - opp_material)
-        + mobility_weight × mobility_score
-        + king_safety_weight × king_safety_score
-        + move_weight × moves_played
+fitness = win_bonus x win + checkmate_bonus x checkmate + draw_bonus x draw
+        + loss_penalty x loss
+        + material_weight x (my_material - opp_material)
+        + mobility_weight x mobility_score
+        + king_safety_weight x own_king_safety
+        + opp_king_safety_weight x opp_king_exposure
+        + king_danger_weight x king_danger_score
+        + move_count_penalty x moves_played
 ```
 
-All components are clamped so `fitness ≥ 0`.
+All components are clamped so `fitness >= 0`.
 
 ### Tuning Tips
 
 - **Increase `win_bonus`** (default 10.0) if networks aren't learning to win games
 - **Increase `material_weight`** (default 1.0) if networks sacrifice pieces recklessly
-- **Decrease `mobility_weight`** (default 0.05) — it's a weak signal that can mislead early networks
+- **Adjust `mobility_weight`** (default 0.3) — provides useful signal but can mislead very early networks
+- **Increase `opp_king_safety_weight`** (default 1.5) to incentivize king attacks
 - **Increase `king_safety_weight`** (default 0.5) only after networks understand basic tactics
 - **Set `draw_bonus` to 0** temporarily if you want more aggressive play (networks will stop playing for draws)
-- **Endgame bonus** (from `endgame_hints.gd`) rewards K+Q/R vs K positions — leave this enabled to help networks learn basic checkmates
+- **`king_danger_weight`** (default 1.0) rewards creating attack signals against the opponent's king
 
 ---
 

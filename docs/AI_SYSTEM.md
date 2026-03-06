@@ -112,17 +112,19 @@ Fitness is computed per-game by `ChessFitness.evaluate(state, color, move_count)
 | Component | Default Weight | Formula |
 |-----------|---------------|---------|
 | Win bonus | 10.0 | Applied if player won |
-| Checkmate bonus | 5.0 | Extra if win was by checkmate |
-| Draw bonus | 3.0 | Applied on draw |
-| Loss penalty | 0.0 | Applied on loss (no penalty by default) |
-| Material advantage | 1.0 | `(my_material - opp_material) × weight` |
-| Mobility | 0.05 | `mobility_score(color) × weight` |
-| King safety | 0.5 | `king_safety_score(color) × weight` |
-| Move count | 0.01 | `moves_played × weight` (rewards survival) |
+| Checkmate bonus | 10.0 | Extra if win was by checkmate |
+| Draw bonus | 1.0 | Applied on draw |
+| Loss penalty | -3.0 | Applied on loss |
+| Material advantage | 1.0 | `(my_material - opp_material) x weight` |
+| Mobility | 0.3 | `mobility_score(color) x weight` |
+| Own king safety | 0.5 | `king_safety_score(own_color) x weight` |
+| Opp king safety | 1.5 | Reward for attacking opponent's king exposure |
+| King danger | 1.0 | `king_danger_score x weight` (attack signals) |
+| Move count | -0.002 | `moves_played x weight` (penalty encourages decisive play) |
 
 Material values: Pawn=1, Knight=3, Bishop=3.25, Rook=5, Queen=9.
 
-Fitness is clamped to ≥ 0.
+Fitness is clamped to >= 0.
 
 ### Curriculum Learning
 

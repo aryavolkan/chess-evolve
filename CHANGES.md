@@ -2,6 +2,14 @@
 
 Notable changes to chess-evolve, newest first. For detailed documentation see `docs/`.
 
+## 2026-03-05
+
+- **Lichess bot integration**: play evolved NEAT genomes online via `lichess_bot.py` with streaming game loop, challenge/accept modes
+- **Per-color seed saving**: white/black seeds saved independently based on per-color benchmark win rate
+- **King danger score**: new `king_danger_score` metric for richer king attack signal
+- **Fitness component breakdown**: per-component fitness metrics logged to W&B for analysis
+- **Rebalanced fitness**: increased `opp_king_safety_weight` to incentivize king hunting
+
 ## 2026-02-27
 
 - **Elo tracking**: 14 Elo distribution metrics (min/p25/median/p75/max per color) synced to W&B
