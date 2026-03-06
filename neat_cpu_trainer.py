@@ -117,35 +117,45 @@ class NeatCPUTrainer:
     def _save_best(self, white_pop: list[str], black_pop: list[str],
                    white_fitness: list[float], black_fitness: list[float],
                    bench_w_wr: float, bench_b_wr: float):
-        """Save best white and black genomes only if they beat the existing seed."""
-        new_avg = (bench_w_wr + bench_b_wr) / 2
-
-        # Only overwrite if we improve on the existing seed
+        """Save best white and black genomes independently when each improves."""
+        prev = {}
         if self.save_genome_path.exists():
             try:
                 prev = json.loads(self.save_genome_path.read_text())
-                prev_avg = prev.get("bench_avg_win_rate",
-                                    prev.get("bench_white_win_rate", 0.0))
-                if new_avg <= prev_avg:
-                    print(f"  Seed not updated: bench_avg={new_avg:.3f} <= existing {prev_avg:.3f}")
-                    return
             except (json.JSONDecodeError, OSError):
                 pass
 
+        prev_w_wr = prev.get("bench_white_win_rate", 0.0)
+        prev_b_wr = prev.get("bench_black_win_rate", 0.0)
+
         w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
         b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
-        data = {
-            "white": white_pop[w_best_idx],
-            "black": black_pop[b_best_idx],
-            "bench_white_win_rate": bench_w_wr,
-            "bench_black_win_rate": bench_b_wr,
-            "bench_avg_win_rate": new_avg,
-        }
-        try:
-            self.save_genome_path.write_text(json.dumps(data))
-            print(f"  Seed updated: bench_avg={new_avg:.3f}")
-        except OSError as e:
-            print(f"  Warning: could not save best genomes: {e}")
+
+        updated = False
+        if bench_w_wr > prev_w_wr:
+            prev["white"] = white_pop[w_best_idx]
+            prev["bench_white_win_rate"] = bench_w_wr
+            print(f"  White seed updated: bench_wr={bench_w_wr:.3f} (was {prev_w_wr:.3f})")
+            updated = True
+        else:
+            print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
+
+        if bench_b_wr > prev_b_wr:
+            prev["black"] = black_pop[b_best_idx]
+            prev["bench_black_win_rate"] = bench_b_wr
+            print(f"  Black seed updated: bench_wr={bench_b_wr:.3f} (was {prev_b_wr:.3f})")
+            updated = True
+        else:
+            print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
+
+        if updated:
+            prev["bench_avg_win_rate"] = (
+                prev.get("bench_white_win_rate", 0.0) + prev.get("bench_black_win_rate", 0.0)
+            ) / 2
+            try:
+                self.save_genome_path.write_text(json.dumps(prev))
+            except OSError as e:
+                print(f"  Warning: could not save best genomes: {e}")
 
     def _init_benchmark(self) -> list[str]:
         """Create a fixed random NEAT population for absolute progress measurement."""
