@@ -68,6 +68,7 @@ def _make_game_result(
     white_material=10.0, black_material=10.0,
     white_mobility=5, black_mobility=5,
     white_king_safety=1.0, black_king_safety=1.0,
+    white_captures_value=0.0, black_captures_value=0.0,
 ):
     return {
         "white_idx": white_idx, "black_idx": black_idx,
@@ -75,6 +76,8 @@ def _make_game_result(
         "white_material": white_material, "black_material": black_material,
         "white_mobility": white_mobility, "black_mobility": black_mobility,
         "white_king_safety": white_king_safety, "black_king_safety": black_king_safety,
+        "white_captures_value": white_captures_value,
+        "black_captures_value": black_captures_value,
     }
 
 
@@ -118,6 +121,19 @@ class TestComputeFitness:
     def test_no_games_yields_zero(self, trainer):
         fitness = trainer._compute_fitness([], pop_size=3, color=0)
         assert fitness == [0.0, 0.0, 0.0]
+
+    def test_captures_increase_fitness(self, trainer):
+        no_cap = [_make_game_result(result=2, white_captures_value=0.0)]
+        cap = [_make_game_result(result=2, white_captures_value=9.0)]
+        f_no = trainer._compute_fitness(no_cap, pop_size=2, color=0)
+        f_cap = trainer._compute_fitness(cap, pop_size=2, color=0)
+        assert f_cap[0] > f_no[0]
+
+    def test_draw_bonus_is_zero(self, trainer):
+        assert trainer.draw_bonus == 0.0
+
+    def test_loss_penalty_value(self, trainer):
+        assert trainer.loss_penalty == -5.0
 
 
 # ===========================================================================

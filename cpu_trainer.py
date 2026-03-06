@@ -33,7 +33,7 @@ class CPUTrainer:
         self.input_size = config.get("input_size", 389)
         self.hidden_size = config.get("hidden_size", 64)
         self.output_size = config.get("output_size", 4096)
-        self.max_moves = config.get("max_moves_per_game", 100)
+        self.max_moves = config.get("max_moves_per_game", 200)
         self.temperature = config.get("move_temperature", 0.5)
 
         # GA parameters
@@ -53,14 +53,15 @@ class CPUTrainer:
 
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
-        self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
+        self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
         # Fitness weights — tuned to prioritize winning over material hoarding.
         # Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
         # King safety rewards defending own king AND attacking opponent's king.
         self.win_bonus = 10.0
-        self.draw_bonus = 1.0
-        self.loss_penalty = -3.0
+        self.draw_bonus = 0.0
+        self.loss_penalty = -5.0
+        self.capture_weight = 0.5
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
@@ -187,6 +188,7 @@ class CPUTrainer:
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
                 my_king_danger_inflicted = game.get("white_king_danger", 0.0)
+                my_captures_value = game.get("white_captures_value", 0.0)
             else:
                 idx = game["black_idx"]
                 my_material = game["black_material"]
@@ -196,6 +198,7 @@ class CPUTrainer:
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
                 my_king_danger_inflicted = game.get("black_king_danger", 0.0)
+                my_captures_value = game.get("black_captures_value", 0.0)
 
             result = game["result"]
             move_count = game["move_count"]
@@ -224,11 +227,13 @@ class CPUTrainer:
             f += my_king_safety * self.king_safety_weight
 
             # Opponent king safety — reward exposing opponent's king
-            # opp_king_safety is high when opponent is safe, so subtract it
             f -= opp_king_safety * self.opp_king_safety_weight
 
             # King danger — reward putting opponent's king in danger
             f += my_king_danger_inflicted * self.king_danger_weight
+
+            # Capture reward — reward taking material
+            f += my_captures_value * self.capture_weight
 
             # Move count penalty
             f += move_count * self.move_count_penalty

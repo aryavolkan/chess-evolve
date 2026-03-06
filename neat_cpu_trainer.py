@@ -31,18 +31,19 @@ class NeatCPUTrainer:
         self.pop_size = config.get("population_size", 50)
         self.input_size = config.get("input_size", 389)
         self.output_size = config.get("output_size", 4096)
-        self.max_moves = config.get("max_moves_per_game", 100)
+        self.max_moves = config.get("max_moves_per_game", 200)
         self.temperature = config.get("move_temperature", 0.5)
         self.tournament_opponents = config.get("tournament_opponents", 5)
 
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
-        self.mercy_material_threshold = config.get("mercy_material_threshold", 20.0)
+        self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
         # Fitness weights (same as cpu_trainer.py)
         self.win_bonus = 10.0
-        self.draw_bonus = 1.0
-        self.loss_penalty = -3.0
+        self.draw_bonus = 0.0
+        self.loss_penalty = -5.0
+        self.capture_weight = 0.5
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
@@ -194,6 +195,7 @@ class NeatCPUTrainer:
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
                 my_king_danger_inflicted = game.get("white_king_danger", 0.0)
+                my_captures_value = game.get("white_captures_value", 0.0)
             else:
                 idx = game["black_idx"]
                 my_material = game["black_material"]
@@ -203,6 +205,7 @@ class NeatCPUTrainer:
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
                 my_king_danger_inflicted = game.get("black_king_danger", 0.0)
+                my_captures_value = game.get("black_captures_value", 0.0)
 
             result = game["result"]
             move_count = game["move_count"]
@@ -225,6 +228,7 @@ class NeatCPUTrainer:
             f += my_king_safety * self.king_safety_weight
             f -= opp_king_safety * self.opp_king_safety_weight
             f += my_king_danger_inflicted * self.king_danger_weight
+            f += my_captures_value * self.capture_weight
             f += move_count * self.move_count_penalty
 
             fitness[idx] += f
@@ -243,7 +247,7 @@ class NeatCPUTrainer:
         totals = {
             "outcome": 0.0, "material": 0.0, "mobility": 0.0,
             "king_safety": 0.0, "opp_king_safety": 0.0,
-            "king_danger": 0.0, "move_penalty": 0.0,
+            "king_danger": 0.0, "captures": 0.0, "move_penalty": 0.0,
         }
         n = len(results)
         if n == 0:
@@ -285,6 +289,10 @@ class NeatCPUTrainer:
                 totals["king_danger"] += game.get("white_king_danger", 0.0) * self.king_danger_weight
             else:
                 totals["king_danger"] += game.get("black_king_danger", 0.0) * self.king_danger_weight
+            if color == 0:
+                totals["captures"] += game.get("white_captures_value", 0.0) * self.capture_weight
+            else:
+                totals["captures"] += game.get("black_captures_value", 0.0) * self.capture_weight
             totals["move_penalty"] += game["move_count"] * self.move_count_penalty
 
         return {k: v / n for k, v in totals.items()}
