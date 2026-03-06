@@ -244,7 +244,7 @@ class TestSeedIO:
         assert data["black"] == "b_genome"
         assert abs(data["bench_avg_win_rate"] - 0.45) < 1e-6
 
-    def test_save_best_skips_on_no_improvement(self, trainer, tmp_path):
+    def test_save_best_skips_genome_on_no_improvement(self, trainer, tmp_path):
         trainer.save_genome_path = tmp_path / "best.json"
         # Write an existing seed with high per-color win rates
         trainer.save_genome_path.write_text(json.dumps({
@@ -274,6 +274,111 @@ class TestSeedIO:
         data = json.loads(trainer.save_genome_path.read_text())
         assert data["white"] == "new_w"
         assert data["black"] == "new_b"
+
+    def test_save_best_persists_hof(self, trainer, tmp_path):
+        """HoF genomes should be saved to the genome file."""
+        trainer.save_genome_path = tmp_path / "best.json"
+        trainer.white_hof = [(20.0, "w_hof_1"), (10.0, "w_hof_2")]
+        trainer.black_hof = [(15.0, "b_hof_1")]
+        trainer._save_best(
+            white_pop=["w"], black_pop=["b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.5, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        assert "white_hof" in data
+        assert "black_hof" in data
+        assert data["white_hof"] == ["w_hof_1", "w_hof_2"]
+        assert data["black_hof"] == ["b_hof_1"]
+
+    def test_save_best_hof_merges_with_existing(self, trainer, tmp_path):
+        """New HoF should merge with previously saved HoF, not overwrite."""
+        trainer.save_genome_path = tmp_path / "best.json"
+        # Simulate a previous run that saved strong HoF genomes
+        trainer.save_genome_path.write_text(json.dumps({
+            "white": "old_w", "black": "old_b",
+            "bench_white_win_rate": 0.1, "bench_black_win_rate": 0.1,
+            "white_hof": ["prev_w1", "prev_w2", "prev_w3"],
+            "black_hof": ["prev_b1"],
+        }))
+        # Current run has only 1 HoF genome per color
+        trainer.white_hof = [(5.0, "new_w1")]
+        trainer.black_hof = [(3.0, "new_b1")]
+        trainer._save_best(
+            white_pop=["w"], black_pop=["b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.5, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        # New genome should be first (has fitness), old ones fill remaining slots
+        assert data["white_hof"][0] == "new_w1"
+        assert len(data["white_hof"]) == 4  # 1 new + 3 old
+        assert "prev_w1" in data["white_hof"]
+        assert "prev_w2" in data["white_hof"]
+        assert "prev_w3" in data["white_hof"]
+
+    def test_save_best_hof_dedupes(self, trainer, tmp_path):
+        """Same genome in current HoF and saved HoF should not duplicate."""
+        trainer.save_genome_path = tmp_path / "best.json"
+        trainer.save_genome_path.write_text(json.dumps({
+            "white": "w", "black": "b",
+            "bench_white_win_rate": 0.0, "bench_black_win_rate": 0.0,
+            "white_hof": ["shared_genome", "old_only"],
+            "black_hof": [],
+        }))
+        trainer.white_hof = [(10.0, "shared_genome"), (5.0, "new_only")]
+        trainer.black_hof = []
+        trainer._save_best(
+            white_pop=["w"], black_pop=["b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.5, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        # "shared_genome" appears once, not twice
+        assert data["white_hof"].count("shared_genome") == 1
+        assert len(data["white_hof"]) == 3  # shared + new_only + old_only
+
+    def test_save_best_hof_capped_at_five(self, trainer, tmp_path):
+        """Merged HoF should keep at most 5 genomes."""
+        trainer.save_genome_path = tmp_path / "best.json"
+        trainer.save_genome_path.write_text(json.dumps({
+            "white": "w", "black": "b",
+            "bench_white_win_rate": 0.0, "bench_black_win_rate": 0.0,
+            "white_hof": [f"old_{i}" for i in range(5)],
+            "black_hof": [],
+        }))
+        trainer.white_hof = [(float(i), f"new_{i}") for i in range(5, 0, -1)]
+        trainer.black_hof = []
+        trainer._save_best(
+            white_pop=["w"], black_pop=["b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.5, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        assert len(data["white_hof"]) == 5
+
+    def test_save_best_hof_current_beats_old(self, trainer, tmp_path):
+        """Current-run genomes (with fitness) should rank above old ones (no fitness)."""
+        trainer.save_genome_path = tmp_path / "best.json"
+        trainer.save_genome_path.write_text(json.dumps({
+            "white": "w", "black": "b",
+            "bench_white_win_rate": 0.0, "bench_black_win_rate": 0.0,
+            "white_hof": [f"old_{i}" for i in range(5)],
+            "black_hof": [],
+        }))
+        # 3 current genomes should take top 3 spots
+        trainer.white_hof = [(30.0, "cur_a"), (20.0, "cur_b"), (10.0, "cur_c")]
+        trainer.black_hof = []
+        trainer._save_best(
+            white_pop=["w"], black_pop=["b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.5, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        # Current genomes ranked first by fitness
+        assert data["white_hof"][:3] == ["cur_a", "cur_b", "cur_c"]
+        # Old ones fill remaining 2 slots
+        assert len(data["white_hof"]) == 5
 
     def test_save_best_updates_colors_independently(self, trainer, tmp_path):
         trainer.save_genome_path = tmp_path / "best.json"
