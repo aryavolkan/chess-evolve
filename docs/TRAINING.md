@@ -4,13 +4,20 @@
 
 ## Prerequisites
 
-1. **Godot 4.2+** with `--headless` support
-2. **Rust toolchain** (stable) — to build the native GDExtension
-3. **Python 3.10+** — for the overnight harness
+1. **Python 3.10+** with numpy, wandb
+2. **Rust toolchain** (stable) with maturin (`pip install maturin`)
+3. **Godot 4.5+** with `--headless` support (only needed for Godot training path or UI)
 4. **Weights & Biases account** — for sweep tracking (optional)
 
-### Build the Rust extension
+### Build Rust crates
+
 ```bash
+# PyO3 crates (required for Rust CPU backend — the primary path)
+cd rust/chess-cpu && maturin develop --release && cd ../..
+cd rust/evolve-ga && maturin develop --release && cd ../..
+cd rust/neat-ga && maturin develop --release && cd ../..
+
+# Godot GDExtension (optional, for Godot training path)
 cargo build --release --manifest-path rust/chess-native/Cargo.toml
 ```
 
@@ -18,16 +25,31 @@ cargo build --release --manifest-path rust/chess-native/Cargo.toml
 
 ## Running a Training Session
 
-### Headless (auto-train mode)
+### Python (primary — auto-detects Rust CPU backend)
+```bash
+# Single run
+python train_wandb.py
+
+# With custom config
+python train_wandb.py --config my_config.json
+
+# Join a W&B sweep
+python train_wandb.py --sweep <sweep-id>
+
+# Chained runs (each seeds from previous best)
+python train_wandb.py --chain 10
+```
+
+### Godot headless (auto-train mode)
 ```bash
 godot --headless --path . -- --auto-train
 ```
 
-### With UI
+### Godot with UI
 ```bash
 godot --path .
 ```
-Shows a 2×2 grid of live board viewers and the training dashboard.
+Shows a 2x2 grid of live board viewers and the training dashboard.
 
 ### Replay viewer
 ```bash
@@ -244,8 +266,12 @@ Every PR runs:
 
 Run locally:
 ```bash
+# All at once
+./scripts/lint_and_test.sh
+
+# Or individually
 ruff check scripts/ train_wandb.py sweep_config.py
-gdlint ai/ chess/
+python -m pytest tests/python -q
 cargo fmt --check --manifest-path rust/chess-native/Cargo.toml
 cargo clippy --manifest-path rust/chess-native/Cargo.toml -- -D warnings
 ```
