@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::panic;
 
 use rand::SeedableRng;
@@ -24,6 +24,8 @@ pub struct GameResult {
     pub black_king_safety: f32,
     pub white_king_danger: f32,
     pub black_king_danger: f32,
+    pub white_captures_value: f32,
+    pub black_captures_value: f32,
 }
 
 /// Compute a simple position hash from bitboards for threefold repetition detection.
@@ -42,6 +44,18 @@ fn position_hash(board: &ChessBoard) -> u64 {
     h = h.rotate_left(3);
     h ^= (board.en_passant_sq as u64) & 0xff;
     h
+}
+
+/// Material value of a captured piece (by absolute piece type).
+fn capture_value(piece_abs: i8) -> f32 {
+    match piece_abs {
+        1 => 1.0,   // pawn
+        2 => 3.0,   // knight
+        3 => 3.25,  // bishop
+        4 => 5.0,   // rook
+        5 => 9.0,   // queen
+        _ => 0.0,
+    }
 }
 
 /// Simulate a single chess game between two neural networks.
@@ -70,12 +84,16 @@ pub fn simulate_game(
     let mut pseudo_buf = Vec::with_capacity(256);
 
     // Threefold repetition detection
-    let mut position_hashes = HashSet::with_capacity(max_moves);
+    let mut position_hashes: HashMap<u64, u8> = HashMap::with_capacity(max_moves);
 
     // Mid-game king danger tracking (sampled every 10 moves)
     let mut w_danger_acc = 0.0f32;
     let mut b_danger_acc = 0.0f32;
     let mut danger_samples = 0u32;
+
+    // Capture tracking
+    let mut w_captures_value = 0.0f32;
+    let mut b_captures_value = 0.0f32;
 
     while move_count < max_moves {
         let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
@@ -90,7 +108,9 @@ pub fn simulate_game(
 
         // Threefold repetition check
         let hash = position_hash(&board);
-        if !position_hashes.insert(hash) {
+        let count = position_hashes.entry(hash).or_insert(0);
+        *count += 1;
+        if *count >= 3 {
             result = 2;
             break;
         }
@@ -103,6 +123,27 @@ pub fn simulate_game(
         };
         net.forward_into(&inputs, &mut hidden, &mut output);
         let chosen = decode_move(&output, &legal_moves, temperature, rng);
+
+        // Track captures
+        let to_sq = (chosen & 0x3f) as usize;
+        let victim = board.piece_at(to_sq);
+        if victim != 0 {
+            let val = capture_value(victim.abs());
+            if board.side_to_move == 0 {
+                w_captures_value += val;
+            } else {
+                b_captures_value += val;
+            }
+        }
+        // En passant capture (pawn not on destination square)
+        if (chosen & 0x2000) != 0 {
+            if board.side_to_move == 0 {
+                w_captures_value += 1.0;
+            } else {
+                b_captures_value += 1.0;
+            }
+        }
+
         board = board.make_move(chosen);
         move_count += 1;
 
@@ -157,6 +198,8 @@ pub fn simulate_game(
         black_king_safety,
         white_king_danger: w_danger_acc / danger_samples.max(1) as f32,
         black_king_danger: b_danger_acc / danger_samples.max(1) as f32,
+        white_captures_value: w_captures_value,
+        black_captures_value: b_captures_value,
     }
 }
 
@@ -235,11 +278,15 @@ pub fn simulate_neat_game(
     let mut inputs = vec![0.0f32; input_size];
     let mut pseudo_buf = Vec::with_capacity(256);
 
-    let mut position_hashes = HashSet::with_capacity(max_moves);
+    let mut position_hashes: HashMap<u64, u8> = HashMap::with_capacity(max_moves);
 
     let mut w_danger_acc = 0.0f32;
     let mut b_danger_acc = 0.0f32;
     let mut danger_samples = 0u32;
+
+    // Capture tracking
+    let mut w_captures_value = 0.0f32;
+    let mut b_captures_value = 0.0f32;
 
     while move_count < max_moves {
         let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
@@ -253,7 +300,9 @@ pub fn simulate_neat_game(
         }
 
         let hash = position_hash(&board);
-        if !position_hashes.insert(hash) {
+        let count = position_hashes.entry(hash).or_insert(0);
+        *count += 1;
+        if *count >= 3 {
             result = 2;
             break;
         }
@@ -269,6 +318,26 @@ pub fn simulate_neat_game(
         } else {
             decode_move(&output, &legal_moves, temperature, rng)
         };
+
+        // Track captures
+        let to_sq = (chosen & 0x3f) as usize;
+        let victim = board.piece_at(to_sq);
+        if victim != 0 {
+            let val = capture_value(victim.abs());
+            if board.side_to_move == 0 {
+                w_captures_value += val;
+            } else {
+                b_captures_value += val;
+            }
+        }
+        if (chosen & 0x2000) != 0 {
+            if board.side_to_move == 0 {
+                w_captures_value += 1.0;
+            } else {
+                b_captures_value += 1.0;
+            }
+        }
+
         board = board.make_move(chosen);
         move_count += 1;
 
@@ -313,6 +382,8 @@ pub fn simulate_neat_game(
         black_king_safety: king_safety_score(&board, 1),
         white_king_danger: w_danger_acc / danger_samples.max(1) as f32,
         black_king_danger: b_danger_acc / danger_samples.max(1) as f32,
+        white_captures_value: w_captures_value,
+        black_captures_value: b_captures_value,
     }
 }
 
@@ -347,6 +418,7 @@ pub fn simulate_neat_games_batch(
                             white_mobility: 0, black_mobility: 20,
                             white_king_safety: 0.0, black_king_safety: 0.0,
                             white_king_danger: 0.0, black_king_danger: 0.0,
+                            white_captures_value: 0.0, black_captures_value: 0.0,
                         };
                     }
                 };
@@ -360,6 +432,7 @@ pub fn simulate_neat_games_batch(
                             white_mobility: 20, black_mobility: 0,
                             white_king_safety: 0.0, black_king_safety: 0.0,
                             white_king_danger: 0.0, black_king_danger: 0.0,
+                            white_captures_value: 0.0, black_captures_value: 0.0,
                         };
                     }
                 };
@@ -392,6 +465,7 @@ pub fn simulate_neat_games_batch(
                 white_mobility: 0, black_mobility: 0,
                 white_king_safety: 0.0, black_king_safety: 0.0,
                 white_king_danger: 0.0, black_king_danger: 0.0,
+                white_captures_value: 0.0, black_captures_value: 0.0,
             })
         })
         .collect()
