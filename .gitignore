@@ -29,6 +29,9 @@ test_config.json
 # Claude Code
 .claude/
 
+# Training artifacts
+neat_best_genomes.json
+
 # Rust
 rust/**/target/
 rust/**/Cargo.lock
