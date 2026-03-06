@@ -149,9 +149,21 @@ class NeatCPUTrainer:
         else:
             print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
-        # Always persist top-5 Hall of Fame genomes for ensemble play
-        prev["white_hof"] = [genome for _, genome in self.white_hof[:5]]
-        prev["black_hof"] = [genome for _, genome in self.black_hof[:5]]
+        # Merge current HoF with previously saved HoF, keep top 5 by fitness
+        for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
+            # Current run's HoF: list of (fitness, genome_json)
+            merged: dict[str, float] = {}
+            for fitness, genome_json in hof:
+                if genome_json not in merged or fitness > merged[genome_json]:
+                    merged[genome_json] = fitness
+            # Previously saved HoF has no fitness scores; use -inf so
+            # current-run genomes win ties but old ones fill remaining slots
+            for genome_json in prev.get(color_key, []):
+                if genome_json not in merged:
+                    merged[genome_json] = float("-inf")
+            # Sort by fitness descending, take top 5
+            ranked = sorted(merged.items(), key=lambda x: -x[1])[:5]
+            prev[color_key] = [genome for genome, _ in ranked]
         updated = True  # HoF update always triggers save
 
         if updated:
