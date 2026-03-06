@@ -704,6 +704,7 @@ class NeatCPUTrainer:
                 "white_fitness_king_safety": w_breakdown["king_safety"],
                 "white_fitness_opp_king_safety": w_breakdown["opp_king_safety"],
                 "white_fitness_king_danger": w_breakdown["king_danger"],
+                "white_fitness_captures": w_breakdown["captures"],
                 "white_fitness_move_penalty": w_breakdown["move_penalty"],
                 "black_fitness_outcome": b_breakdown["outcome"],
                 "black_fitness_material": b_breakdown["material"],
@@ -711,6 +712,7 @@ class NeatCPUTrainer:
                 "black_fitness_king_safety": b_breakdown["king_safety"],
                 "black_fitness_opp_king_safety": b_breakdown["opp_king_safety"],
                 "black_fitness_king_danger": b_breakdown["king_danger"],
+                "black_fitness_captures": b_breakdown["captures"],
                 "black_fitness_move_penalty": b_breakdown["move_penalty"],
                 # Benchmark vs random
                 # King danger averages
