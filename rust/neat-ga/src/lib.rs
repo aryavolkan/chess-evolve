@@ -10,7 +10,7 @@ pub mod species;
 
 /// Create an initial NEAT population. Returns a list of genome JSON strings.
 #[pyfunction]
-fn create_population(py: Python<'_>, config_json: &str) -> PyResult<Vec<String>> {
+fn create_population(_py: Python<'_>, config_json: &str) -> PyResult<Vec<String>> {
     let config: config::NeatConfig = serde_json::from_str(config_json).map_err(|e| {
         pyo3::exceptions::PyValueError::new_err(format!("Invalid config JSON: {e}"))
     })?;
@@ -34,33 +34,13 @@ fn create_population(py: Python<'_>, config_json: &str) -> PyResult<Vec<String>>
         pop.push(json);
     }
 
-    // Return tracker state so Python can persist it
-    let tracker_json = serde_json::to_string(&tracker).map_err(|e| {
-        pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize tracker error: {e}"))
-    })?;
-
-    // Use py to create a dict with population + tracker
-    let result = PyDict::new(py);
-    result.set_item("population", pop)?;
-    result.set_item("tracker", tracker_json)?;
-
-    // Actually, the plan says return list[str], so let's keep it simple
-    // and return a dict with both
-    // Wait, the plan interface says -> list[str], but we need tracker too.
-    // Let's return a dict to be more useful.
-    Ok(result
-        .get_item("population")?
-        .unwrap()
-        .extract::<Vec<String>>()?)
+    Ok(pop)
 }
 
 /// Create an initial NEAT population with tracker state.
 /// Returns dict with "population" (list[str]) and "tracker" (str).
 #[pyfunction]
-fn create_population_with_tracker(
-    py: Python<'_>,
-    config_json: &str,
-) -> PyResult<Py<PyDict>> {
+fn create_population_with_tracker(py: Python<'_>, config_json: &str) -> PyResult<Py<PyDict>> {
     let config: config::NeatConfig = serde_json::from_str(config_json).map_err(|e| {
         pyo3::exceptions::PyValueError::new_err(format!("Invalid config JSON: {e}"))
     })?;
@@ -128,16 +108,14 @@ fn evolve_neat_generation(
         })?;
 
     // Deserialize species. Accept "[]" or "null" for initial state.
-    let mut species_list: Vec<species::Species> = if species_json.is_empty()
-        || species_json == "[]"
-        || species_json == "null"
-    {
-        Vec::new()
-    } else {
-        serde_json::from_str(species_json).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid species JSON: {e}"))
-        })?
-    };
+    let mut species_list: Vec<species::Species> =
+        if species_json.is_empty() || species_json == "[]" || species_json == "null" {
+            Vec::new()
+        } else {
+            serde_json::from_str(species_json).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid species JSON: {e}"))
+            })?
+        };
 
     // Deserialize next_species_id from species list
     let mut next_species_id = species_list.iter().map(|s| s.id + 1).max().unwrap_or(0);
@@ -166,7 +144,7 @@ fn evolve_neat_generation(
     // Serialize results
     let new_pop_json: Vec<String> = population
         .iter()
-        .map(|g| serde_json::to_string(g))
+        .map(serde_json::to_string)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize population error: {e}"))
@@ -247,6 +225,75 @@ fn create_seeded_population(
     Ok(result.into())
 }
 
+/// Create a population from multiple seed genomes (Hall of Fame).
+///
+/// Seeds are distributed round-robin across the population.  Each individual
+/// clones the topology of its assigned seed but gets randomized weights/biases.
+/// The tracker is initialized from *all* seeds so innovation numbers stay
+/// consistent.  If `seed_genome_jsons` is empty, falls back to random init.
+#[pyfunction]
+fn create_multi_seeded_population(
+    py: Python<'_>,
+    config_json: &str,
+    seed_genome_jsons: Vec<String>,
+) -> PyResult<Py<PyDict>> {
+    let config: config::NeatConfig = serde_json::from_str(config_json).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid config JSON: {e}"))
+    })?;
+
+    if seed_genome_jsons.is_empty() {
+        // Fallback to random population
+        return create_population_with_tracker(py, config_json);
+    }
+
+    // Parse all seed genomes
+    let seeds: Vec<genome::NeatGenome> = seed_genome_jsons
+        .iter()
+        .enumerate()
+        .map(|(i, json)| {
+            serde_json::from_str(json).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "Invalid seed genome JSON at index {i}: {e}"
+                ))
+            })
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+
+    // Initialize tracker from all seeds
+    let max_node = seeds
+        .iter()
+        .flat_map(|g| g.nodes.iter())
+        .map(|n| n.id)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut tracker = innovation::InnovationTracker::new(max_node);
+    for seed in &seeds {
+        tracker.seed_from_genome(seed);
+    }
+
+    let mut rng = rand::rngs::SmallRng::from_entropy();
+    let mut pop = Vec::with_capacity(config.population_size);
+    for i in 0..config.population_size {
+        let seed = &seeds[i % seeds.len()];
+        let g = genome::NeatGenome::create_from_topology(seed, &mut rng);
+        let json = serde_json::to_string(&g).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+        })?;
+        pop.push(json);
+    }
+
+    let tracker_json = serde_json::to_string(&tracker).map_err(|e| {
+        pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize tracker error: {e}"))
+    })?;
+
+    let result = PyDict::new(py);
+    result.set_item("population", pop)?;
+    result.set_item("tracker", tracker_json)?;
+
+    Ok(result.into())
+}
+
 /// Compute compatibility distance between two genomes (for debugging).
 #[pyfunction]
 fn compatibility_distance(
@@ -272,6 +319,7 @@ fn neat_ga(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_population, m)?)?;
     m.add_function(wrap_pyfunction!(create_population_with_tracker, m)?)?;
     m.add_function(wrap_pyfunction!(create_seeded_population, m)?)?;
+    m.add_function(wrap_pyfunction!(create_multi_seeded_population, m)?)?;
     m.add_function(wrap_pyfunction!(evolve_neat_generation, m)?)?;
     m.add_function(wrap_pyfunction!(compatibility_distance, m)?)?;
     Ok(())
