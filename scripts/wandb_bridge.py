@@ -83,6 +83,7 @@ CHESS_LOG_KEYS = [
     "white_fitness_king_safety",
     "white_fitness_opp_king_safety",
     "white_fitness_king_danger",
+    "white_fitness_captures",
     "white_fitness_move_penalty",
     "black_fitness_outcome",
     "black_fitness_material",
@@ -90,6 +91,7 @@ CHESS_LOG_KEYS = [
     "black_fitness_king_safety",
     "black_fitness_opp_king_safety",
     "black_fitness_king_danger",
+    "black_fitness_captures",
     "black_fitness_move_penalty",
     # King danger metrics
     "white_king_danger_avg",
