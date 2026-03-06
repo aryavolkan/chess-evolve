@@ -46,7 +46,7 @@ class NeatCPUTrainer:
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 0.5
+        self.opp_king_safety_weight = 1.5
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
 
@@ -221,6 +221,54 @@ class NeatCPUTrainer:
                 fitness[i] /= game_counts[i]
 
         return fitness
+
+    def _compute_fitness_breakdown(
+        self, results: list[dict], color: int,
+    ) -> dict[str, float]:
+        """Compute average contribution of each fitness component across all games."""
+        totals = {
+            "outcome": 0.0, "material": 0.0, "mobility": 0.0,
+            "king_safety": 0.0, "opp_king_safety": 0.0, "move_penalty": 0.0,
+        }
+        n = len(results)
+        if n == 0:
+            return totals
+
+        for game in results:
+            if color == 0:
+                my_mat = game["white_material"]
+                opp_mat = game["black_material"]
+                my_ks = game["white_king_safety"]
+                opp_ks = game["black_king_safety"]
+                my_mob = game["white_mobility"]
+                opp_mob = game["black_mobility"]
+            else:
+                my_mat = game["black_material"]
+                opp_mat = game["white_material"]
+                my_ks = game["black_king_safety"]
+                opp_ks = game["white_king_safety"]
+                my_mob = game["black_mobility"]
+                opp_mob = game["white_mobility"]
+
+            result = game["result"]
+            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
+            is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
+
+            if result == 2:
+                mat_adv = max(-1.0, min(1.0, (my_mat - opp_mat) / 10.0))
+                totals["outcome"] += self.draw_bonus * (0.5 + 0.5 * mat_adv)
+            elif is_win:
+                totals["outcome"] += self.win_bonus + self.checkmate_bonus
+            elif is_loss:
+                totals["outcome"] += self.loss_penalty
+
+            totals["material"] += (my_mat - opp_mat) * self.material_weight
+            totals["mobility"] += (my_mob - opp_mob) * self.mobility_weight
+            totals["king_safety"] += my_ks * self.king_safety_weight
+            totals["opp_king_safety"] -= opp_ks * self.opp_king_safety_weight
+            totals["move_penalty"] += game["move_count"] * self.move_count_penalty
+
+        return {k: v / n for k, v in totals.items()}
 
     def _compute_outcome_rates(
         self, results: list[dict], color: int,
@@ -554,6 +602,10 @@ class NeatCPUTrainer:
             avg_conns = (w_stats["avg_connections"] + b_stats["avg_connections"]) / 2
             avg_nodes = (w_stats["avg_nodes"] + b_stats["avg_nodes"]) / 2
 
+            # Fitness component breakdowns
+            w_breakdown = self._compute_fitness_breakdown(results, color=0)
+            b_breakdown = self._compute_fitness_breakdown(results, color=1)
+
             # Benchmark vs random
             w_bench_wr, w_bench_mat, b_bench_wr, b_bench_mat = self._benchmark_vs_random(
                 white_pop, black_pop, white_fitness, black_fitness,
@@ -617,6 +669,19 @@ class NeatCPUTrainer:
                 "black_connections_avg": b_stats["avg_connections"],
                 "white_hidden_nodes_avg": w_stats["avg_nodes"] - self.input_size - self.output_size,
                 "black_hidden_nodes_avg": b_stats["avg_nodes"] - self.input_size - self.output_size,
+                # Fitness component breakdowns
+                "white_fitness_outcome": w_breakdown["outcome"],
+                "white_fitness_material": w_breakdown["material"],
+                "white_fitness_mobility": w_breakdown["mobility"],
+                "white_fitness_king_safety": w_breakdown["king_safety"],
+                "white_fitness_opp_king_safety": w_breakdown["opp_king_safety"],
+                "white_fitness_move_penalty": w_breakdown["move_penalty"],
+                "black_fitness_outcome": b_breakdown["outcome"],
+                "black_fitness_material": b_breakdown["material"],
+                "black_fitness_mobility": b_breakdown["mobility"],
+                "black_fitness_king_safety": b_breakdown["king_safety"],
+                "black_fitness_opp_king_safety": b_breakdown["opp_king_safety"],
+                "black_fitness_move_penalty": b_breakdown["move_penalty"],
                 # Benchmark vs random
                 "bench_white_win_rate": w_bench_wr,
                 "bench_white_material_adv": w_bench_mat,

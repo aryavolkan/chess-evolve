@@ -64,7 +64,7 @@ class CPUTrainer:
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 0.5
+        self.opp_king_safety_weight = 1.5
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
 

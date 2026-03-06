@@ -139,6 +139,19 @@ CHESS_LOG_KEYS = [
     "black_connections_avg",
     "white_hidden_nodes_avg",
     "black_hidden_nodes_avg",
+    # Fitness component breakdowns
+    "white_fitness_outcome",
+    "white_fitness_material",
+    "white_fitness_mobility",
+    "white_fitness_king_safety",
+    "white_fitness_opp_king_safety",
+    "white_fitness_move_penalty",
+    "black_fitness_outcome",
+    "black_fitness_material",
+    "black_fitness_mobility",
+    "black_fitness_king_safety",
+    "black_fitness_opp_king_safety",
+    "black_fitness_move_penalty",
     # Benchmark vs random (absolute progress)
     "bench_white_win_rate",
     "bench_white_material_adv",
@@ -177,7 +190,11 @@ def do_training(config=None, visible=False):
     if _has_cuda or _USE_RUST or _USE_PYTORCH:
         # Use sweep infrastructure for worker isolation + W&B logging
         _worker = SweepWorker(USER_DIR)
-        run = wandb.init(project="chess-evolve", tags=["chess", "neuroevolution", "coevolution"])
+        run = wandb.init(
+        project="chess-evolve",
+        tags=["chess", "neuroevolution", "coevolution"],
+        settings=wandb.Settings(init_timeout=300),
+    )
         define_step_metric()
         run.config.update(merged)
         max_gens = merged.get("max_generations", 50)
@@ -433,7 +450,11 @@ def sweep_train_fn():
     global _worker
     _worker = SweepWorker(USER_DIR)
 
-    run = wandb.init(project="chess-evolve", tags=["chess", "neuroevolution", "coevolution"])
+    run = wandb.init(
+        project="chess-evolve",
+        tags=["chess", "neuroevolution", "coevolution"],
+        settings=wandb.Settings(init_timeout=300),
+    )
     define_step_metric()
 
     # Merge defaults with sweep overrides
