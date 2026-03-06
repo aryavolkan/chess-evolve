@@ -47,6 +47,7 @@ class NeatCPUTrainer:
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
         self.opp_king_safety_weight = 1.5
+        self.king_danger_weight = 1.0
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
 
@@ -182,6 +183,7 @@ class NeatCPUTrainer:
                 opp_king_safety = game["black_king_safety"]
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
+                my_king_danger_inflicted = game.get("white_king_danger", 0.0)
             else:
                 idx = game["black_idx"]
                 my_material = game["black_material"]
@@ -190,6 +192,7 @@ class NeatCPUTrainer:
                 opp_king_safety = game["white_king_safety"]
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
+                my_king_danger_inflicted = game.get("black_king_danger", 0.0)
 
             result = game["result"]
             move_count = game["move_count"]
@@ -211,6 +214,7 @@ class NeatCPUTrainer:
             f += (my_mobility - opp_mobility) * self.mobility_weight
             f += my_king_safety * self.king_safety_weight
             f -= opp_king_safety * self.opp_king_safety_weight
+            f += my_king_danger_inflicted * self.king_danger_weight
             f += move_count * self.move_count_penalty
 
             fitness[idx] += f
@@ -228,7 +232,8 @@ class NeatCPUTrainer:
         """Compute average contribution of each fitness component across all games."""
         totals = {
             "outcome": 0.0, "material": 0.0, "mobility": 0.0,
-            "king_safety": 0.0, "opp_king_safety": 0.0, "move_penalty": 0.0,
+            "king_safety": 0.0, "opp_king_safety": 0.0,
+            "king_danger": 0.0, "move_penalty": 0.0,
         }
         n = len(results)
         if n == 0:
@@ -266,6 +271,10 @@ class NeatCPUTrainer:
             totals["mobility"] += (my_mob - opp_mob) * self.mobility_weight
             totals["king_safety"] += my_ks * self.king_safety_weight
             totals["opp_king_safety"] -= opp_ks * self.opp_king_safety_weight
+            if color == 0:
+                totals["king_danger"] += game.get("white_king_danger", 0.0) * self.king_danger_weight
+            else:
+                totals["king_danger"] += game.get("black_king_danger", 0.0) * self.king_danger_weight
             totals["move_penalty"] += game["move_count"] * self.move_count_penalty
 
         return {k: v / n for k, v in totals.items()}
@@ -435,6 +444,7 @@ class NeatCPUTrainer:
                     "black_material": 0.0, "white_mobility": 0,
                     "black_mobility": 0, "white_king_safety": 0.0,
                     "black_king_safety": 0.0,
+                    "white_king_danger": 0.0, "black_king_danger": 0.0,
                 }
                 for w, b in pairings
             ]
@@ -675,14 +685,19 @@ class NeatCPUTrainer:
                 "white_fitness_mobility": w_breakdown["mobility"],
                 "white_fitness_king_safety": w_breakdown["king_safety"],
                 "white_fitness_opp_king_safety": w_breakdown["opp_king_safety"],
+                "white_fitness_king_danger": w_breakdown["king_danger"],
                 "white_fitness_move_penalty": w_breakdown["move_penalty"],
                 "black_fitness_outcome": b_breakdown["outcome"],
                 "black_fitness_material": b_breakdown["material"],
                 "black_fitness_mobility": b_breakdown["mobility"],
                 "black_fitness_king_safety": b_breakdown["king_safety"],
                 "black_fitness_opp_king_safety": b_breakdown["opp_king_safety"],
+                "black_fitness_king_danger": b_breakdown["king_danger"],
                 "black_fitness_move_penalty": b_breakdown["move_penalty"],
                 # Benchmark vs random
+                # King danger averages
+                "white_king_danger_avg": sum(g.get("white_king_danger", 0.0) for g in results) / max(1, num_games),
+                "black_king_danger_avg": sum(g.get("black_king_danger", 0.0) for g in results) / max(1, num_games),
                 "bench_white_win_rate": w_bench_wr,
                 "bench_white_material_adv": w_bench_mat,
                 "bench_black_win_rate": b_bench_wr,

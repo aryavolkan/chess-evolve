@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use crate::board::ChessBoard;
 use crate::encode::{decode_move, decode_move_factored, dense_from_flat_weights, encode_board};
-use crate::evaluate::{king_safety_score, material_score, mobility_score};
+use crate::evaluate::{king_danger_score, king_safety_score, material_score, mobility_score};
 use crate::sparse_nn::SparseNetwork;
 
 /// Result of a single simulated game.
@@ -22,6 +22,8 @@ pub struct GameResult {
     pub black_mobility: i32,
     pub white_king_safety: f32,
     pub black_king_safety: f32,
+    pub white_king_danger: f32,
+    pub black_king_danger: f32,
 }
 
 /// Compute a simple position hash from bitboards for threefold repetition detection.
@@ -70,6 +72,11 @@ pub fn simulate_game(
     // Threefold repetition detection
     let mut position_hashes = HashSet::with_capacity(max_moves);
 
+    // Mid-game king danger tracking (sampled every 10 moves)
+    let mut w_danger_acc = 0.0f32;
+    let mut b_danger_acc = 0.0f32;
+    let mut danger_samples = 0u32;
+
     while move_count < max_moves {
         let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
         if legal_moves.is_empty() {
@@ -84,10 +91,6 @@ pub fn simulate_game(
         // Threefold repetition check
         let hash = position_hash(&board);
         if !position_hashes.insert(hash) {
-            // Hash already seen — count occurrences
-            // For simplicity, treat any repeated position as a draw
-            // (a true threefold needs 3 occurrences, but this is a reasonable
-            // approximation that also catches infinite loops faster)
             result = 2;
             break;
         }
@@ -102,6 +105,13 @@ pub fn simulate_game(
         let chosen = decode_move(&output, &legal_moves, temperature, rng);
         board = board.make_move(chosen);
         move_count += 1;
+
+        // Sample king danger every 10 moves
+        if move_count % 10 == 0 {
+            w_danger_acc += king_danger_score(&board, 1); // danger white poses to black's king
+            b_danger_acc += king_danger_score(&board, 0); // danger black poses to white's king
+            danger_samples += 1;
+        }
 
         // 50-move rule
         if board.halfmove_clock >= 100 {
@@ -122,6 +132,11 @@ pub fn simulate_game(
         }
     }
 
+    // Also sample final position
+    w_danger_acc += king_danger_score(&board, 1);
+    b_danger_acc += king_danger_score(&board, 0);
+    danger_samples += 1;
+
     let white_material = material_score(&board, 0);
     let black_material = material_score(&board, 1);
     let white_mobility = mobility_score(&board, 0);
@@ -140,6 +155,8 @@ pub fn simulate_game(
         black_mobility,
         white_king_safety,
         black_king_safety,
+        white_king_danger: w_danger_acc / danger_samples.max(1) as f32,
+        black_king_danger: b_danger_acc / danger_samples.max(1) as f32,
     }
 }
 
@@ -220,6 +237,10 @@ pub fn simulate_neat_game(
 
     let mut position_hashes = HashSet::with_capacity(max_moves);
 
+    let mut w_danger_acc = 0.0f32;
+    let mut b_danger_acc = 0.0f32;
+    let mut danger_samples = 0u32;
+
     while move_count < max_moves {
         let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
         if legal_moves.is_empty() {
@@ -251,6 +272,13 @@ pub fn simulate_neat_game(
         board = board.make_move(chosen);
         move_count += 1;
 
+        // Sample king danger every 10 moves
+        if move_count % 10 == 0 {
+            w_danger_acc += king_danger_score(&board, 1);
+            b_danger_acc += king_danger_score(&board, 0);
+            danger_samples += 1;
+        }
+
         if board.halfmove_clock >= 100 {
             result = 2;
             break;
@@ -267,6 +295,11 @@ pub fn simulate_neat_game(
         }
     }
 
+    // Also sample final position
+    w_danger_acc += king_danger_score(&board, 1);
+    b_danger_acc += king_danger_score(&board, 0);
+    danger_samples += 1;
+
     GameResult {
         white_idx: 0,
         black_idx: 0,
@@ -278,6 +311,8 @@ pub fn simulate_neat_game(
         black_mobility: mobility_score(&board, 1),
         white_king_safety: king_safety_score(&board, 0),
         black_king_safety: king_safety_score(&board, 1),
+        white_king_danger: w_danger_acc / danger_samples.max(1) as f32,
+        black_king_danger: b_danger_acc / danger_samples.max(1) as f32,
     }
 }
 
@@ -311,6 +346,7 @@ pub fn simulate_neat_games_batch(
                             white_material: 0.0, black_material: 39.0,
                             white_mobility: 0, black_mobility: 20,
                             white_king_safety: 0.0, black_king_safety: 0.0,
+                            white_king_danger: 0.0, black_king_danger: 0.0,
                         };
                     }
                 };
@@ -323,6 +359,7 @@ pub fn simulate_neat_games_batch(
                             white_material: 39.0, black_material: 0.0,
                             white_mobility: 20, black_mobility: 0,
                             white_king_safety: 0.0, black_king_safety: 0.0,
+                            white_king_danger: 0.0, black_king_danger: 0.0,
                         };
                     }
                 };
@@ -354,6 +391,7 @@ pub fn simulate_neat_games_batch(
                 white_material: 0.0, black_material: 0.0,
                 white_mobility: 0, black_mobility: 0,
                 white_king_safety: 0.0, black_king_safety: 0.0,
+                white_king_danger: 0.0, black_king_danger: 0.0,
             })
         })
         .collect()

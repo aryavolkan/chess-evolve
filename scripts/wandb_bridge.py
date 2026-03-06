@@ -82,13 +82,18 @@ CHESS_LOG_KEYS = [
     "white_fitness_mobility",
     "white_fitness_king_safety",
     "white_fitness_opp_king_safety",
+    "white_fitness_king_danger",
     "white_fitness_move_penalty",
     "black_fitness_outcome",
     "black_fitness_material",
     "black_fitness_mobility",
     "black_fitness_king_safety",
     "black_fitness_opp_king_safety",
+    "black_fitness_king_danger",
     "black_fitness_move_penalty",
+    # King danger metrics
+    "white_king_danger_avg",
+    "black_king_danger_avg",
     # Benchmark vs random (absolute progress)
     "bench_white_win_rate",
     "bench_white_material_adv",

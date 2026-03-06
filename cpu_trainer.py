@@ -65,6 +65,7 @@ class CPUTrainer:
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
         self.opp_king_safety_weight = 1.5
+        self.king_danger_weight = 1.0
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
 
@@ -185,6 +186,7 @@ class CPUTrainer:
                 opp_king_safety = game["black_king_safety"]
                 my_mobility = game["white_mobility"]
                 opp_mobility = game["black_mobility"]
+                my_king_danger_inflicted = game.get("white_king_danger", 0.0)
             else:
                 idx = game["black_idx"]
                 my_material = game["black_material"]
@@ -193,6 +195,7 @@ class CPUTrainer:
                 opp_king_safety = game["white_king_safety"]
                 my_mobility = game["black_mobility"]
                 opp_mobility = game["white_mobility"]
+                my_king_danger_inflicted = game.get("black_king_danger", 0.0)
 
             result = game["result"]
             move_count = game["move_count"]
@@ -223,6 +226,9 @@ class CPUTrainer:
             # Opponent king safety — reward exposing opponent's king
             # opp_king_safety is high when opponent is safe, so subtract it
             f -= opp_king_safety * self.opp_king_safety_weight
+
+            # King danger — reward putting opponent's king in danger
+            f += my_king_danger_inflicted * self.king_danger_weight
 
             # Move count penalty
             f += move_count * self.move_count_penalty
