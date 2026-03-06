@@ -250,7 +250,9 @@ class NeatLichessBot:
         game_info = next(stream)
         board = chess.Board()
 
-        am_white = game_info.get("white", {}).get("id", "").lower() == self.bot_id
+        white_info = game_info.get("white", {})
+        white_id = white_info.get("id", white_info.get("name", "")).lower()
+        am_white = white_id == self.bot_id
 
         # Apply initial moves if any
         initial_state = game_info
@@ -265,8 +267,10 @@ class NeatLichessBot:
         # Make a move if it's our turn
         if self._is_our_turn(board, am_white) and not board.is_game_over():
             move = self.pick_move(board)
-            self.client.bots.make_move(game_id, move.uci())
-            board.push(move)
+            try:
+                self.client.bots.make_move(game_id, move.uci())
+            except berserk.exceptions.ResponseError:
+                pass  # game may have ended or not our turn
 
         # Stream remaining game state
         for event in stream:
@@ -285,7 +289,10 @@ class NeatLichessBot:
 
                 if self._is_our_turn(board, am_white) and not board.is_game_over():
                     move = self.pick_move(board)
-                    self.client.bots.make_move(game_id, move.uci())
+                    try:
+                        self.client.bots.make_move(game_id, move.uci())
+                    except berserk.exceptions.ResponseError:
+                        pass  # game may have ended or not our turn
 
             elif event["type"] == "gameFull":
                 # Shouldn't happen mid-stream, but handle gracefully
@@ -352,7 +359,8 @@ class NeatLichessBot:
                     break
 
     def challenge_bot(self, opponent: str, color: str | None = None,
-                      clock_limit: int = 300, clock_increment: int = 3):
+                      clock_limit: int = 300, clock_increment: int = 3,
+                      rated: bool = False):
         """Send a challenge to another Lichess bot/user."""
         kwargs = {
             "clock_limit": clock_limit,
@@ -360,7 +368,7 @@ class NeatLichessBot:
         }
         if color:
             kwargs["color"] = color
-        self.client.challenges.create(opponent, rated=False, **kwargs)
+        self.client.challenges.create(opponent, rated=rated, **kwargs)
 
     def get_stats(self) -> dict:
         """Return session stats plus current Lichess ratings."""
