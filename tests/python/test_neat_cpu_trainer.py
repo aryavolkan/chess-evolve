@@ -230,10 +230,10 @@ class TestSeedIO:
 
     def test_save_best_skips_on_no_improvement(self, trainer, tmp_path):
         trainer.save_genome_path = tmp_path / "best.json"
-        # Write an existing seed with high win rate
+        # Write an existing seed with high per-color win rates
         trainer.save_genome_path.write_text(json.dumps({
             "white": "old_w", "black": "old_b",
-            "bench_avg_win_rate": 0.9,
+            "bench_white_win_rate": 0.9, "bench_black_win_rate": 0.9,
         }))
         trainer._save_best(
             white_pop=["new_w"], black_pop=["new_b"],
@@ -241,13 +241,14 @@ class TestSeedIO:
             bench_w_wr=0.1, bench_b_wr=0.1,
         )
         data = json.loads(trainer.save_genome_path.read_text())
-        assert data["white"] == "old_w", "should not overwrite better seed"
+        assert data["white"] == "old_w", "should not overwrite better white seed"
+        assert data["black"] == "old_b", "should not overwrite better black seed"
 
     def test_save_best_overwrites_on_improvement(self, trainer, tmp_path):
         trainer.save_genome_path = tmp_path / "best.json"
         trainer.save_genome_path.write_text(json.dumps({
             "white": "old_w", "black": "old_b",
-            "bench_avg_win_rate": 0.1,
+            "bench_white_win_rate": 0.1, "bench_black_win_rate": 0.1,
         }))
         trainer._save_best(
             white_pop=["new_w"], black_pop=["new_b"],
@@ -256,6 +257,25 @@ class TestSeedIO:
         )
         data = json.loads(trainer.save_genome_path.read_text())
         assert data["white"] == "new_w"
+        assert data["black"] == "new_b"
+
+    def test_save_best_updates_colors_independently(self, trainer, tmp_path):
+        trainer.save_genome_path = tmp_path / "best.json"
+        trainer.save_genome_path.write_text(json.dumps({
+            "white": "old_w", "black": "old_b",
+            "bench_white_win_rate": 0.8, "bench_black_win_rate": 0.2,
+        }))
+        # White regresses, black improves
+        trainer._save_best(
+            white_pop=["new_w"], black_pop=["new_b"],
+            white_fitness=[1.0], black_fitness=[1.0],
+            bench_w_wr=0.3, bench_b_wr=0.5,
+        )
+        data = json.loads(trainer.save_genome_path.read_text())
+        assert data["white"] == "old_w", "white should keep old seed"
+        assert data["black"] == "new_b", "black should update"
+        assert data["bench_white_win_rate"] == 0.8
+        assert data["bench_black_win_rate"] == 0.5
 
 
 # ===========================================================================
