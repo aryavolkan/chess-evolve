@@ -73,35 +73,93 @@ pub struct NeatConfig {
     pub min_species_protected: usize,
 }
 
-fn default_input_count() -> usize { 389 }
-fn default_output_count() -> usize { 128 }
-fn default_population_size() -> usize { 50 }
-fn default_initial_connections_per_output() -> usize { 5 }
-fn default_compatibility_threshold() -> f32 { 3.0 }
-fn default_c1_excess() -> f32 { 1.0 }
-fn default_c2_disjoint() -> f32 { 1.0 }
-fn default_c3_weight_diff() -> f32 { 0.4 }
-fn default_target_species_count() -> usize { 4 }
-fn default_threshold_step() -> f32 { 0.3 }
-fn default_weight_mutate_rate() -> f32 { 0.8 }
-fn default_weight_perturb_rate() -> f32 { 0.9 }
-fn default_weight_perturb_strength() -> f32 { 0.3 }
-fn default_weight_reset_range() -> f32 { 2.0 }
-fn default_add_node_rate() -> f32 { 0.10 }
-fn default_add_connection_rate() -> f32 { 0.20 }
-fn default_disable_connection_rate() -> f32 { 0.01 }
-fn default_add_node_count() -> usize { 1 }
-fn default_add_connection_count() -> usize { 1 }
-fn default_prune_rate() -> f32 { 0.1 }
-fn default_complexity_cost() -> f32 { 0.0 }
-fn default_elite_fraction() -> f32 { 0.1 }
-fn default_survival_fraction() -> f32 { 0.5 }
-fn default_crossover_rate() -> f32 { 0.75 }
-fn default_interspecies_crossover_rate() -> f32 { 0.001 }
-fn default_disabled_gene_inherit_rate() -> f32 { 0.75 }
-fn default_stagnation_threshold() -> usize { 15 }
-fn default_stagnation_kill_threshold() -> usize { 25 }
-fn default_min_species_protected() -> usize { 2 }
+fn default_input_count() -> usize {
+    389
+}
+fn default_output_count() -> usize {
+    128
+}
+fn default_population_size() -> usize {
+    50
+}
+fn default_initial_connections_per_output() -> usize {
+    5
+}
+fn default_compatibility_threshold() -> f32 {
+    3.0
+}
+fn default_c1_excess() -> f32 {
+    1.0
+}
+fn default_c2_disjoint() -> f32 {
+    1.0
+}
+fn default_c3_weight_diff() -> f32 {
+    0.4
+}
+fn default_target_species_count() -> usize {
+    4
+}
+fn default_threshold_step() -> f32 {
+    0.3
+}
+fn default_weight_mutate_rate() -> f32 {
+    0.8
+}
+fn default_weight_perturb_rate() -> f32 {
+    0.9
+}
+fn default_weight_perturb_strength() -> f32 {
+    0.3
+}
+fn default_weight_reset_range() -> f32 {
+    2.0
+}
+fn default_add_node_rate() -> f32 {
+    0.10
+}
+fn default_add_connection_rate() -> f32 {
+    0.20
+}
+fn default_disable_connection_rate() -> f32 {
+    0.01
+}
+fn default_add_node_count() -> usize {
+    1
+}
+fn default_add_connection_count() -> usize {
+    1
+}
+fn default_prune_rate() -> f32 {
+    0.1
+}
+fn default_complexity_cost() -> f32 {
+    0.0
+}
+fn default_elite_fraction() -> f32 {
+    0.1
+}
+fn default_survival_fraction() -> f32 {
+    0.5
+}
+fn default_crossover_rate() -> f32 {
+    0.75
+}
+fn default_interspecies_crossover_rate() -> f32 {
+    0.001
+}
+fn default_disabled_gene_inherit_rate() -> f32 {
+    0.75
+}
+fn default_stagnation_threshold() -> usize {
+    15
+}
+fn default_stagnation_kill_threshold() -> usize {
+    25
+}
+fn default_min_species_protected() -> usize {
+    2
+}
 
 impl Default for NeatConfig {
     fn default() -> Self {

@@ -15,7 +15,6 @@ import json
 import math
 import os
 import sys
-import time
 from collections import defaultdict
 
 import berserk

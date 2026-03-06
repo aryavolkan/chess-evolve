@@ -126,8 +126,7 @@ pub fn evolve_neat_generation(
         }
 
         // Survival pool
-        let pool_size =
-            (sorted_members.len() as f32 * config.survival_fraction).max(1.0) as usize;
+        let pool_size = (sorted_members.len() as f32 * config.survival_fraction).max(1.0) as usize;
         let pool: Vec<usize> = sorted_members[..pool_size.min(sorted_members.len())].to_vec();
 
         let remaining = offspring_count.saturating_sub(elites_to_add);
@@ -141,8 +140,7 @@ pub fn evolve_neat_generation(
                     let other_sp_idx = rng.gen_range(0..species_list.len());
                     let other_sp = &species_list[other_sp_idx];
                     if !other_sp.member_indices.is_empty() {
-                        other_sp.member_indices
-                            [rng.gen_range(0..other_sp.member_indices.len())]
+                        other_sp.member_indices[rng.gen_range(0..other_sp.member_indices.len())]
                     } else {
                         pool[rng.gen_range(0..pool.len())]
                     }

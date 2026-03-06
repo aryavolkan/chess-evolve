@@ -8,8 +8,8 @@ Drop-in replacement for CPUTrainer when use_neat=True.
 import json
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import chess_cpu
 import neat_ga
@@ -500,7 +500,7 @@ class NeatCPUTrainer:
     def train(
         self,
         max_generations: int,
-        on_generation: Optional[Callable[[dict], None]] = None,
+        on_generation: Callable[[dict], None] | None = None,
     ) -> dict:
         """Run the NEAT training loop.
 
@@ -524,7 +524,7 @@ class NeatCPUTrainer:
             white_pop: list[str] = init_result["population"]
             white_tracker_json: str = init_result["tracker"]
         elif seed and "white" in seed:
-            print(f"  Seeding white from best genome")
+            print("  Seeding white from best genome")
             init_result = neat_ga.create_seeded_population(config_json, seed["white"])
             white_pop: list[str] = init_result["population"]
             white_tracker_json: str = init_result["tracker"]
@@ -539,7 +539,7 @@ class NeatCPUTrainer:
             black_pop: list[str] = init_result["population"]
             black_tracker_json: str = init_result["tracker"]
         elif seed and "black" in seed:
-            print(f"  Seeding black from best genome")
+            print("  Seeding black from best genome")
             init_result = neat_ga.create_seeded_population(config_json, seed["black"])
             black_pop: list[str] = init_result["population"]
             black_tracker_json: str = init_result["tracker"]
@@ -600,8 +600,8 @@ class NeatCPUTrainer:
             if bw > 0:
                 w_bench_fit = self._benchmark_fitness_all(white_pop, color=0)
                 b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
-                white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit)]
-                black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit)]
+                white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit, strict=True)]
+                black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit, strict=True)]
 
             # Parsimony pressure: penalize complexity (enabled connections)
             cc = self.neat_config.get("complexity_cost", 0.0)
