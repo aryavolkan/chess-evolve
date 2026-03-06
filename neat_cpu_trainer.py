@@ -92,7 +92,7 @@ class NeatCPUTrainer:
         # Hall of Fame (stored as JSON strings)
         self.white_hof: list[tuple[float, str]] = []
         self.black_hof: list[tuple[float, str]] = []
-        self.hof_max_size = 10
+        self.hof_max_size = self.pop_size
 
         # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
@@ -149,7 +149,7 @@ class NeatCPUTrainer:
         else:
             print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
-        # Merge current HoF with previously saved HoF, keep top 5 by fitness
+        # Merge current HoF with previously saved HoF, keep top pop_size by fitness
         for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
             # Current run's HoF: list of (fitness, genome_json)
             merged: dict[str, float] = {}
@@ -161,8 +161,8 @@ class NeatCPUTrainer:
             for genome_json in prev.get(color_key, []):
                 if genome_json not in merged:
                     merged[genome_json] = float("-inf")
-            # Sort by fitness descending, take top 5
-            ranked = sorted(merged.items(), key=lambda x: -x[1])[:5]
+            # Sort by fitness descending, keep enough to seed a full population
+            ranked = sorted(merged.items(), key=lambda x: -x[1])[:self.pop_size]
             prev[color_key] = [genome for genome, _ in ranked]
         updated = True  # HoF update always triggers save
 
@@ -515,18 +515,35 @@ class NeatCPUTrainer:
 
         # Initialize populations via Rust (seeded or random)
         seed = self._load_seed()
-        if seed and "white" in seed:
-            print(f"  Seeding from {self.seed_genome_path}")
+        white_hof_seeds = (seed or {}).get("white_hof", [])
+        black_hof_seeds = (seed or {}).get("black_hof", [])
+
+        if white_hof_seeds:
+            print(f"  Seeding white from {len(white_hof_seeds)} HoF genomes")
+            init_result = neat_ga.create_multi_seeded_population(config_json, white_hof_seeds)
+            white_pop: list[str] = init_result["population"]
+            white_tracker_json: str = init_result["tracker"]
+        elif seed and "white" in seed:
+            print(f"  Seeding white from best genome")
             init_result = neat_ga.create_seeded_population(config_json, seed["white"])
             white_pop: list[str] = init_result["population"]
             white_tracker_json: str = init_result["tracker"]
-            init_result = neat_ga.create_seeded_population(config_json, seed["black"])
-            black_pop: list[str] = init_result["population"]
-            black_tracker_json: str = init_result["tracker"]
         else:
             init_result = neat_ga.create_population_with_tracker(config_json)
             white_pop: list[str] = init_result["population"]
             white_tracker_json: str = init_result["tracker"]
+
+        if black_hof_seeds:
+            print(f"  Seeding black from {len(black_hof_seeds)} HoF genomes")
+            init_result = neat_ga.create_multi_seeded_population(config_json, black_hof_seeds)
+            black_pop: list[str] = init_result["population"]
+            black_tracker_json: str = init_result["tracker"]
+        elif seed and "black" in seed:
+            print(f"  Seeding black from best genome")
+            init_result = neat_ga.create_seeded_population(config_json, seed["black"])
+            black_pop: list[str] = init_result["population"]
+            black_tracker_json: str = init_result["tracker"]
+        else:
             init_result = neat_ga.create_population_with_tracker(config_json)
             black_pop: list[str] = init_result["population"]
             black_tracker_json: str = init_result["tracker"]

@@ -35,6 +35,9 @@ _neat_ga_mock.create_population_with_tracker = MagicMock(
 _neat_ga_mock.create_seeded_population = MagicMock(
     return_value={"population": ["{}"] * 50, "tracker": "{}"}
 )
+_neat_ga_mock.create_multi_seeded_population = MagicMock(
+    return_value={"population": ["{}"] * 50, "tracker": "{}"}
+)
 _neat_ga_mock.evolve_neat_generation = MagicMock(
     return_value={
         "population": ["{}"] * 50,
@@ -338,8 +341,8 @@ class TestSeedIO:
         assert data["white_hof"].count("shared_genome") == 1
         assert len(data["white_hof"]) == 3  # shared + new_only + old_only
 
-    def test_save_best_hof_capped_at_five(self, trainer, tmp_path):
-        """Merged HoF should keep at most 5 genomes."""
+    def test_save_best_hof_capped_at_pop_size(self, trainer, tmp_path):
+        """Merged HoF should keep at most pop_size genomes."""
         trainer.save_genome_path = tmp_path / "best.json"
         trainer.save_genome_path.write_text(json.dumps({
             "white": "w", "black": "b",
@@ -377,8 +380,8 @@ class TestSeedIO:
         data = json.loads(trainer.save_genome_path.read_text())
         # Current genomes ranked first by fitness
         assert data["white_hof"][:3] == ["cur_a", "cur_b", "cur_c"]
-        # Old ones fill remaining 2 slots
-        assert len(data["white_hof"]) == 5
+        # Old ones fill remaining slots up to pop_size (5)
+        assert len(data["white_hof"]) == trainer.pop_size
 
     def test_save_best_updates_colors_independently(self, trainer, tmp_path):
         trainer.save_genome_path = tmp_path / "best.json"
@@ -464,7 +467,10 @@ class TestInitialization:
     def test_default_config_values(self, tmp_path):
         t = NeatCPUTrainer({}, tmp_path / "m.jsonl")
         assert t.pop_size == 50
-        assert t.hof_max_size == 10
+        assert t.hof_max_size == t.pop_size
+
+    def test_hof_max_size_matches_pop_size(self, trainer):
+        assert trainer.hof_max_size == trainer.pop_size
 
     def test_neat_config_built(self, trainer):
         nc = trainer.neat_config
