@@ -21,53 +21,37 @@ from godot_wandb import godot_user_dir, poll_metrics, read_metrics  # noqa: E402
 
 CHESS_LOG_KEYS = [
     "generation",
+    # Fitness
     "white_best",
     "white_avg",
     "black_best",
     "black_avg",
-    "best_fitness",
-    "avg_fitness",
-    "games_played",
+    "combined_best",
+    # Games
     "total_games_this_gen",
     "avg_game_length",
     "games_per_sec",
     "moves_per_sec",
+    "generation_time_sec",
+    # Outcome rates
     "white_win_rate",
     "white_draw_rate",
-    "white_loss_rate",
     "black_win_rate",
     "black_draw_rate",
-    "black_loss_rate",
-    "white_hof_size",
-    "black_hof_size",
+    # Tournament scores
     "white_tournament_score_best",
     "white_tournament_score_avg",
     "black_tournament_score_best",
     "black_tournament_score_avg",
+    # Material
     "white_material_avg",
     "black_material_avg",
-    "generation_time_sec",
-    "combined_best",
-    # Elo tracking
-    "white_hof_avg_elo",
-    "black_hof_avg_elo",
-    "white_hof_top_elo",
-    "black_hof_top_elo",
-    "white_elo_min",
-    "white_elo_p25",
-    "white_elo_median",
-    "white_elo_p75",
-    "white_elo_max",
-    "black_elo_min",
-    "black_elo_p25",
-    "black_elo_median",
-    "black_elo_p75",
-    "black_elo_max",
-    # NEAT topology metrics
-    "neat_hidden_nodes_avg",
-    "neat_connections_avg",
-    "neat_species_count",
-    # Per-color topology metrics
+    # Hall of Fame
+    "white_hof_size",
+    "black_hof_size",
+    # NEAT topology metrics (per-color)
+    "white_species_count",
+    "black_species_count",
     "white_depth_avg",
     "black_depth_avg",
     "white_width_avg",
@@ -101,6 +85,7 @@ CHESS_LOG_KEYS = [
     "bench_white_material_adv",
     "bench_black_win_rate",
     "bench_black_material_adv",
+    "bench_avg_win_rate",
 ]
 
 

@@ -128,7 +128,7 @@ class TestChessLogKeys:
 
     def test_contains_core_metrics(self):
         keys = _MODULE["CHESS_LOG_KEYS"]
-        core = ["generation", "best_fitness", "avg_fitness", "white_best", "black_best",
+        core = ["generation", "white_best", "black_best",
                 "white_win_rate", "black_win_rate", "combined_best"]
         for k in core:
             assert k in keys, f"missing core key: {k}"
