@@ -676,53 +676,37 @@ class NeatCPUTrainer:
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
                 "generation": gen,
+                # Fitness
                 "white_best": max(white_fitness),
                 "white_avg": sum(white_fitness) / len(white_fitness),
                 "black_best": max(black_fitness),
                 "black_avg": sum(black_fitness) / len(black_fitness),
-                "best_fitness": max(max(white_fitness), max(black_fitness)),
-                "avg_fitness": (sum(white_fitness) + sum(black_fitness)) / (2 * self.pop_size),
-                "games_played": total_games,
+                "combined_best": min(max(white_fitness), max(black_fitness)),
+                # Games
                 "total_games_this_gen": num_games,
                 "avg_game_length": avg_game_length,
                 "games_per_sec": games_per_sec,
                 "moves_per_sec": moves_per_sec,
+                "generation_time_sec": gen_time,
+                # Outcome rates
                 "white_win_rate": w_win,
                 "white_draw_rate": w_draw,
-                "white_loss_rate": w_loss,
                 "black_win_rate": b_win,
                 "black_draw_rate": b_draw,
-                "black_loss_rate": b_loss,
-                "white_hof_size": len(self.white_hof),
-                "black_hof_size": len(self.black_hof),
+                # Tournament scores
                 "white_tournament_score_best": max(white_tourn) if white_tourn else 0,
                 "white_tournament_score_avg": sum(white_tourn) / max(1, len(white_tourn)),
                 "black_tournament_score_best": max(black_tourn) if black_tourn else 0,
                 "black_tournament_score_avg": sum(black_tourn) / max(1, len(black_tourn)),
+                # Material
                 "white_material_avg": w_mat_avg,
                 "black_material_avg": b_mat_avg,
-                "generation_time_sec": gen_time,
-                "combined_best": min(max(white_fitness), max(black_fitness)),
-                # Elo tracking placeholders
-                "white_hof_avg_elo": 0,
-                "black_hof_avg_elo": 0,
-                "white_hof_top_elo": 0,
-                "black_hof_top_elo": 0,
-                "white_elo_min": 0,
-                "white_elo_p25": 0,
-                "white_elo_median": 0,
-                "white_elo_p75": 0,
-                "white_elo_max": 0,
-                "black_elo_min": 0,
-                "black_elo_p25": 0,
-                "black_elo_median": 0,
-                "black_elo_p75": 0,
-                "black_elo_max": 0,
-                # NEAT topology metrics (combined, backward-compatible)
-                "neat_hidden_nodes_avg": avg_nodes - self.input_size - self.output_size,
-                "neat_connections_avg": avg_conns,
-                "neat_species_count": w_stats["species_count"] + b_stats["species_count"],
-                # Per-color topology metrics
+                # Hall of Fame
+                "white_hof_size": len(self.white_hof),
+                "black_hof_size": len(self.black_hof),
+                # NEAT topology metrics (per-color)
+                "white_species_count": w_stats["species_count"],
+                "black_species_count": b_stats["species_count"],
                 "white_depth_avg": w_stats.get("avg_depth", 0),
                 "black_depth_avg": b_stats.get("avg_depth", 0),
                 "white_width_avg": w_stats.get("avg_width", 0),
@@ -748,14 +732,15 @@ class NeatCPUTrainer:
                 "black_fitness_king_danger": b_breakdown["king_danger"],
                 "black_fitness_captures": b_breakdown["captures"],
                 "black_fitness_move_penalty": b_breakdown["move_penalty"],
-                # Benchmark vs random
                 # King danger averages
                 "white_king_danger_avg": sum(g.get("white_king_danger", 0.0) for g in results) / max(1, num_games),
                 "black_king_danger_avg": sum(g.get("black_king_danger", 0.0) for g in results) / max(1, num_games),
+                # Benchmark vs random (absolute progress)
                 "bench_white_win_rate": w_bench_wr,
                 "bench_white_material_adv": w_bench_mat,
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
+                "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
             }
 
             # Write metrics line to file
