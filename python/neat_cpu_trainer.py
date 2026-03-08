@@ -594,12 +594,11 @@ class NeatCPUTrainer:
         self, population: list[str], coevo_fitness: list[float],
         color: int,
     ) -> list[float]:
-        """Compute Stockfish-based fitness for top N genomes using CPL.
+        """Compute Stockfish-based fitness for top N genomes.
 
-        Plays each top genome 1 game vs Stockfish, computes avg centipawn loss.
-        Fitness = max(0, 1 - avg_cpl / 500). Lower CPL = higher fitness.
-        Win bonus: +2.0 for win, +1.0 for draw.
-        Non-tested genomes get 0.0.
+        Plays each top genome 1 fast game vs Stockfish (no CPL analysis).
+        Fitness based on outcome + survival length (how many moves before losing).
+        Non-tested genomes inherit the median SF fitness to avoid penalizing them.
         """
         if not self._stockfish_path:
             return [0.0] * len(population)
@@ -607,10 +606,9 @@ class NeatCPUTrainer:
         import chess.engine
 
         n = len(population)
-        sf_fit = [0.0] * n
         genome_is_white = color == 0
 
-        # Only test top N by coevolution fitness
+        # Test top N by coevolution fitness
         top_n = min(self.sf_fitness_top_n, n)
         ranked = sorted(range(n), key=lambda i: coevo_fitness[i], reverse=True)
         top_indices = ranked[:top_n]
@@ -620,23 +618,32 @@ class NeatCPUTrainer:
             engine.configure({"Skill Level": self.sf_skill_level})
         except Exception as e:
             print(f"  ⚠ SF fitness: could not start Stockfish: {e}")
-            return sf_fit
+            return [0.0] * n
 
+        tested_scores: list[float] = []
+        sf_fit = [0.0] * n
         try:
             for idx in top_indices:
-                result, moves, avg_cpl = self._play_game_vs_stockfish(
+                result, moves, _cpl = self._play_game_vs_stockfish(
                     population[idx], genome_is_white=genome_is_white,
-                    engine=engine, compute_cpl=True,
+                    engine=engine, compute_cpl=False,
                 )
-                # CPL-based fitness: 1.0 at 0 CPL, 0.0 at 500+ CPL
-                cpl_score = max(0.0, 1.0 - avg_cpl / 500.0)
                 # Outcome bonus
-                outcome_bonus = 2.0 if result == "win" else (1.0 if result == "draw" else 0.0)
-                # Survival bonus: longer games = better (capped at 1.0)
-                survival = min(1.0, moves / self.max_moves)
-                sf_fit[idx] = cpl_score + outcome_bonus + survival
+                outcome = 10.0 if result == "win" else (3.0 if result == "draw" else 0.0)
+                # Survival: longer games = better (normalized to 0-5 range)
+                survival = 5.0 * min(1.0, moves / self.max_moves)
+                sf_fit[idx] = outcome + survival
+                tested_scores.append(sf_fit[idx])
         finally:
             engine.quit()
+
+        # Non-tested genomes get median score so they aren't penalized
+        if tested_scores:
+            tested_scores.sort()
+            median = tested_scores[len(tested_scores) // 2]
+            for i in range(n):
+                if i not in set(top_indices):
+                    sf_fit[i] = median
 
         return sf_fit
 
