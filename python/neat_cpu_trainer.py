@@ -5,6 +5,8 @@ Uses neat_ga for NEAT evolution (speciation, crossover, topology mutation)
 and chess_cpu for parallel game simulation with sparse neural networks.
 Drop-in replacement for CPUTrainer when use_neat=True.
 """
+from __future__ import annotations
+
 import json
 import os
 import random
@@ -13,12 +15,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-import chess
-import chess.engine
 import chess_cpu
 import neat_ga
-
-from lichess_bot import SparseNetwork, pick_move
 
 
 class NeatCPUTrainer:
@@ -448,13 +446,18 @@ class NeatCPUTrainer:
 
     def _play_game_vs_stockfish(
         self, genome_json: str, genome_is_white: bool,
-        engine: chess.engine.SimpleEngine,
+        engine,
     ) -> tuple[str, int]:
         """Play one game between a NEAT genome and Stockfish.
 
         Returns (result, move_count) where result is "win", "draw", or "loss"
         from the genome's perspective.
         """
+        import chess
+        import chess.engine
+
+        from lichess_bot import SparseNetwork, pick_move  # noqa: F811
+
         network = SparseNetwork(json.loads(genome_json))
         board = chess.Board()
 
@@ -489,6 +492,8 @@ class NeatCPUTrainer:
         """
         if not self._stockfish_path:
             return 0.0, 0.0, 0.0
+
+        import chess.engine
 
         w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
         b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
