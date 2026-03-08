@@ -439,6 +439,7 @@ def load_genomes(path: str, color: str = "white",
                  top_n: int = 5) -> tuple[list[str], int]:
     """Load best genome + HoF genomes (deduped), up to top_n.
 
+    top_n=0 means load all available genomes.
     Returns (list_of_genome_json_strings, output_size).
     """
     with open(path) as f:
@@ -454,7 +455,7 @@ def load_genomes(path: str, color: str = "white",
 
     hof_key = f"{color}_hof"
     for gj in data.get(hof_key, []):
-        if gj not in seen and len(genomes) < top_n:
+        if gj not in seen and (top_n == 0 or len(genomes) < top_n):
             seen.add(gj)
             genomes.append(gj)
 
@@ -479,7 +480,7 @@ def main():
     parser.add_argument("--challenge", type=str, default=None,
                         help="Challenge this user/bot instead of waiting")
     parser.add_argument("--top", type=int, default=5,
-                        help="Ensemble size: number of top genomes for voting (default: 5, 1=single genome)")
+                        help="Ensemble size: number of top genomes for voting (default: 5, 0=all available)")
     parser.add_argument("--test", action="store_true",
                         help="Dry run: load genome, pick first move, exit")
     args = parser.parse_args()
