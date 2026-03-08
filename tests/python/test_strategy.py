@@ -18,7 +18,7 @@ def _collect_values(param: dict) -> list[float]:
 
 
 def test_sweep_config_parameter_ranges() -> None:
-    module = _load("sweep_config.py")
+    module = _load("configs/sweep_config.py")
     for name in ("sweep_config", "sweep_config_quick", "sweep_config_deep"):
         cfg = module[name]
         params = cfg["parameters"]

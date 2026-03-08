@@ -10,13 +10,14 @@ import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
 shared_utils = Path.home() / "Projects/shared-evolve-utils"
 if shared_utils.exists():
     sys.path.insert(0, str(shared_utils))
 
 import wandb  # noqa: E402
+
 from godot_wandb import godot_user_dir, poll_metrics, read_metrics  # noqa: E402
 
 CHESS_LOG_KEYS = [

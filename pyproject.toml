@@ -1,7 +1,7 @@
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-src = ["scripts"]
+src = ["python", "scripts", "configs"]
 extend-exclude = ["assets"]
 
 [tool.ruff.lint]
@@ -30,6 +30,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["T201"]  # allow print()
+"python/*.py" = ["T201"]   # allow print()
+"configs/*.py" = ["T201"]  # allow print()
 
 [tool.ruff.format]
 quote-style = "double"

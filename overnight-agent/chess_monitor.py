@@ -26,8 +26,9 @@ _SHARED = next(
     if os.path.isdir(p)
 )
 sys.path.insert(0, _SHARED)
-from godot_wandb import godot_user_dir  # noqa: E402
 from worker_monitor import WorkerConfig, add_monitor_args, monitor_once  # noqa: E402
+
+from godot_wandb import godot_user_dir  # noqa: E402
 
 PROJECT_PATH = os.environ.get(
     "CHESS_EVOLVE_PROJECT_PATH",

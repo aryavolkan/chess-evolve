@@ -20,10 +20,13 @@ _SHARED = next(
 )
 if _SHARED:
     sys.path.insert(0, _SHARED)
+_PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
+sys.path.insert(0, _PYTHON)
 _OVERNIGHT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overnight-agent")
 sys.path.insert(0, _OVERNIGHT)
 import wandb  # noqa: E402
 from global_elite import GlobalElitePool  # noqa: E402
+
 from godot_wandb import (  # noqa: E402
     SweepWorker,
     define_step_metric,
@@ -259,7 +262,7 @@ def _detect_rust() -> bool:
         import importlib.util
         return (importlib.util.find_spec("chess_cpu") is not None
                 and importlib.util.find_spec("evolve_ga") is not None
-                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cpu_trainer.py")))
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "cpu_trainer.py")))
     except Exception:
         return False
 
@@ -270,7 +273,7 @@ def _detect_neat_rust() -> bool:
         import importlib.util
         return (importlib.util.find_spec("neat_ga") is not None
                 and importlib.util.find_spec("chess_cpu") is not None
-                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "neat_cpu_trainer.py")))
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "neat_cpu_trainer.py")))
     except Exception:
         return False
 
@@ -282,7 +285,7 @@ def _detect_pytorch() -> bool:
         for mod in ("torch", "chess"):
             if importlib.util.find_spec(mod) is None:
                 return False
-        return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gpu_trainer.py"))
+        return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "gpu_trainer.py"))
     except Exception:
         return False
 

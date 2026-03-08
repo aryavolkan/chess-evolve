@@ -9,13 +9,10 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 # Ensure overnight-agent is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "overnight-agent"))
 
 from global_elite import GlobalElitePool, _valid_genome  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Helpers

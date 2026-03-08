@@ -10,9 +10,7 @@ import runpy
 import sys
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Load train_wandb module safely via runpy to avoid heavy imports.

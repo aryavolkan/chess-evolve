@@ -32,7 +32,7 @@ python -m pytest tests/python -q
 python -m pytest tests/python/test_cpu_trainer.py -v
 
 # Lint
-ruff check scripts/ train_wandb.py sweep_config.py
+ruff check python/ scripts/ configs/ train_wandb.py
 ```
 
 ### GDScript
@@ -74,9 +74,11 @@ python train_wandb.py --chain 10
    - `neat-ga` (PyO3): NEAT evolution — variable-topology genomes, speciation, crossover, topology mutation.
    - `chess-native` (gdext): Godot GDExtension for accelerating the Godot-based training path.
 
-2. **Python layer** (root + `overnight-agent/`):
-   - `cpu_trainer.py` / `neat_cpu_trainer.py`: Training loops using Rust PyO3 crates. Fixed-topology (CPUTrainer) vs variable-topology NEAT (NeatCPUTrainer).
-   - `train_wandb.py`: Entry point for all training. Auto-detects backend, handles W&B logging, sweep integration, chained training.
+2. **Python layer** (`python/`, `train_wandb.py`, `overnight-agent/`):
+   - `python/cpu_trainer.py` / `python/neat_cpu_trainer.py`: Training loops using Rust PyO3 crates. Fixed-topology (CPUTrainer) vs variable-topology NEAT (NeatCPUTrainer).
+   - `python/lichess_bot.py`: Lichess bot with ensemble voting from Hall of Fame genomes.
+   - `train_wandb.py`: Entry point for all training (stays at root). Auto-detects backend, handles W&B logging, sweep integration, chained training.
+   - `configs/`: Sweep configs and JSON training configs.
    - `overnight-agent/`: W&B sweep workers, monitoring, global elite pool for cross-run genome sharing.
 
 3. **Godot layer** (`ai/`, `chess/`, `ui/`, `scenes/`):
