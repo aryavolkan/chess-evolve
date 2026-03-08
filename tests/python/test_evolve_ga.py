@@ -377,8 +377,8 @@ class TestMigrate:
         new_islands, new_fitness = evolve_ga.migrate([pop], [fit], n_migrants=2)
         assert len(new_islands) == 1
         # Use approximate comparison since Rust f64->f32->f64 round-trip loses precision
-        for orig, result in zip(pop, new_islands[0]):
-            for a, b in zip(orig, result):
+        for orig, result in zip(pop, new_islands[0], strict=True):
+            for a, b in zip(orig, result, strict=True):
                 assert abs(a - b) < 1e-6
 
 

@@ -17,7 +17,7 @@ jobs:
       - name: Python lint (ruff)
         run: |
           pip3 install --quiet --break-system-packages ruff
-          ruff check scripts/ train_wandb.py sweep_config.py
+          ruff check python/ scripts/ configs/ train_wandb.py
 
       - name: GDScript lint (gdlint)
         run: |

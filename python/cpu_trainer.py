@@ -8,13 +8,12 @@ import gc
 import json
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
-
-import numpy as np
 
 import chess_cpu
 import evolve_ga
+import numpy as np
 
 
 class CPUTrainer:
@@ -399,7 +398,7 @@ class CPUTrainer:
     def train(
         self,
         max_generations: int,
-        on_generation: Optional[Callable[[dict], None]] = None,
+        on_generation: Callable[[dict], None] | None = None,
     ) -> dict:
         """Run the training loop.
 

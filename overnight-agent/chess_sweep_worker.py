@@ -21,6 +21,7 @@ if _SHARED:
     sys.path.insert(0, _SHARED)
 import wandb  # noqa: E402
 from global_elite import GlobalElitePool  # noqa: E402
+
 from godot_wandb import (  # noqa: E402
     SweepWorker,
     define_step_metric,
