@@ -215,9 +215,8 @@ func get_hall_of_fame_opponent(color: int, use_elo_weight: bool = ELO_ELO_WEIGHT
                 return NeatNetworkScript.from_genome(hof[i].genome)
 
         return NeatNetworkScript.from_genome(hof[hof.size() - 1].genome)
-    else:
-        var idx := randi() % hof.size()
-        return NeatNetworkScript.from_genome(hof[idx].genome)
+    var idx := randi() % hof.size()
+    return NeatNetworkScript.from_genome(hof[idx].genome)
 
 
 func get_hall_of_fame_stats(color: int) -> Dictionary:

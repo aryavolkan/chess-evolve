@@ -99,7 +99,9 @@ func benchmark_forward(iterations: int = 1000) -> void:
     for i in iterations:
         forward(input)
     var elapsed := Time.get_ticks_usec() - start
-    print("forward ", iterations, " ", elapsed, " usec total, ", float(elapsed) / float(iterations), " usec/call")
+    var per_call := float(elapsed) / float(iterations)
+    print("forward %d %d usec total, %.1f usec/call" % [
+        iterations, elapsed, per_call])
 
 
 func get_weights() -> PackedFloat32Array:

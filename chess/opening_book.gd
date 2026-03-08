@@ -76,7 +76,8 @@ static func _build_book() -> void:
 		# Sicilian Defense: 1.e4 c5
 		[1.0, [[12,28], [50,34]]],
 		# Sicilian Najdorf: 1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6
-		[0.8, [[12,28], [50,34], [6,21], [51,43], [11,27], [34,27], [21,27], [62,45], [1,18], [48,40]]],
+		[0.8, [[12,28], [50,34], [6,21], [51,43], [11,27],
+		[34,27], [21,27], [62,45], [1,18], [48,40]]],
 		# French Defense: 1.e4 e6
 		[0.9, [[12,28], [52,44]]],
 		# French Advance: 1.e4 e6 2.d4 d5 3.e5
@@ -166,6 +167,8 @@ static func _add_opening_sequence(move_pairs: Array, weight: float) -> void:
 		# Apply the move to advance position
 		var legal_moves := state.generate_legal_moves()
 		if not legal_moves.has(encoded_move):
-			push_warning("OpeningBook: Illegal move in sequence at step %d: %d->%d" % [i, from_sq, to_sq])
+			push_warning(
+			"OpeningBook: Illegal move in sequence at step %d: %d->%d"
+			% [i, from_sq, to_sq])
 			break
 		state.make_move(encoded_move)

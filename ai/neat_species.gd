@@ -85,7 +85,10 @@ func is_empty() -> bool:
     return members.is_empty()
 
 
-static func speciate(population: Array, existing_species: Array, config: NeatConfig, next_species_id: int) -> Dictionary:
+static func speciate(
+    population: Array, existing_species: Array,
+    config: NeatConfig, next_species_id: int
+) -> Dictionary:
     for species in existing_species:
         species.clear_members()
 
