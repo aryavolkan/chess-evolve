@@ -114,10 +114,19 @@ class NeatCPUTrainer:
         self.sf_bench_interval = config.get("sf_bench_interval", 10)
         self.sf_bench_games = config.get("sf_bench_games", 6)
         self.sf_skill_level = config.get("sf_skill_level", 0)
-        self.sf_move_time = config.get("sf_move_time", 0.01)  # seconds per move
+        self.sf_move_time = config.get("sf_move_time", 0.05)  # seconds per move
         self._stockfish_path = shutil.which("stockfish") or os.environ.get("STOCKFISH_PATH", "")
+
+        # Stockfish fitness signal: CPL-based fitness bonus for top N genomes
+        self.sf_fitness_weight = config.get("sf_fitness_weight", 0.0)
+        self.sf_fitness_interval = config.get("sf_fitness_interval", 5)
+        self.sf_fitness_top_n = config.get("sf_fitness_top_n", 10)
+
         if self._stockfish_path:
-            print(f"  Stockfish found: {self._stockfish_path} (skill {self.sf_skill_level}, every {self.sf_bench_interval} gens)")
+            parts = [f"skill {self.sf_skill_level}", f"bench every {self.sf_bench_interval} gens"]
+            if self.sf_fitness_weight > 0:
+                parts.append(f"fitness weight {self.sf_fitness_weight}")
+            print(f"  Stockfish found: {self._stockfish_path} ({', '.join(parts)})")
         else:
             print("  Stockfish not found; sf_bench disabled")
 
@@ -446,12 +455,13 @@ class NeatCPUTrainer:
 
     def _play_game_vs_stockfish(
         self, genome_json: str, genome_is_white: bool,
-        engine,
-    ) -> tuple[str, int]:
+        engine, compute_cpl: bool = False,
+    ) -> tuple[str, int, float]:
         """Play one game between a NEAT genome and Stockfish.
 
-        Returns (result, move_count) where result is "win", "draw", or "loss"
-        from the genome's perspective.
+        Returns (result, move_count, avg_cpl) where result is "win", "draw",
+        or "loss" from the genome's perspective. avg_cpl is the average
+        centipawn loss per genome move (0.0 if compute_cpl is False).
         """
         import chess
         import chess.engine
@@ -460,38 +470,74 @@ class NeatCPUTrainer:
 
         network = SparseNetwork(json.loads(genome_json))
         board = chess.Board()
+        cpl_values: list[float] = []
 
         for _ in range(self.max_moves):
             if board.is_game_over():
                 break
 
-            if (board.turn == chess.WHITE and genome_is_white) or (board.turn == chess.BLACK and not genome_is_white):
+            is_genome_turn = (board.turn == chess.WHITE and genome_is_white) or (
+                board.turn == chess.BLACK and not genome_is_white
+            )
+
+            if is_genome_turn:
+                # Evaluate position before genome's move for CPL
+                if compute_cpl:
+                    try:
+                        info_before = engine.analyse(
+                            board, chess.engine.Limit(time=self.sf_move_time),
+                        )
+                        score_before = info_before["score"].pov(
+                            chess.WHITE if genome_is_white else chess.BLACK,
+                        )
+                    except Exception:
+                        score_before = None
+
                 move = pick_move(network, board, self.output_size)
+                board.push(move)
+
+                # Evaluate position after genome's move for CPL
+                if compute_cpl and score_before is not None:
+                    try:
+                        info_after = engine.analyse(
+                            board, chess.engine.Limit(time=self.sf_move_time),
+                        )
+                        score_after = info_after["score"].pov(
+                            chess.WHITE if genome_is_white else chess.BLACK,
+                        )
+                        cp_before = score_before.score(mate_score=10000)
+                        cp_after = score_after.score(mate_score=10000)
+                        if cp_before is not None and cp_after is not None:
+                            # CPL = how much worse the position got (from genome's view)
+                            cpl = max(0, cp_before - cp_after)
+                            cpl_values.append(cpl)
+                    except Exception:
+                        pass
             else:
                 result = engine.play(board, chess.engine.Limit(time=self.sf_move_time))
-                move = result.move
-
-            board.push(move)
+                board.push(result.move)
 
         move_count = len(board.move_stack)
+        avg_cpl = sum(cpl_values) / max(1, len(cpl_values)) if cpl_values else 0.0
         outcome = board.outcome()
         if outcome is None:
-            return "draw", move_count
+            return "draw", move_count, avg_cpl
         if outcome.winner is None:
-            return "draw", move_count
+            return "draw", move_count, avg_cpl
         genome_won = (outcome.winner == chess.WHITE) == genome_is_white
-        return ("win" if genome_won else "loss"), move_count
+        return ("win" if genome_won else "loss"), move_count, avg_cpl
 
     def _benchmark_vs_stockfish(
         self, white_pop: list[str], black_pop: list[str],
         white_fitness: list[float], black_fitness: list[float],
-    ) -> tuple[float, float, float]:
+    ) -> tuple[float, float, float, float, float]:
         """Play best genomes against Stockfish.
 
-        Returns (white_win_rate, black_win_rate, avg_game_length).
+        Returns (white_win_rate, black_win_rate, avg_game_length,
+                 white_avg_cpl, black_avg_cpl).
         """
         if not self._stockfish_path:
-            return 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0
 
         import chess.engine
 
@@ -503,38 +549,96 @@ class NeatCPUTrainer:
             engine.configure({"Skill Level": self.sf_skill_level})
         except Exception as e:
             print(f"  ⚠ Could not start Stockfish: {e}")
-            return 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0
 
         try:
             w_wins = 0
             b_wins = 0
             total_moves = 0
+            w_cpls: list[float] = []
+            b_cpls: list[float] = []
             n = self.sf_bench_games
 
             # Best white genome plays as white vs Stockfish
             for _ in range(n):
-                result, moves = self._play_game_vs_stockfish(
-                    white_pop[w_best_idx], genome_is_white=True, engine=engine,
+                result, moves, cpl = self._play_game_vs_stockfish(
+                    white_pop[w_best_idx], genome_is_white=True,
+                    engine=engine, compute_cpl=True,
                 )
                 if result == "win":
                     w_wins += 1
                 total_moves += moves
+                w_cpls.append(cpl)
 
             # Best black genome plays as black vs Stockfish
             for _ in range(n):
-                result, moves = self._play_game_vs_stockfish(
-                    black_pop[b_best_idx], genome_is_white=False, engine=engine,
+                result, moves, cpl = self._play_game_vs_stockfish(
+                    black_pop[b_best_idx], genome_is_white=False,
+                    engine=engine, compute_cpl=True,
                 )
                 if result == "win":
                     b_wins += 1
                 total_moves += moves
+                b_cpls.append(cpl)
 
             w_wr = w_wins / n
             b_wr = b_wins / n
             avg_len = total_moves / (2 * n)
-            return w_wr, b_wr, avg_len
+            w_avg_cpl = sum(w_cpls) / max(1, len(w_cpls))
+            b_avg_cpl = sum(b_cpls) / max(1, len(b_cpls))
+            return w_wr, b_wr, avg_len, w_avg_cpl, b_avg_cpl
         finally:
             engine.quit()
+
+    def _compute_sf_fitness(
+        self, population: list[str], coevo_fitness: list[float],
+        color: int,
+    ) -> list[float]:
+        """Compute Stockfish-based fitness for top N genomes using CPL.
+
+        Plays each top genome 1 game vs Stockfish, computes avg centipawn loss.
+        Fitness = max(0, 1 - avg_cpl / 500). Lower CPL = higher fitness.
+        Win bonus: +2.0 for win, +1.0 for draw.
+        Non-tested genomes get 0.0.
+        """
+        if not self._stockfish_path:
+            return [0.0] * len(population)
+
+        import chess.engine
+
+        n = len(population)
+        sf_fit = [0.0] * n
+        genome_is_white = color == 0
+
+        # Only test top N by coevolution fitness
+        top_n = min(self.sf_fitness_top_n, n)
+        ranked = sorted(range(n), key=lambda i: coevo_fitness[i], reverse=True)
+        top_indices = ranked[:top_n]
+
+        try:
+            engine = chess.engine.SimpleEngine.popen_uci(self._stockfish_path)
+            engine.configure({"Skill Level": self.sf_skill_level})
+        except Exception as e:
+            print(f"  ⚠ SF fitness: could not start Stockfish: {e}")
+            return sf_fit
+
+        try:
+            for idx in top_indices:
+                result, moves, avg_cpl = self._play_game_vs_stockfish(
+                    population[idx], genome_is_white=genome_is_white,
+                    engine=engine, compute_cpl=True,
+                )
+                # CPL-based fitness: 1.0 at 0 CPL, 0.0 at 500+ CPL
+                cpl_score = max(0.0, 1.0 - avg_cpl / 500.0)
+                # Outcome bonus
+                outcome_bonus = 2.0 if result == "win" else (1.0 if result == "draw" else 0.0)
+                # Survival bonus: longer games = better (capped at 1.0)
+                survival = min(1.0, moves / self.max_moves)
+                sf_fit[idx] = cpl_score + outcome_bonus + survival
+        finally:
+            engine.quit()
+
+        return sf_fit
 
     def _benchmark_fitness_all(
         self, population: list[str], color: int,
@@ -622,6 +726,20 @@ class NeatCPUTrainer:
 
         # Initialize populations via Rust (seeded or random)
         seed = self._load_seed()
+
+        # Check seed output_size compatibility: skip seeds if mismatched
+        if seed:
+            check_key = "white" if "white" in seed else None
+            if check_key:
+                try:
+                    g = json.loads(seed[check_key])
+                    seed_outputs = sum(1 for n in g["nodes"] if n["node_type"] == 2)
+                    if seed_outputs != self.output_size:
+                        print(f"  ⚠ Seed output_size={seed_outputs} != config={self.output_size}; ignoring seeds")
+                        seed = None
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
         white_hof_seeds = (seed or {}).get("white_hof", [])
         black_hof_seeds = (seed or {}).get("black_hof", [])
 
@@ -710,6 +828,17 @@ class NeatCPUTrainer:
                 white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit, strict=True)]
                 black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit, strict=True)]
 
+            # Stockfish CPL-based fitness signal (every N generations)
+            sf_w_avg_cpl_fit, sf_b_avg_cpl_fit = 0.0, 0.0
+            sf_w = self.sf_fitness_weight
+            if sf_w > 0 and self._stockfish_path and gen % self.sf_fitness_interval == 0:
+                sf_white_fit = self._compute_sf_fitness(white_pop, white_fitness, color=0)
+                sf_black_fit = self._compute_sf_fitness(black_pop, black_fitness, color=1)
+                white_fitness = [(1 - sf_w) * c + sf_w * s for c, s in zip(white_fitness, sf_white_fit, strict=True)]
+                black_fitness = [(1 - sf_w) * c + sf_w * s for c, s in zip(black_fitness, sf_black_fit, strict=True)]
+                sf_w_avg_cpl_fit = sum(sf_white_fit) / max(1, sum(1 for f in sf_white_fit if f > 0))
+                sf_b_avg_cpl_fit = sum(sf_black_fit) / max(1, sum(1 for f in sf_black_fit if f > 0))
+
             # Parsimony pressure: penalize complexity (enabled connections)
             cc = self.neat_config.get("complexity_cost", 0.0)
             if cc > 0:
@@ -782,11 +911,12 @@ class NeatCPUTrainer:
 
             # Benchmark vs Stockfish (every N generations)
             sf_w_wr, sf_b_wr, sf_avg_len = 0.0, 0.0, 0.0
+            sf_w_cpl, sf_b_cpl = 0.0, 0.0
             if self._stockfish_path and self.sf_bench_interval > 0 and gen % self.sf_bench_interval == 0:
-                sf_w_wr, sf_b_wr, sf_avg_len = self._benchmark_vs_stockfish(
+                sf_w_wr, sf_b_wr, sf_avg_len, sf_w_cpl, sf_b_cpl = self._benchmark_vs_stockfish(
                     white_pop, black_pop, white_fitness, black_fitness,
                 )
-                print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f}")
+                print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f} w_cpl={sf_w_cpl:.0f} b_cpl={sf_b_cpl:.0f}")
 
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
@@ -860,6 +990,11 @@ class NeatCPUTrainer:
                 "sf_white_win_rate": sf_w_wr,
                 "sf_black_win_rate": sf_b_wr,
                 "sf_avg_game_length": sf_avg_len,
+                "sf_white_avg_cpl": sf_w_cpl,
+                "sf_black_avg_cpl": sf_b_cpl,
+                # Stockfish fitness signal
+                "sf_fitness_white_avg": sf_w_avg_cpl_fit,
+                "sf_fitness_black_avg": sf_b_avg_cpl_fit,
             }
 
             # Write metrics line to file

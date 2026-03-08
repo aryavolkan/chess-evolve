@@ -30,7 +30,7 @@ except ImportError:
 
 DEFAULT_GENOME_PATH = "neat_best_genomes.json"
 INPUT_SIZE = 389
-DEFAULT_OUTPUT_SIZE = 128
+DEFAULT_OUTPUT_SIZE = 4096
 
 
 # ---------------------------------------------------------------------------
