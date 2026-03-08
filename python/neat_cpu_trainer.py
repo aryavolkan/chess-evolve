@@ -6,13 +6,19 @@ and chess_cpu for parallel game simulation with sparse neural networks.
 Drop-in replacement for CPUTrainer when use_neat=True.
 """
 import json
+import os
 import random
+import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
 
+import chess
+import chess.engine
 import chess_cpu
 import neat_ga
+
+from lichess_bot import SparseNetwork, pick_move
 
 
 class NeatCPUTrainer:
@@ -105,6 +111,17 @@ class NeatCPUTrainer:
         # Fixed random benchmark population for absolute progress measurement.
         self.benchmark_size = 20
         self.benchmark_genomes = self._init_benchmark()
+
+        # Stockfish benchmark: play best genome vs Stockfish every N generations
+        self.sf_bench_interval = config.get("sf_bench_interval", 10)
+        self.sf_bench_games = config.get("sf_bench_games", 6)
+        self.sf_skill_level = config.get("sf_skill_level", 0)
+        self.sf_move_time = config.get("sf_move_time", 0.01)  # seconds per move
+        self._stockfish_path = shutil.which("stockfish") or os.environ.get("STOCKFISH_PATH", "")
+        if self._stockfish_path:
+            print(f"  Stockfish found: {self._stockfish_path} (skill {self.sf_skill_level}, every {self.sf_bench_interval} gens)")
+        else:
+            print("  Stockfish not found; sf_bench disabled")
 
     def _load_seed(self) -> dict | None:
         """Load seed genomes from file if it exists."""
@@ -429,6 +446,91 @@ class NeatCPUTrainer:
 
         return w_wr, w_mat, b_wr, b_mat
 
+    def _play_game_vs_stockfish(
+        self, genome_json: str, genome_is_white: bool,
+        engine: chess.engine.SimpleEngine,
+    ) -> tuple[str, int]:
+        """Play one game between a NEAT genome and Stockfish.
+
+        Returns (result, move_count) where result is "win", "draw", or "loss"
+        from the genome's perspective.
+        """
+        network = SparseNetwork(json.loads(genome_json))
+        board = chess.Board()
+
+        for _ in range(self.max_moves):
+            if board.is_game_over():
+                break
+
+            if (board.turn == chess.WHITE and genome_is_white) or (board.turn == chess.BLACK and not genome_is_white):
+                move = pick_move(network, board, self.output_size)
+            else:
+                result = engine.play(board, chess.engine.Limit(time=self.sf_move_time))
+                move = result.move
+
+            board.push(move)
+
+        move_count = len(board.move_stack)
+        outcome = board.outcome()
+        if outcome is None:
+            return "draw", move_count
+        if outcome.winner is None:
+            return "draw", move_count
+        genome_won = (outcome.winner == chess.WHITE) == genome_is_white
+        return ("win" if genome_won else "loss"), move_count
+
+    def _benchmark_vs_stockfish(
+        self, white_pop: list[str], black_pop: list[str],
+        white_fitness: list[float], black_fitness: list[float],
+    ) -> tuple[float, float, float]:
+        """Play best genomes against Stockfish.
+
+        Returns (white_win_rate, black_win_rate, avg_game_length).
+        """
+        if not self._stockfish_path:
+            return 0.0, 0.0, 0.0
+
+        w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
+        b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
+
+        try:
+            engine = chess.engine.SimpleEngine.popen_uci(self._stockfish_path)
+            engine.configure({"Skill Level": self.sf_skill_level})
+        except Exception as e:
+            print(f"  ⚠ Could not start Stockfish: {e}")
+            return 0.0, 0.0, 0.0
+
+        try:
+            w_wins = 0
+            b_wins = 0
+            total_moves = 0
+            n = self.sf_bench_games
+
+            # Best white genome plays as white vs Stockfish
+            for _ in range(n):
+                result, moves = self._play_game_vs_stockfish(
+                    white_pop[w_best_idx], genome_is_white=True, engine=engine,
+                )
+                if result == "win":
+                    w_wins += 1
+                total_moves += moves
+
+            # Best black genome plays as black vs Stockfish
+            for _ in range(n):
+                result, moves = self._play_game_vs_stockfish(
+                    black_pop[b_best_idx], genome_is_white=False, engine=engine,
+                )
+                if result == "win":
+                    b_wins += 1
+                total_moves += moves
+
+            w_wr = w_wins / n
+            b_wr = b_wins / n
+            avg_len = total_moves / (2 * n)
+            return w_wr, b_wr, avg_len
+        finally:
+            engine.quit()
+
     def _benchmark_fitness_all(
         self, population: list[str], color: int,
     ) -> list[float]:
@@ -673,6 +775,14 @@ class NeatCPUTrainer:
                 white_pop, black_pop, white_fitness, black_fitness,
             )
 
+            # Benchmark vs Stockfish (every N generations)
+            sf_w_wr, sf_b_wr, sf_avg_len = 0.0, 0.0, 0.0
+            if self._stockfish_path and self.sf_bench_interval > 0 and gen % self.sf_bench_interval == 0:
+                sf_w_wr, sf_b_wr, sf_avg_len = self._benchmark_vs_stockfish(
+                    white_pop, black_pop, white_fitness, black_fitness,
+                )
+                print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f}")
+
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
                 "generation": gen,
@@ -741,6 +851,10 @@ class NeatCPUTrainer:
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
                 "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
+                # Stockfish benchmark
+                "sf_white_win_rate": sf_w_wr,
+                "sf_black_win_rate": sf_b_wr,
+                "sf_avg_game_length": sf_avg_len,
             }
 
             # Write metrics line to file

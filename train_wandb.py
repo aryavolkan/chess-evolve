@@ -152,6 +152,10 @@ CHESS_LOG_KEYS = [
     "bench_black_win_rate",
     "bench_black_material_adv",
     "bench_avg_win_rate",
+    # Stockfish benchmark
+    "sf_white_win_rate",
+    "sf_black_win_rate",
+    "sf_avg_game_length",
 ]
 
 
