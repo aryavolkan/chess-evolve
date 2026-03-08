@@ -1,9 +1,9 @@
 {
-    "population_size": 200,
-    "max_generations": 1000,
+    "population_size": 500,
+    "max_generations": 2000,
     "max_moves_per_game": 100,
     "input_size": 389,
-    "output_size": 128,
+    "output_size": 4096,
     "use_neat": true,
     "tournament_opponents": 8,
     "move_temperature": 0.5,
@@ -24,5 +24,12 @@
     "threshold_step": 0.1,
     "benchmark_fitness_weight": 0.3,
     "prune_rate": 0.10,
-    "complexity_cost": 0.005
+    "complexity_cost": 0.005,
+    "sf_fitness_weight": 0.1,
+    "sf_fitness_interval": 5,
+    "sf_fitness_top_n": 10,
+    "sf_bench_interval": 10,
+    "sf_bench_games": 6,
+    "sf_skill_level": 0,
+    "sf_move_time": 0.05
 }
