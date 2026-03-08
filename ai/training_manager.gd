@@ -293,8 +293,10 @@ func calculate_tournament_scores() -> Dictionary:
             if result == 1:  # Win
                 scores[idx] += 1.0
             elif result == 0:  # Draw
-                var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
-                var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
+                var mat_adv := 0.0
+                if entry is Dictionary:
+                    mat_adv = entry.get("material_advantage", 0.0)
+                var draw_score := 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
                 scores[idx] += draw_score
             # Loss gives 0 points
 
@@ -321,14 +323,18 @@ func update_fitness_from_tournament() -> void:
                 if result == 1:
                     white_scores[idx] += 1.0
                 elif result == 0:
-                    var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
-                    var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
+                    var mat_adv := 0.0
+                    if entry is Dictionary:
+                        mat_adv = entry.get("material_advantage", 0.0)
+                    var draw_score := 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
                     white_scores[idx] += draw_score
             elif parts[1] == "black":
                 if result == 1:
                     black_scores[idx] += 1.0
                 elif result == 0:
-                    var mat_adv: float = entry.get("material_advantage", 0.0) if entry is Dictionary else 0.0
+                    var mat_adv := 0.0
+                    if entry is Dictionary:
+                        mat_adv = entry.get("material_advantage", 0.0)
                     var draw_score: float = 0.5 + clampf(mat_adv * 0.02, -0.2, 0.2)
                     black_scores[idx] += draw_score
 
@@ -471,9 +477,15 @@ func _record_tournament_result(white_idx: int, black_idx: int, game_result) -> v
         if state != null:
             material_diff = state.material_score(0) - state.material_score(1)
         else:  # Rust path
-            material_diff = game_result.get("white_material_final", 0.0) - game_result.get("black_material_final", 0.0)
-        tournament_results[str(white_idx) + "_white_" + str(black_idx)] = {"result": 0, "material_advantage": material_diff}
-        tournament_results[str(black_idx) + "_black_" + str(white_idx)] = {"result": 0, "material_advantage": -material_diff}
+            var w_mat: float = game_result.get("white_material_final", 0.0)
+            var b_mat: float = game_result.get("black_material_final", 0.0)
+            material_diff = w_mat - b_mat
+        var w_key := str(white_idx) + "_white_" + str(black_idx)
+        var b_key := str(black_idx) + "_black_" + str(white_idx)
+        tournament_results[w_key] = {
+            "result": 0, "material_advantage": material_diff}
+        tournament_results[b_key] = {
+            "result": 0, "material_advantage": -material_diff}
     elif game_result["result"] == 1:  # White wins
         tournament_results[str(white_idx) + "_white_" + str(black_idx)] = {"result": 1}
         tournament_results[str(black_idx) + "_black_" + str(white_idx)] = {"result": -1}

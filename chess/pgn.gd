@@ -36,12 +36,12 @@ static func move_to_san(state, encoded_move: int) -> String:
 
 	# Castling
 	if abs_p == PIECE.KING and absi(to_sq - from_sq) == 2:
-		var san := "O-O" if to_sq > from_sq else "O-O-O"
+		var castle_san := "O-O" if to_sq > from_sq else "O-O-O"
 		# Check/checkmate suffix
-		var after = state.clone()
-		after.make_move(encoded_move)
-		san += _check_suffix(after)
-		return san
+		var castle_after = state.clone()
+		castle_after.make_move(encoded_move)
+		castle_san += _check_suffix(castle_after)
+		return castle_san
 
 	var san := ""
 
@@ -54,7 +54,7 @@ static func move_to_san(state, encoded_move: int) -> String:
 		san += disambig
 
 	# Capture
-	var is_capture: bool = captured != 0 or (abs_p == PIECE.PAWN and to_sq == state.en_passant_square)
+	var is_capture := captured != 0 or (abs_p == PIECE.PAWN and to_sq == state.en_passant_square)
 	if is_capture:
 		if abs_p == PIECE.PAWN:
 			san += file_char(from_sq % 8)
@@ -152,17 +152,7 @@ static func _disambiguation(state, from_sq: int, to_sq: int, abs_piece: int) -> 
 
 	var from_file := from_sq % 8
 	var from_rank := from_sq / 8
-	var need_file := true
-	var need_rank := false
 
-	# Check if file alone is sufficient
-	for other_from in ambiguous_from:
-		if other_from % 8 == from_file:
-			need_rank = true
-		if other_from / 8 == from_rank:
-			need_file = true
-
-	# If both file and rank are ambiguous, use both
 	var same_file := false
 	var same_rank := false
 	for other_from in ambiguous_from:

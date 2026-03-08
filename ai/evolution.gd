@@ -192,7 +192,7 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
 
     # Immigration: inject random individuals to maintain genetic diversity
     var immigrant_count := maxi(1, ceili(population_size * immigration_rate))
-    for _n in immigrant_count:
+    for idx in immigrant_count:
         if new_pop.size() >= population_size:
             break
         immigrant_idx.append(new_pop.size())
@@ -216,7 +216,7 @@ func _evolve_population(pop: Array, fitness: PackedFloat32Array) -> Array:
 
 func _tournament_select(pop: Array, fitness: PackedFloat32Array):
     var best_idx := randi() % pop.size()
-    for _k in range(1, tournament_k):
+    for round_idx in range(1, tournament_k):
         var idx := randi() % pop.size()
         if fitness[idx] > fitness[best_idx]:
             best_idx = idx
@@ -437,9 +437,8 @@ func get_hall_of_fame_opponent(color: int, use_elo_weight: bool = ELO_ELO_WEIGHT
 
         # Fallback
         return hof[hof.size() - 1].network
-    else:
-        var idx := randi() % hof.size()
-        return hof[idx].network
+    var idx := randi() % hof.size()
+    return hof[idx].network
 
 
 func get_hall_of_fame_stats(color: int) -> Dictionary:
@@ -491,9 +490,10 @@ func seed_from_global_elite(elite_pool: Array) -> int:
 
         # Skip if architecture doesn't match (can't play in this run)
         if e_input != input_size or e_hidden != hidden_size or e_output != output_size:
-            push_warning("GlobalElite: skipping genome with mismatched architecture (%d/%d/%d vs %d/%d/%d)" % [
-                e_input, e_hidden, e_output, input_size, hidden_size, output_size
-            ])
+            push_warning(
+                "GlobalElite: skipping genome with mismatched arch (%d/%d/%d vs %d/%d/%d)" % [
+                    e_input, e_hidden, e_output, input_size, hidden_size, output_size
+                ])
             continue
 
         var nn = NeuralNetworkScript.new(input_size, hidden_size, output_size, false)
