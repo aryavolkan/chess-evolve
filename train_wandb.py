@@ -448,7 +448,7 @@ def _harvest_elites(run, elite_pool, config=None):
                     for genome_json in seed_data.get(color, [])[:5]:
                         elites.append({
                             "genome_json": genome_json,
-                            "fitness": seed_data.get(f"bench_avg_win_rate", 0.0),
+                            "fitness": seed_data.get("bench_avg_win_rate", 0.0),
                         })
                 if elites:
                     contrib_path.write_text(json.dumps({
