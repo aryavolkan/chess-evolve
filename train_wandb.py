@@ -209,27 +209,15 @@ def do_training(config=None, visible=False):
         _worker.clear_metrics()
         _worker.write_config(merged)
 
-        elite_pool = GlobalElitePool(USER_DIR)
-        seed_path = elite_pool.write_seed_file(_worker.worker_id)
-        if seed_path:
-            pool_stats = elite_pool.stats()
-            print(
-                f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
-                f"{pool_stats['contributor_count']} run(s), "
-                f"top fitness={pool_stats['top_fitness']:.2f}"
-            )
-        else:
-            print("🧬 No global elites found; starting fresh")
-
         print(f"\n🎮 Training: pop={merged.get('population_size')}, gens={max_gens}")
 
         try:
             if _has_cuda:
-                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cuda")
+                _run_pytorch_training(run, merged, max_gens, device="cuda")
             elif _USE_RUST:
-                _run_rust_training(run, merged, max_gens, elite_pool)
+                _run_rust_training(run, merged, max_gens)
             elif _USE_PYTORCH:
-                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cpu")
+                _run_pytorch_training(run, merged, max_gens, device="cpu")
         except KeyboardInterrupt:
             print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
             run.finish(exit_code=130)
@@ -239,7 +227,6 @@ def do_training(config=None, visible=False):
             traceback.print_exc()
             run.finish(exit_code=1)
         finally:
-            elite_pool.cleanup_seed_file(_worker.worker_id)
             _worker.cleanup()
     else:
         # Godot fallback
@@ -310,7 +297,7 @@ _USE_PYTORCH = _detect_pytorch()
 
 # --- Training backends ---
 
-def _run_rust_training(run, config, max_gens, elite_pool):
+def _run_rust_training(run, config, max_gens):
     """Run training via Rust CPU trainer (chess_cpu + evolve_ga or neat_ga)."""
     if config.get("use_neat", False) and _USE_NEAT_RUST:
         from neat_cpu_trainer import NeatCPUTrainer
@@ -334,13 +321,12 @@ def _run_rust_training(run, config, max_gens, elite_pool):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool, config)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: Rust CPU training complete!")
     run.finish(exit_code=0)
 
 
-def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
+def _run_pytorch_training(run, config, max_gens, device="cuda"):
     """Run training via PyTorch trainer (GPU or CPU, no Godot)."""
     from gpu_trainer import GPUTrainer
 
@@ -361,7 +347,6 @@ def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool, config)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: PyTorch training complete!")
     run.finish(exit_code=0)
@@ -406,7 +391,7 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                 proc.kill()
         proc = None
 
-        _harvest_elites(run, elite_pool, config)
+        _harvest_godot_elites(run, elite_pool)
         log_final_summary(run, final)
         print(f"✅ Worker {_worker.worker_id}: training complete!")
         run.finish(exit_code=0)
@@ -433,31 +418,9 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                     pass
 
 
-def _harvest_elites(run, elite_pool, config=None):
-    """Harvest elite contributions from this run and upload to W&B."""
+def _harvest_godot_elites(run, elite_pool):
+    """Harvest elite contributions from a Godot run and upload to W&B."""
     contrib_path = Path(USER_DIR) / f"elite_contrib_{_worker.worker_id}.json"
-
-    # For NEAT runs, build contrib file from neat_best_genomes.json
-    if not contrib_path.exists() and config and config.get("use_neat", False):
-        seed_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
-        if seed_path.exists():
-            try:
-                seed_data = json.loads(seed_path.read_text())
-                elites = []
-                for color in ("white_hof", "black_hof"):
-                    for genome_json in seed_data.get(color, [])[:5]:
-                        elites.append({
-                            "genome_json": genome_json,
-                            "fitness": seed_data.get("bench_avg_win_rate", 0.0),
-                        })
-                if elites:
-                    contrib_path.write_text(json.dumps({
-                        "worker_id": _worker.worker_id,
-                        "elites": elites,
-                    }))
-            except (json.JSONDecodeError, OSError):
-                pass
-
     if contrib_path.exists():
         try:
             new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
@@ -502,27 +465,9 @@ def sweep_train_fn():
     _worker.clear_metrics()
     _worker.write_config(config)
 
-    # --- Global Elite: seed this run from shared pool ---
-    elite_pool = GlobalElitePool(USER_DIR)
-    seed_path = elite_pool.write_seed_file(_worker.worker_id)
-    if seed_path:
-        pool_stats = elite_pool.stats()
-        print(
-            f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
-            f"{pool_stats['contributor_count']} run(s), "
-            f"top fitness={pool_stats['top_fitness']:.2f}"
-        )
-        run.log({"global_elite/pool_size": pool_stats["total_elites"],
-                 "global_elite/top_fitness": pool_stats["top_fitness"],
-                 "global_elite/avg_fitness": pool_stats["avg_fitness"],
-                 "global_elite/contributors": pool_stats["contributor_count"]})
-    else:
-        print("🧬 No global elites found; starting fresh")
-
     print(f"\n🎮 Worker {_worker.worker_id}: pop={config.get('population_size')}, gens={max_gens}")
 
     # Determine backend: Rust > PyTorch GPU > PyTorch CPU > Godot
-    # Skip torch import when CUDA disabled (saves ~3GB RSS for Rust/Godot workers)
     _has_cuda = False
     if _USE_PYTORCH and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         try:
@@ -533,14 +478,18 @@ def sweep_train_fn():
 
     try:
         if _has_cuda:
-            _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda")
+            _run_pytorch_training(run, config, max_gens, device="cuda")
         elif _USE_RUST:
-            _run_rust_training(run, config, max_gens, elite_pool)
+            _run_rust_training(run, config, max_gens)
         elif _USE_PYTORCH:
-            _run_pytorch_training(run, config, max_gens, elite_pool, device="cpu")
+            _run_pytorch_training(run, config, max_gens, device="cpu")
         else:
+            # Godot path still uses GlobalElitePool
             print("⚙️  Godot training mode")
+            elite_pool = GlobalElitePool(USER_DIR)
+            elite_pool.write_seed_file(_worker.worker_id)
             _run_godot_training(run, config, max_gens, elite_pool)
+            elite_pool.cleanup_seed_file(_worker.worker_id)
     except KeyboardInterrupt:
         print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
         run.finish(exit_code=130)
@@ -550,7 +499,6 @@ def sweep_train_fn():
         traceback.print_exc()
         run.finish(exit_code=1)
     finally:
-        elite_pool.cleanup_seed_file(_worker.worker_id)
         _worker.cleanup()
 
 

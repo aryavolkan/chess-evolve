@@ -217,14 +217,13 @@ class TestDoChainedTraining:
 
 
 # ===========================================================================
-# _harvest_elites
+# _harvest_godot_elites (Godot-only path)
 # ===========================================================================
 
-class TestHarvestElites:
+class TestHarvestGodotElites:
     def test_no_contrib_file_noop(self, tmp_path):
         """When no elite_contrib file exists, nothing should happen."""
-        harvest = _MODULE["_harvest_elites"]
-        # Set up required globals
+        harvest = _MODULE["_harvest_godot_elites"]
         _globals = harvest.__globals__
         orig_worker = _globals.get("_worker")
         orig_user_dir = _globals.get("USER_DIR")
@@ -244,7 +243,7 @@ class TestHarvestElites:
 
     def test_harvests_valid_elites(self, tmp_path):
         """When elite_contrib file exists with valid genomes, update pool."""
-        harvest = _MODULE["_harvest_elites"]
+        harvest = _MODULE["_harvest_godot_elites"]
         _globals = harvest.__globals__
         orig_worker = _globals.get("_worker")
         orig_user_dir = _globals.get("USER_DIR")
@@ -252,11 +251,9 @@ class TestHarvestElites:
         mock_worker = type("W", (), {"worker_id": "test_w2"})()
         _globals["_worker"] = mock_worker
         _globals["USER_DIR"] = str(tmp_path)
-        # Ensure wandb mock has Artifact
         mock_wandb = types.SimpleNamespace(Artifact=MagicMock())
         _globals["wandb"] = mock_wandb
 
-        # Write a valid contrib file
         contrib = tmp_path / "elite_contrib_test_w2.json"
         contrib.write_text(json.dumps({
             "elites": [{"fitness": 5.0}, {"fitness": 3.0}],
@@ -279,7 +276,7 @@ class TestHarvestElites:
 
     def test_handles_corrupt_json(self, tmp_path):
         """Corrupt contrib file should not crash."""
-        harvest = _MODULE["_harvest_elites"]
+        harvest = _MODULE["_harvest_godot_elites"]
         _globals = harvest.__globals__
         orig_worker = _globals.get("_worker")
         orig_user_dir = _globals.get("USER_DIR")
