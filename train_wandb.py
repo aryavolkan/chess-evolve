@@ -65,13 +65,17 @@ DEFAULT_CONFIG = {
     "opening_book_depth": 6,
     "move_temperature": 0.5,     # softmax temperature for move selection (0 = deterministic)
     # NEAT-specific defaults
-    "use_neat": False,
+    "use_neat": True,
     "neat_add_node_rate": 0.15,
     "neat_add_connection_rate": 0.25,
     "neat_initial_connections_per_output": 10,
     "neat_target_species_count": 5,
     "neat_seed_genome_path": "",
     "neat_save_genome_path": "user://neat_best_genome.json",
+    # Stockfish CPL fitness signal
+    "sf_fitness_weight": 0.25,      # blend 25% SF CPL fitness into selection
+    "sf_fitness_interval": 5,       # run SF fitness every 5 gens
+    "sf_fitness_top_n": 20,         # test top 20 genomes per color
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -330,7 +334,7 @@ def _run_rust_training(run, config, max_gens, elite_pool):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool)
+    _harvest_elites(run, elite_pool, config)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: Rust CPU training complete!")
     run.finish(exit_code=0)
@@ -357,7 +361,7 @@ def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool)
+    _harvest_elites(run, elite_pool, config)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: PyTorch training complete!")
     run.finish(exit_code=0)
@@ -402,7 +406,7 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                 proc.kill()
         proc = None
 
-        _harvest_elites(run, elite_pool)
+        _harvest_elites(run, elite_pool, config)
         log_final_summary(run, final)
         print(f"✅ Worker {_worker.worker_id}: training complete!")
         run.finish(exit_code=0)
@@ -429,9 +433,31 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                     pass
 
 
-def _harvest_elites(run, elite_pool):
+def _harvest_elites(run, elite_pool, config=None):
     """Harvest elite contributions from this run and upload to W&B."""
     contrib_path = Path(USER_DIR) / f"elite_contrib_{_worker.worker_id}.json"
+
+    # For NEAT runs, build contrib file from neat_best_genomes.json
+    if not contrib_path.exists() and config and config.get("use_neat", False):
+        seed_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
+        if seed_path.exists():
+            try:
+                seed_data = json.loads(seed_path.read_text())
+                elites = []
+                for color in ("white_hof", "black_hof"):
+                    for genome_json in seed_data.get(color, [])[:5]:
+                        elites.append({
+                            "genome_json": genome_json,
+                            "fitness": seed_data.get(f"bench_avg_win_rate", 0.0),
+                        })
+                if elites:
+                    contrib_path.write_text(json.dumps({
+                        "worker_id": _worker.worker_id,
+                        "elites": elites,
+                    }))
+            except (json.JSONDecodeError, OSError):
+                pass
+
     if contrib_path.exists():
         try:
             new_genomes = json.loads(contrib_path.read_text()).get("elites", [])
