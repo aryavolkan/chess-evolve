@@ -624,15 +624,16 @@ class NeatCPUTrainer:
         sf_fit = [0.0] * n
         try:
             for idx in top_indices:
-                result, moves, _cpl = self._play_game_vs_stockfish(
+                result, moves, cpl = self._play_game_vs_stockfish(
                     population[idx], genome_is_white=genome_is_white,
-                    engine=engine, compute_cpl=False,
+                    engine=engine, compute_cpl=True,
                 )
+                # CPL-based fitness: lower CPL = better play
+                # Map CPL to 0-10 range: CPL=0 → 10, CPL>=2000 → 0
+                cpl_score = max(0.0, 10.0 * (1.0 - cpl / 2000.0)) if cpl > 0 else 0.0
                 # Outcome bonus
-                outcome = 10.0 if result == "win" else (3.0 if result == "draw" else 0.0)
-                # Survival: longer games = better (normalized to 0-5 range)
-                survival = 5.0 * min(1.0, moves / self.max_moves)
-                sf_fit[idx] = outcome + survival
+                outcome = 5.0 if result == "win" else (2.0 if result == "draw" else 0.0)
+                sf_fit[idx] = cpl_score + outcome
                 tested_scores.append(sf_fit[idx])
         finally:
             engine.quit()
@@ -993,16 +994,22 @@ class NeatCPUTrainer:
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
                 "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
-                # Stockfish benchmark
-                "sf_white_win_rate": sf_w_wr,
-                "sf_black_win_rate": sf_b_wr,
-                "sf_avg_game_length": sf_avg_len,
-                "sf_white_avg_cpl": sf_w_cpl,
-                "sf_black_avg_cpl": sf_b_cpl,
-                # Stockfish fitness signal
-                "sf_fitness_white_avg": sf_w_avg_cpl_fit,
-                "sf_fitness_black_avg": sf_b_avg_cpl_fit,
             }
+
+            # Only include SF metrics on benchmark generations
+            ran_sf = (self._stockfish_path
+                      and self.sf_bench_interval > 0
+                      and gen % self.sf_bench_interval == 0)
+            if ran_sf:
+                metrics.update({
+                    "sf_white_win_rate": sf_w_wr,
+                    "sf_black_win_rate": sf_b_wr,
+                    "sf_avg_game_length": sf_avg_len,
+                    "sf_white_avg_cpl": sf_w_cpl,
+                    "sf_black_avg_cpl": sf_b_cpl,
+                    "sf_fitness_white_avg": sf_w_avg_cpl_fit,
+                    "sf_fitness_black_avg": sf_b_avg_cpl_fit,
+                })
 
             # Write metrics line to file
             try:
