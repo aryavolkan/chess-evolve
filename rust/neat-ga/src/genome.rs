@@ -97,10 +97,10 @@ impl NeatGenome {
         for &out_id in &output_ids {
             // Reservoir sampling to pick k random inputs
             let mut chosen: Vec<u32> = input_ids[..k].to_vec();
-            for i in k..input_ids.len() {
+            for (i, &inp) in input_ids.iter().enumerate().skip(k) {
                 let j = rng.gen_range(0..=i);
                 if j < k {
-                    chosen[j] = input_ids[i];
+                    chosen[j] = inp;
                 }
             }
             for &in_id in &chosen {
@@ -184,7 +184,8 @@ impl NeatGenome {
                 if rng.gen::<f32>() < config.weight_perturb_rate {
                     conn.weight += normal.sample(rng);
                 } else {
-                    conn.weight = rng.gen_range(-config.weight_reset_range..config.weight_reset_range);
+                    conn.weight =
+                        rng.gen_range(-config.weight_reset_range..config.weight_reset_range);
                 }
             }
         }
@@ -471,10 +472,18 @@ impl NeatGenome {
             rev.entry(c.out_id).or_default().push(c.in_id);
         }
 
-        let input_ids: HashSet<u32> = self.nodes.iter()
-            .filter(|n| n.node_type == 0).map(|n| n.id).collect();
-        let output_ids: HashSet<u32> = self.nodes.iter()
-            .filter(|n| n.node_type == 2).map(|n| n.id).collect();
+        let input_ids: HashSet<u32> = self
+            .nodes
+            .iter()
+            .filter(|n| n.node_type == 0)
+            .map(|n| n.id)
+            .collect();
+        let output_ids: HashSet<u32> = self
+            .nodes
+            .iter()
+            .filter(|n| n.node_type == 2)
+            .map(|n| n.id)
+            .collect();
 
         // Forward reachable from inputs
         let mut fwd_reach = input_ids.clone();
@@ -504,13 +513,15 @@ impl NeatGenome {
 
         // Keep inputs, outputs, and hidden nodes on an active path
         self.nodes.retain(|n| {
-            n.node_type == 0 || n.node_type == 2
+            n.node_type == 0
+                || n.node_type == 2
                 || (fwd_reach.contains(&n.id) && bwd_reach.contains(&n.id))
         });
 
         // Also drop connections referencing removed nodes
         let live_ids: HashSet<u32> = self.nodes.iter().map(|n| n.id).collect();
-        self.connections.retain(|c| live_ids.contains(&c.in_id) && live_ids.contains(&c.out_id));
+        self.connections
+            .retain(|c| live_ids.contains(&c.in_id) && live_ids.contains(&c.out_id));
     }
 
     pub fn enabled_connection_count(&self) -> usize {
@@ -579,7 +590,9 @@ impl NeatGenome {
         }
 
         // Depth = max depth among output nodes (or all nodes if no outputs reached)
-        let max_depth = self.nodes.iter()
+        let max_depth = self
+            .nodes
+            .iter()
             .filter(|n| n.node_type == 2)
             .filter_map(|n| depth.get(&n.id))
             .copied()

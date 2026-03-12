@@ -1,39 +1,36 @@
-# Chess Evolve 🧬♟️
+# Chess Evolve
 
-Evolutionary neural networks learn to play chess through coevolution. A sister project to [Evolve](../evolve), adapted for chess.
-
-## Core Concept
-
-Two populations of neural networks — one playing white, one playing black — evolve against each other. Networks that win more games survive and reproduce. Over generations, both populations develop increasingly sophisticated chess strategies.
+Evolutionary neural networks learn to play chess through coevolution. Two populations of neural networks — one playing white, one playing black — evolve against each other. Networks that win more games survive and reproduce. Over generations, both populations develop increasingly sophisticated chess strategies.
 
 ## Architecture
 
+The system has three backends: **Rust CPU** (primary), **PyTorch GPU/CPU**, and **Godot** (original).
+
 ```
-┌─────────────────────────────────────────────┐
-│                 Training Manager             │
-│  ┌──────────┐  ┌──────────┐                 │
-│  │ White Pop │  │ Black Pop │  (coevolution) │
-│  │ (50 nets) │  │ (50 nets) │                │
-│  └─────┬─────┘  └─────┬─────┘               │
-│        │               │                     │
-│        └───┬───────┬───┘                     │
-│            ▼       ▼                         │
-│         Game Engine (BoardState)             │
-│            │       │                         │
-│         Encoder ──► Neural Network           │
-│         (389 in)   (64 hidden → 4096 out)    │
-│            │                                 │
-│         Fitness Evaluation                   │
-│  (material, mobility, king safety, result)   │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    Python Harness                        │
+│  train_wandb.py ──► auto-detect backend                 │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │ cpu_trainer  │  │ neat_cpu_    │  │ lichess_bot   │  │
+│  │   .py        │  │ trainer.py   │  │   .py         │  │
+│  └──────┬───────┘  └──────┬───────┘  └───────────────┘  │
+│         │                 │                              │
+│  ┌──────▼─────────────────▼──────┐                      │
+│  │     Rust PyO3 Crates          │                      │
+│  │  chess-cpu  evolve-ga  neat-ga│                      │
+│  └───────────────────────────────┘                      │
+│                                                          │
+│  Populations (numpy float32) ──► Rust simulation         │
+│  ──► fitness ──► evolve ──► W&B logging                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Neural Network
 
-- **Input (389):** 6 piece-type planes × 64 squares (signed ±1), side to move, castling rights
+- **Input (389):** 6 piece-type planes x 64 squares (signed +/-1), side to move, castling rights
 - **Hidden:** 64 neurons, tanh activation
-- **Output (4096):** one logit per (from_square × 64 + to_square) pair
-- **Move selection:** score = output[from×64 + to], masked to legal moves, pick highest
+- **Output (4096):** one logit per (from_square x 64 + to_square) pair
+- **Move selection:** score = output[from*64 + to], masked to legal moves, pick highest
 - **~33K trainable parameters**
 
 ### Fitness Function
@@ -41,121 +38,146 @@ Two populations of neural networks — one playing white, one playing black — 
 | Component | Weight | Description |
 |-----------|--------|-------------|
 | Win | 10.0 | Bonus for winning the game |
-| Checkmate | 5.0 | Extra bonus for checkmate |
-| Draw | 3.0 | Modest reward for draws |
-| Material | 1.0× | Net material advantage |
-| Mobility | 0.05× | Legal move count |
-| King Safety | 0.5× | Friendly pawns near king |
-| Game Length | 0.01× | Reward for surviving longer |
+| Checkmate | 10.0 | Extra bonus for checkmate |
+| Draw | 1.0 | Modest reward for draws |
+| Loss | -3.0 | Penalty for losing |
+| Material | 1.0x | Net material advantage |
+| Mobility | 0.3x | Legal move count |
+| Own King Safety | 0.5x | Friendly pawns near king |
+| Opp King Safety | 1.5x | Reward for attacking opponent's king |
+| King Danger | 1.0x | King danger score (attack signals) |
+| Move Count | -0.002x | Penalty per move (encourages decisive play) |
+
+Primary optimization metric: `combined_best = min(white_best, black_best)` for balanced improvement.
 
 ### Evolution
 
-- Tournament selection (k=3)
+- Tournament selection (k=2)
 - Two-point crossover (70% rate)
-- Gaussian mutation (rate=0.15, σ=0.2)
-- Elitism (top 5 preserved)
+- Gaussian mutation (rate=0.15, sigma=0.2)
+- Elitism (top 2 preserved)
 - Independent evolution for white and black populations
+- Fitness sharing (sigma=0.08) for diversity
+- Immigration (10% random replacement per generation)
+
+### Benchmark System
+
+A fixed random population (20 genomes) measures absolute progress, since coevolutionary metrics hide improvement when both sides improve simultaneously. Seeds are saved independently per color based on per-color benchmark win rate.
 
 ## Project Structure
 
 ```
 chess-evolve/
+├── train_wandb.py                 # Main entry point (auto-detects backend)
+├── cpu_trainer.py                 # Fixed-topology training loop (Rust backend)
+├── neat_cpu_trainer.py            # NEAT variable-topology training loop
+├── sweep_config.py                # W&B sweep hyperparameter configs
+├── lichess_bot.py                 # Lichess bot (play evolved genomes online)
+├── rust/
+│   ├── chess-cpu/                 # PyO3: game simulation, NN forward pass, fitness
+│   ├── evolve-ga/                 # PyO3: GA operators (selection, crossover, mutation)
+│   ├── neat-ga/                   # PyO3: NEAT evolution (speciation, topology mutation)
+│   └── chess-native/              # gdext: Godot GDExtension acceleration
 ├── ai/
-│   ├── neural_network.gd    # Feedforward network
-│   ├── evolution.gd          # Coevolutionary population manager + Hall of Fame + Elo
-│   ├── fitness.gd            # Multi-factor fitness + endgame evaluation
-│   ├── minimax_player.gd     # Minimax search with NN evaluation
-│   ├── training_manager.gd   # Orchestrates games and evolution
-│   ├── neat_evolution.gd     # NEAT topology evolution manager
-│   ├── neat_genome.gd        # NEAT genome representation
-│   └── neat_network.gd       # NEAT network forward pass
+│   ├── neural_network.gd          # Feedforward network
+│   ├── evolution.gd               # Coevolutionary population manager + Hall of Fame + Elo
+│   ├── fitness.gd                 # Multi-factor fitness + endgame evaluation
+│   ├── training_manager.gd        # Orchestrates games and evolution
+│   ├── neat_evolution.gd          # NEAT topology evolution manager
+│   ├── neat_genome.gd             # NEAT genome representation
+│   └── neat_network.gd            # NEAT network forward pass
 ├── chess/
-│   ├── constants.gd          # Piece types, values
-│   ├── board_state.gd        # Full chess logic (moves, check, castling, en passant)
-│   ├── encoder.gd            # Board → NN input encoding, output → move decoding
-│   ├── endgame_hints.gd      # Endgame pattern recognition and evaluation
-│   ├── opening_book.gd       # Embedded opening book (~30 openings)
-│   └── pgn.gd                # PGN export (Standard Algebraic Notation)
+│   ├── constants.gd               # Piece types, values
+│   ├── board_state.gd             # Full chess logic (moves, check, castling, en passant)
+│   ├── encoder.gd                 # Board -> NN input encoding, output -> move decoding
+│   └── pgn.gd                     # PGN export (Standard Algebraic Notation)
 ├── ui/
-│   ├── board_renderer.gd     # Visual chess board with animation and click handling
-│   ├── human_play.gd         # Human vs AI game mode
-│   ├── replay_viewer.gd      # Game replay with PGN export
-│   └── training_dashboard.gd # Stats display and training controls
-├── scenes/
-│   ├── main.gd               # Main scene controller
-│   └── main.tscn             # Entry scene
-├── scripts/
-│   └── wandb_bridge.py       # Stream metrics to Weights & Biases
-├── test/
-│   ├── test_base.gd          # Test framework
-│   ├── test_runner.gd        # Headless test runner
-│   ├── test_board_state.gd   # Chess logic tests
-│   ├── test_encoder.gd       # Encoding tests
-│   ├── test_neural_network.gd # NN tests
-│   ├── test_evolution.gd     # Evolution tests
-│   ├── test_fitness.gd       # Fitness tests
-│   ├── test_training.gd      # Integration tests
-│   ├── test_pgn.gd           # PGN export tests
-│   ├── test_opening_book.gd  # Opening book tests
-│   └── test_endgame.gd       # Endgame hints tests
-└── README.md
+│   ├── board_renderer.gd          # Visual chess board with animation
+│   ├── human_play.gd              # Human vs AI game mode
+│   ├── replay_viewer.gd           # Game replay with PGN export
+│   └── training_dashboard.gd      # Stats display and training controls
+├── overnight-agent/
+│   ├── chess_sweep_worker.py      # W&B sweep worker
+│   ├── chess_monitor.py           # Worker monitor + auto-spawn
+│   └── global_elite.py            # Cross-run genome sharing
+├── scripts/                       # Lint, test, and utility scripts
+├── test/                          # GDScript tests
+├── tests/python/                  # Python pytest tests
+└── docs/                          # Detailed documentation
 ```
 
 ## Getting Started
 
 ### Prerequisites
-- Godot 4.5+ (same as Evolve)
+
+- **Python 3.10+** with numpy, wandb
+- **Rust toolchain** (stable) with maturin (`pip install maturin`)
+- **Godot 4.5+** (only needed for UI/Godot training path)
+
+### Build Rust Crates
+
+```bash
+# Build all PyO3 crates (required for Rust CPU backend)
+cd rust/chess-cpu && maturin develop --release && cd ../..
+cd rust/evolve-ga && maturin develop --release && cd ../..
+cd rust/neat-ga && maturin develop --release && cd ../..
+
+# Build Godot GDExtension (optional, for Godot training path)
+cargo build --release --manifest-path rust/chess-native/Cargo.toml
+```
+
+### Run Training
+
+```bash
+# Single run (auto-detects backend: Rust > PyTorch GPU > PyTorch CPU > Godot)
+python train_wandb.py
+
+# With custom config
+python train_wandb.py --config my_config.json
+
+# Join a W&B sweep
+python train_wandb.py --sweep <sweep-id>
+
+# Chained runs (each seeds from previous best)
+python train_wandb.py --chain 10
+```
 
 ### Run Tests
+
 ```bash
-cd ~/Projects/chess-evolve
-godot --headless --script test/test_runner.gd
+# Python tests
+python -m pytest tests/python -q
+
+# GDScript tests (headless)
+godot --headless --path . -s test/test_runner.gd
+
+# All lints + tests
+./scripts/lint_and_test.sh
 ```
 
-### Run the Project
-Open in Godot Editor or:
+### Lichess Bot
+
+Play evolved genomes on Lichess:
+
 ```bash
-godot --path ~/Projects/chess-evolve
+# Test the bot (dry run)
+python lichess_bot.py --test
+
+# Accept challenges
+python lichess_bot.py --games 5
+
+# Challenge a specific bot
+python lichess_bot.py --challenge <bot-username>
 ```
 
-### Using the Training Dashboard
+Requires a Lichess bot account and API token (set `LICHESS_TOKEN` env var). Uses the best NEAT genome from `neat_best_genomes.json`.
 
-1. Click **Start Training** to begin evolution (button flips to **Pause/Resume**)
-2. Monitor the live counters: generation, per-color best + average fitness, and cumulative games played
-3. Use the speed selector (1×, 2×, 4×, 8×) to run multiple generations per frame — it also adjusts Godot's `time_scale`
-4. Every 5 generations the 4 board viewers show **showcase games** from the best networks
-5. Training runs continuously — press Pause to halt without resetting stats
+### Using the Training Dashboard (Godot UI)
 
-### Metrics + W&B Logging
-
-- Each generation writes `metrics.json` under `~/Library/Application Support/Godot/app_userdata/Chess Evolve/metrics.json`.
-- Fields tracked: generation, white/black best + average fitness, combined aggregates, population size, total games played, games per generation, and `updated_at`.
-- Use `scripts/wandb_bridge.py` to stream the JSON into Weights & Biases while training is running.
-
-Example snippet:
-```json
-{
-  "generation": 12,
-  "white_best": 15.3,
-  "black_best": 14.8,
-  "white_avg": 3.2,
-  "black_avg": 2.9,
-  "best_fitness": 15.3,
-  "avg_fitness": 3.05,
-  "population_size": 30,
-  "games_played": 720,
-  "games_per_generation": 60,
-  "updated_at": 1739498123
-}
-```
-
-Run the bridge alongside Godot:
-```bash
-pip install --upgrade wandb
-python scripts/wandb_bridge.py --project chess-evolve --run-name dev-test
-```
-
-Hit `Ctrl+C` to stop streaming or point `--metrics-path` to logs synced from another machine.
+1. Click **Start Training** to begin evolution
+2. Monitor live counters: generation, per-color best + average fitness, games played
+3. Use the speed selector (1x, 2x, 4x, 8x) for multiple generations per frame
+4. Every 5 generations the board viewers show **showcase games** from the best networks
 
 ## Chess Logic
 
@@ -167,40 +189,11 @@ Full legal move generation including:
 - Check, checkmate, and stalemate detection
 - 50-move rule draw
 
-## Phase 2 Features
-
-All Phase 2 items are complete:
-
-- [x] **NEAT topology evolution** — `neat_evolution.gd`, `neat_genome.gd`, `neat_network.gd` enable evolving network topology alongside weights
-- [x] **Hall of Fame** — Top 20 networks per color archived with Elo ratings, used as training opponents with weighted selection
-- [x] **Opening book** — ~30 embedded openings (Italian, Sicilian, Caro-Kann, Queen's Gambit, etc.) for training diversity; configurable depth
-- [x] **Endgame hints** — Pattern recognition for K vs K, K+Q/R vs K, insufficient material; driving heuristic integrated into fitness
-- [x] **W&B Elo tracking** — Elo distribution metrics (min/p25/median/p75/max) per color streamed to Weights & Biases
-- [x] **Human play mode** — Play against evolved networks via `--human-play` CLI flag or dashboard button; supports minimax opponent
-- [x] **Move animation** — Tween-based piece animation with capture fade-out on board viewer and replay viewer
-- [x] **PGN export** — Full Standard Algebraic Notation with disambiguation, castling, check/checkmate; export button in replay viewer
-
-### Human Play Mode
-
-```bash
-godot --path . -- --human-play
-```
-
-Click a piece to see legal moves highlighted, then click a destination to move. The AI responds automatically.
-
-## Relationship to Evolve
-
-Borrows patterns from Evolve:
-- `neural_network.gd` — same feedforward architecture, adapted sizes
-- `evolution.gd` — tournament selection, crossover, mutation (extended for coevolution + Hall of Fame)
-- `training_manager.gd` — orchestration pattern (extended with curriculum, tournament mode)
-- `test/` — same test framework and conventions
-
 ## Documentation
 
 Detailed documentation lives in `docs/`:
 - [Architecture](docs/ARCHITECTURE.md) — system design and data flow
 - [Training](docs/TRAINING.md) — running training, sweep config, metrics
-- [Improving Training](docs/IMPROVING_TRAINING.md) — hyperparameter tuning, diagnosing issues, performance
+- [Improving Training](docs/IMPROVING_TRAINING.md) — hyperparameter tuning, diagnosing issues
 - [AI System](docs/AI_SYSTEM.md) — network architecture, evolution, fitness, Hall of Fame
 - [Game System](docs/GAME_SYSTEM.md) — chess rules, board representation, encoder

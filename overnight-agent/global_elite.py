@@ -160,7 +160,15 @@ class GlobalElitePool:
 
 
 def _valid_genome(e: object) -> bool:
-    """Return True if e looks like a serialised NeuralNetwork genome."""
+    """Return True if e looks like a serialised genome (fixed-topology or NEAT)."""
     if not isinstance(e, dict):
         return False
-    return all(k in e for k in ("weights_ih", "bias_h", "weights_ho", "bias_o", "fitness"))
+    if "fitness" not in e:
+        return False
+    # Fixed-topology genome
+    if all(k in e for k in ("weights_ih", "bias_h", "weights_ho", "bias_o")):
+        return True
+    # NEAT genome (has nodes and connections)
+    if "genome_json" in e or all(k in e for k in ("nodes", "connections")):
+        return True
+    return False

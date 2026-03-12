@@ -4,7 +4,7 @@ REQUIRED_TOP_LEVEL_KEYS = {"method", "metric", "parameters"}
 
 
 def test_root_sweep_config_has_expected_shape() -> None:
-    module = runpy.run_path("sweep_config.py")
+    module = runpy.run_path("configs/sweep_config.py")
     sweep_config = module["sweep_config"]
 
     assert REQUIRED_TOP_LEVEL_KEYS.issubset(sweep_config)

@@ -91,10 +91,10 @@ func _evaluate_position(state: BoardStateScript) -> float:
     if state.is_game_over:
         if state.result == 2:  # Draw
             return 0.0
-        elif state.result == 1:  # White wins
+        if state.result == 1:  # White wins
             return 100.0 if state.side_to_move == 1 else -100.0
-        else:  # Black wins
-            return -100.0 if state.side_to_move == 1 else 100.0
+        # Black wins
+        return -100.0 if state.side_to_move == 1 else 100.0
 
     # Use neural network for position evaluation
     var inputs := ChessEncoderScript.encode_board(state)

@@ -20,10 +20,13 @@ _SHARED = next(
 )
 if _SHARED:
     sys.path.insert(0, _SHARED)
+_PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
+sys.path.insert(0, _PYTHON)
 _OVERNIGHT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overnight-agent")
 sys.path.insert(0, _OVERNIGHT)
 import wandb  # noqa: E402
 from global_elite import GlobalElitePool  # noqa: E402
+
 from godot_wandb import (  # noqa: E402
     SweepWorker,
     define_step_metric,
@@ -62,13 +65,17 @@ DEFAULT_CONFIG = {
     "opening_book_depth": 6,
     "move_temperature": 0.5,     # softmax temperature for move selection (0 = deterministic)
     # NEAT-specific defaults
-    "use_neat": False,
+    "use_neat": True,
     "neat_add_node_rate": 0.15,
     "neat_add_connection_rate": 0.25,
     "neat_initial_connections_per_output": 10,
     "neat_target_species_count": 5,
     "neat_seed_genome_path": "",
     "neat_save_genome_path": "user://neat_best_genome.json",
+    # Stockfish CPL fitness signal
+    "sf_fitness_weight": 0.25,      # blend 25% SF CPL fitness into selection
+    "sf_fitness_interval": 5,       # run SF fitness every 5 gens
+    "sf_fitness_top_n": 20,         # test top 20 genomes per color
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -84,53 +91,37 @@ PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT
 
 CHESS_LOG_KEYS = [
     "generation",
+    # Fitness
     "white_best",
     "white_avg",
     "black_best",
     "black_avg",
-    "best_fitness",
-    "avg_fitness",
-    "games_played",
+    "combined_best",
+    # Games
     "total_games_this_gen",
     "avg_game_length",
     "games_per_sec",
     "moves_per_sec",
+    "generation_time_sec",
+    # Outcome rates
     "white_win_rate",
     "white_draw_rate",
-    "white_loss_rate",
     "black_win_rate",
     "black_draw_rate",
-    "black_loss_rate",
-    "white_hof_size",
-    "black_hof_size",
+    # Tournament scores
     "white_tournament_score_best",
     "white_tournament_score_avg",
     "black_tournament_score_best",
     "black_tournament_score_avg",
+    # Material
     "white_material_avg",
     "black_material_avg",
-    "generation_time_sec",
-    "combined_best",
-    # Elo tracking
-    "white_hof_avg_elo",
-    "black_hof_avg_elo",
-    "white_hof_top_elo",
-    "black_hof_top_elo",
-    "white_elo_min",
-    "white_elo_p25",
-    "white_elo_median",
-    "white_elo_p75",
-    "white_elo_max",
-    "black_elo_min",
-    "black_elo_p25",
-    "black_elo_median",
-    "black_elo_p75",
-    "black_elo_max",
-    # NEAT topology metrics
-    "neat_hidden_nodes_avg",
-    "neat_connections_avg",
-    "neat_species_count",
-    # Per-color topology metrics
+    # Hall of Fame
+    "white_hof_size",
+    "black_hof_size",
+    # NEAT topology metrics (per-color)
+    "white_species_count",
+    "black_species_count",
     "white_depth_avg",
     "black_depth_avg",
     "white_width_avg",
@@ -139,11 +130,41 @@ CHESS_LOG_KEYS = [
     "black_connections_avg",
     "white_hidden_nodes_avg",
     "black_hidden_nodes_avg",
+    # Fitness component breakdowns
+    "white_fitness_outcome",
+    "white_fitness_material",
+    "white_fitness_mobility",
+    "white_fitness_king_safety",
+    "white_fitness_opp_king_safety",
+    "white_fitness_king_danger",
+    "white_fitness_captures",
+    "white_fitness_move_penalty",
+    "black_fitness_outcome",
+    "black_fitness_material",
+    "black_fitness_mobility",
+    "black_fitness_king_safety",
+    "black_fitness_opp_king_safety",
+    "black_fitness_king_danger",
+    "black_fitness_captures",
+    "black_fitness_move_penalty",
+    # King danger metrics
+    "white_king_danger_avg",
+    "black_king_danger_avg",
     # Benchmark vs random (absolute progress)
     "bench_white_win_rate",
     "bench_white_material_adv",
     "bench_black_win_rate",
     "bench_black_material_adv",
+    "bench_avg_win_rate",
+    # Stockfish benchmark
+    "sf_white_win_rate",
+    "sf_black_win_rate",
+    "sf_avg_game_length",
+    "sf_white_avg_cpl",
+    "sf_black_avg_cpl",
+    # Stockfish fitness signal
+    "sf_fitness_white_avg",
+    "sf_fitness_black_avg",
 ]
 
 
@@ -177,34 +198,26 @@ def do_training(config=None, visible=False):
     if _has_cuda or _USE_RUST or _USE_PYTORCH:
         # Use sweep infrastructure for worker isolation + W&B logging
         _worker = SweepWorker(USER_DIR)
-        run = wandb.init(project="chess-evolve", tags=["chess", "neuroevolution", "coevolution"])
+        run = wandb.init(
+        project="chess-evolve",
+        tags=["chess", "neuroevolution", "coevolution"],
+        settings=wandb.Settings(init_timeout=300),
+    )
         define_step_metric()
         run.config.update(merged)
         max_gens = merged.get("max_generations", 50)
         _worker.clear_metrics()
         _worker.write_config(merged)
 
-        elite_pool = GlobalElitePool(USER_DIR)
-        seed_path = elite_pool.write_seed_file(_worker.worker_id)
-        if seed_path:
-            pool_stats = elite_pool.stats()
-            print(
-                f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
-                f"{pool_stats['contributor_count']} run(s), "
-                f"top fitness={pool_stats['top_fitness']:.2f}"
-            )
-        else:
-            print("🧬 No global elites found; starting fresh")
-
         print(f"\n🎮 Training: pop={merged.get('population_size')}, gens={max_gens}")
 
         try:
             if _has_cuda:
-                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cuda")
+                _run_pytorch_training(run, merged, max_gens, device="cuda")
             elif _USE_RUST:
-                _run_rust_training(run, merged, max_gens, elite_pool)
+                _run_rust_training(run, merged, max_gens)
             elif _USE_PYTORCH:
-                _run_pytorch_training(run, merged, max_gens, elite_pool, device="cpu")
+                _run_pytorch_training(run, merged, max_gens, device="cpu")
         except KeyboardInterrupt:
             print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
             run.finish(exit_code=130)
@@ -214,7 +227,6 @@ def do_training(config=None, visible=False):
             traceback.print_exc()
             run.finish(exit_code=1)
         finally:
-            elite_pool.cleanup_seed_file(_worker.worker_id)
             _worker.cleanup()
     else:
         # Godot fallback
@@ -250,7 +262,7 @@ def _detect_rust() -> bool:
         import importlib.util
         return (importlib.util.find_spec("chess_cpu") is not None
                 and importlib.util.find_spec("evolve_ga") is not None
-                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cpu_trainer.py")))
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "cpu_trainer.py")))
     except Exception:
         return False
 
@@ -261,7 +273,7 @@ def _detect_neat_rust() -> bool:
         import importlib.util
         return (importlib.util.find_spec("neat_ga") is not None
                 and importlib.util.find_spec("chess_cpu") is not None
-                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "neat_cpu_trainer.py")))
+                and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "neat_cpu_trainer.py")))
     except Exception:
         return False
 
@@ -273,7 +285,7 @@ def _detect_pytorch() -> bool:
         for mod in ("torch", "chess"):
             if importlib.util.find_spec(mod) is None:
                 return False
-        return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gpu_trainer.py"))
+        return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "python", "gpu_trainer.py"))
     except Exception:
         return False
 
@@ -285,7 +297,7 @@ _USE_PYTORCH = _detect_pytorch()
 
 # --- Training backends ---
 
-def _run_rust_training(run, config, max_gens, elite_pool):
+def _run_rust_training(run, config, max_gens):
     """Run training via Rust CPU trainer (chess_cpu + evolve_ga or neat_ga)."""
     if config.get("use_neat", False) and _USE_NEAT_RUST:
         from neat_cpu_trainer import NeatCPUTrainer
@@ -309,13 +321,12 @@ def _run_rust_training(run, config, max_gens, elite_pool):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: Rust CPU training complete!")
     run.finish(exit_code=0)
 
 
-def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
+def _run_pytorch_training(run, config, max_gens, device="cuda"):
     """Run training via PyTorch trainer (GPU or CPU, no Godot)."""
     from gpu_trainer import GPUTrainer
 
@@ -336,7 +347,6 @@ def _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda"):
 
     final = trainer.train(max_generations=max_gens, on_generation=on_generation)
 
-    _harvest_elites(run, elite_pool)
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: PyTorch training complete!")
     run.finish(exit_code=0)
@@ -381,7 +391,7 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                 proc.kill()
         proc = None
 
-        _harvest_elites(run, elite_pool)
+        _harvest_godot_elites(run, elite_pool)
         log_final_summary(run, final)
         print(f"✅ Worker {_worker.worker_id}: training complete!")
         run.finish(exit_code=0)
@@ -408,8 +418,8 @@ def _run_godot_training(run, config, max_gens, elite_pool):
                     pass
 
 
-def _harvest_elites(run, elite_pool):
-    """Harvest elite contributions from this run and upload to W&B."""
+def _harvest_godot_elites(run, elite_pool):
+    """Harvest elite contributions from a Godot run and upload to W&B."""
     contrib_path = Path(USER_DIR) / f"elite_contrib_{_worker.worker_id}.json"
     if contrib_path.exists():
         try:
@@ -433,7 +443,11 @@ def sweep_train_fn():
     global _worker
     _worker = SweepWorker(USER_DIR)
 
-    run = wandb.init(project="chess-evolve", tags=["chess", "neuroevolution", "coevolution"])
+    run = wandb.init(
+        project="chess-evolve",
+        tags=["chess", "neuroevolution", "coevolution"],
+        settings=wandb.Settings(init_timeout=300),
+    )
     define_step_metric()
 
     # Merge defaults with sweep overrides
@@ -451,27 +465,9 @@ def sweep_train_fn():
     _worker.clear_metrics()
     _worker.write_config(config)
 
-    # --- Global Elite: seed this run from shared pool ---
-    elite_pool = GlobalElitePool(USER_DIR)
-    seed_path = elite_pool.write_seed_file(_worker.worker_id)
-    if seed_path:
-        pool_stats = elite_pool.stats()
-        print(
-            f"🧬 Global elite pool: {pool_stats['total_elites']} genomes from "
-            f"{pool_stats['contributor_count']} run(s), "
-            f"top fitness={pool_stats['top_fitness']:.2f}"
-        )
-        run.log({"global_elite/pool_size": pool_stats["total_elites"],
-                 "global_elite/top_fitness": pool_stats["top_fitness"],
-                 "global_elite/avg_fitness": pool_stats["avg_fitness"],
-                 "global_elite/contributors": pool_stats["contributor_count"]})
-    else:
-        print("🧬 No global elites found; starting fresh")
-
     print(f"\n🎮 Worker {_worker.worker_id}: pop={config.get('population_size')}, gens={max_gens}")
 
     # Determine backend: Rust > PyTorch GPU > PyTorch CPU > Godot
-    # Skip torch import when CUDA disabled (saves ~3GB RSS for Rust/Godot workers)
     _has_cuda = False
     if _USE_PYTORCH and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
         try:
@@ -482,14 +478,18 @@ def sweep_train_fn():
 
     try:
         if _has_cuda:
-            _run_pytorch_training(run, config, max_gens, elite_pool, device="cuda")
+            _run_pytorch_training(run, config, max_gens, device="cuda")
         elif _USE_RUST:
-            _run_rust_training(run, config, max_gens, elite_pool)
+            _run_rust_training(run, config, max_gens)
         elif _USE_PYTORCH:
-            _run_pytorch_training(run, config, max_gens, elite_pool, device="cpu")
+            _run_pytorch_training(run, config, max_gens, device="cpu")
         else:
+            # Godot path still uses GlobalElitePool
             print("⚙️  Godot training mode")
+            elite_pool = GlobalElitePool(USER_DIR)
+            elite_pool.write_seed_file(_worker.worker_id)
             _run_godot_training(run, config, max_gens, elite_pool)
+            elite_pool.cleanup_seed_file(_worker.worker_id)
     except KeyboardInterrupt:
         print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
         run.finish(exit_code=130)
@@ -499,7 +499,6 @@ def sweep_train_fn():
         traceback.print_exc()
         run.finish(exit_code=1)
     finally:
-        elite_pool.cleanup_seed_file(_worker.worker_id)
         _worker.cleanup()
 
 

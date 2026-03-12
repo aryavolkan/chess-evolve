@@ -55,8 +55,7 @@ pub fn speciate(
     for (i, genome) in population.iter().enumerate() {
         let mut placed = false;
         for species in &mut species_list {
-            let dist =
-                NeatGenome::compatibility_distance(genome, &species.representative, config);
+            let dist = NeatGenome::compatibility_distance(genome, &species.representative, config);
             if dist < config.compatibility_threshold {
                 species.member_indices.push(i);
                 placed = true;
@@ -157,9 +156,9 @@ pub fn cull_stagnant(species_list: &mut Vec<Species>, config: &NeatConfig) {
 
     let mut surviving = Vec::new();
     for (i, species) in species_list.iter().enumerate() {
-        if i < config.min_species_protected {
-            surviving.push(species.clone());
-        } else if !species.is_stagnant(config.stagnation_kill_threshold) {
+        if i < config.min_species_protected
+            || !species.is_stagnant(config.stagnation_kill_threshold)
+        {
             surviving.push(species.clone());
         }
     }

@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   python-quality:
@@ -24,7 +25,7 @@ jobs:
 
       - name: Run Python lint and tests
         run: |
-          ruff check python/ scripts/ || true
+          ruff check python/ scripts/ configs/ train_wandb.py || true
           pytest tests/python/ -v --ignore=tests/python/test_wandb_bridge.py || true
 
   gdscript-quality:

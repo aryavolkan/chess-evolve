@@ -74,6 +74,10 @@ fn simulate_game(
     dict.set_item("black_mobility", gr.black_mobility)?;
     dict.set_item("white_king_safety", gr.white_king_safety)?;
     dict.set_item("black_king_safety", gr.black_king_safety)?;
+    dict.set_item("white_king_danger", gr.white_king_danger)?;
+    dict.set_item("black_king_danger", gr.black_king_danger)?;
+    dict.set_item("white_captures_value", gr.white_captures_value)?;
+    dict.set_item("black_captures_value", gr.black_captures_value)?;
     Ok(dict.into())
 }
 
@@ -163,6 +167,10 @@ fn simulate_games_batch(
             dict.set_item("black_mobility", gr.black_mobility)?;
             dict.set_item("white_king_safety", gr.white_king_safety)?;
             dict.set_item("black_king_safety", gr.black_king_safety)?;
+            dict.set_item("white_king_danger", gr.white_king_danger)?;
+            dict.set_item("black_king_danger", gr.black_king_danger)?;
+            dict.set_item("white_captures_value", gr.white_captures_value)?;
+            dict.set_item("black_captures_value", gr.black_captures_value)?;
             Ok(dict.into())
         })
         .collect()
@@ -227,6 +235,10 @@ fn simulate_neat_games_batch(
                         black_mobility: 0,
                         white_king_safety: 0.0,
                         black_king_safety: 0.0,
+                        white_king_danger: 0.0,
+                        black_king_danger: 0.0,
+                        white_captures_value: 0.0,
+                        black_captures_value: 0.0,
                     })
                     .collect()
             }
@@ -247,6 +259,10 @@ fn simulate_neat_games_batch(
             dict.set_item("black_mobility", gr.black_mobility)?;
             dict.set_item("white_king_safety", gr.white_king_safety)?;
             dict.set_item("black_king_safety", gr.black_king_safety)?;
+            dict.set_item("white_king_danger", gr.white_king_danger)?;
+            dict.set_item("black_king_danger", gr.black_king_danger)?;
+            dict.set_item("white_captures_value", gr.white_captures_value)?;
+            dict.set_item("black_captures_value", gr.black_captures_value)?;
             Ok(dict.into())
         })
         .collect()
