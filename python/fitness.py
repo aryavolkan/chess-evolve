@@ -7,13 +7,13 @@ Used by both CPUTrainer (fixed-topology) and NeatCPUTrainer (NEAT).
 # Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
 FITNESS_DEFAULTS = {
     "win_bonus": 10.0,
-    "draw_bonus": 0.0,
+    "draw_bonus": 3.0,
     "loss_penalty": -5.0,
-    "capture_weight": 0.5,
+    "capture_weight": 0.2,
     "material_weight": 1.0,
     "mobility_weight": 0.3,
     "king_safety_weight": 0.5,
-    "opp_king_safety_weight": 1.5,
+    "opp_king_safety_weight": 0.0,
     "king_danger_weight": 1.0,
     "move_count_penalty": -0.002,
     "checkmate_bonus": 10.0,

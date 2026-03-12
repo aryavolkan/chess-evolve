@@ -62,8 +62,11 @@ class CPUTrainer:
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
-        # Fitness weights (shared defaults from fitness.py)
+        # Fitness weights (shared defaults from fitness.py, config-overridable)
         self.fitness_weights = dict(FITNESS_DEFAULTS)
+        for key in FITNESS_DEFAULTS:
+            if key in config:
+                self.fitness_weights[key] = config[key]
 
         # Network weight count
         ih = self.input_size * self.hidden_size
