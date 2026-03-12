@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Build Rust GDExtension (required for artifact tests)
         run: cargo build --release
@@ -31,6 +33,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install GDScript tooling
         run: pip3 install --quiet --break-system-packages gdtoolkit
