@@ -45,13 +45,13 @@ class NeatCPUTrainer:
 
         # Fitness weights (same as cpu_trainer.py)
         self.win_bonus = 10.0
-        self.draw_bonus = 0.0
+        self.draw_bonus = config.get("draw_bonus", 3.0)
         self.loss_penalty = -5.0
-        self.capture_weight = 0.5
+        self.capture_weight = config.get("capture_weight", 0.2)
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 1.5
+        self.opp_king_safety_weight = config.get("opp_king_safety_weight", 0.0)
         self.king_danger_weight = 1.0
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
@@ -100,6 +100,11 @@ class NeatCPUTrainer:
 
         # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
+
+        # Curriculum learning: stage 0 = coevolution (default), stage 1 = vs random
+        self.curriculum_stage = config.get("curriculum_stage", 0)
+        self.curriculum_random_opponents = config.get("curriculum_random_opponents", 30)
+        self.curriculum_promotion_threshold = config.get("curriculum_promotion_threshold", 0.80)
 
         # Seed genome paths: if set, initialize population from saved best topology
         _seed = config.get("seed_genome_path", "")
@@ -204,6 +209,13 @@ class NeatCPUTrainer:
         bench_config = dict(self.neat_config)
         bench_config["population_size"] = self.benchmark_size
         config_json = json.dumps(bench_config)
+        return neat_ga.create_population(config_json)
+
+    def _init_random_opponents(self, count: int) -> list[str]:
+        """Create a fixed pool of random NEAT genomes for curriculum training."""
+        opp_config = dict(self.neat_config)
+        opp_config["population_size"] = count
+        config_json = json.dumps(opp_config)
         return neat_ga.create_population(config_json)
 
     def _generate_pairings(self) -> list[tuple[int, int]]:
@@ -786,55 +798,93 @@ class NeatCPUTrainer:
         white_config_json = config_json
         black_config_json = config_json
 
+        # Curriculum stage 1: create fixed random opponent pools
+        use_curriculum = self.curriculum_stage >= 1
+        if use_curriculum:
+            n_opp = self.curriculum_random_opponents
+            curriculum_black_opp = self._init_random_opponents(n_opp)
+            curriculum_white_opp = self._init_random_opponents(n_opp)
+            print(f"  Curriculum stage {self.curriculum_stage}: {n_opp} random opponents per color")
+
         last_metrics = {}
         total_games = 0
 
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
 
-            # Generate pairings
-            pairings = self._generate_pairings()
-
-            # Simulate all games in parallel via Rust
-            try:
-                results = chess_cpu.simulate_neat_games_batch(
-                    white_pop,
-                    black_pop,
-                    pairings,
-                    output_size=self.output_size,
-                    max_moves=self.max_moves,
+            if use_curriculum:
+                # Stage 1: each individual plays all random opponents
+                # White pop (as white) vs random black opponents
+                w_pairings = [(w, b) for w in range(self.pop_size)
+                              for b in range(len(curriculum_black_opp))]
+                w_results = chess_cpu.simulate_neat_games_batch(
+                    white_pop, curriculum_black_opp, w_pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
                     temperature=self.temperature,
                     mercy_min_moves=self.mercy_min_moves,
                     mercy_material_threshold=self.mercy_material_threshold,
                 )
-            except Exception as e:
-                print(f"  ⚠ Rust batch panic at gen {gen}, using fallback draws: {e}")
-                results = [
-                    {
-                        "white_idx": w, "black_idx": b, "result": 2,
-                        "move_count": 0, "white_material": 0.0,
-                        "black_material": 0.0, "white_mobility": 0,
-                        "black_mobility": 0, "white_king_safety": 0.0,
-                        "black_king_safety": 0.0,
-                    }
-                    for w, b in pairings
-                ]
+                # Random white opponents vs black pop (as black)
+                b_pairings = [(w, b) for w in range(len(curriculum_white_opp))
+                              for b in range(self.pop_size)]
+                b_results = chess_cpu.simulate_neat_games_batch(
+                    curriculum_white_opp, black_pop, b_pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
+                    temperature=self.temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+
+                white_fitness = self._compute_fitness(w_results, self.pop_size, color=0)
+                black_fitness = self._compute_fitness(b_results, self.pop_size, color=1)
+
+                # Combine results for metrics reporting
+                results = w_results + b_results
+                num_games = len(results)
+            else:
+                # Standard coevolution
+                pairings = self._generate_pairings()
+
+                try:
+                    results = chess_cpu.simulate_neat_games_batch(
+                        white_pop,
+                        black_pop,
+                        pairings,
+                        output_size=self.output_size,
+                        max_moves=self.max_moves,
+                        temperature=self.temperature,
+                        mercy_min_moves=self.mercy_min_moves,
+                        mercy_material_threshold=self.mercy_material_threshold,
+                    )
+                except Exception as e:
+                    print(f"  ⚠ Rust batch panic at gen {gen}, using fallback draws: {e}")
+                    results = [
+                        {
+                            "white_idx": w, "black_idx": b, "result": 2,
+                            "move_count": 0, "white_material": 0.0,
+                            "black_material": 0.0, "white_mobility": 0,
+                            "black_mobility": 0, "white_king_safety": 0.0,
+                            "black_king_safety": 0.0,
+                        }
+                        for w, b in pairings
+                    ]
+
+                num_games = len(results)
+
+                # Compute coevolution fitness
+                white_fitness = self._compute_fitness(results, self.pop_size, color=0)
+                black_fitness = self._compute_fitness(results, self.pop_size, color=1)
+
+                # Blend benchmark fitness into selection signal
+                bw = self.benchmark_fitness_weight
+                if bw > 0:
+                    w_bench_fit = self._benchmark_fitness_all(white_pop, color=0)
+                    b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
+                    white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit, strict=True)]
+                    black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit, strict=True)]
 
             gen_time = time.time() - gen_start
-            num_games = len(results)
             total_games += num_games
-
-            # Compute coevolution fitness
-            white_fitness = self._compute_fitness(results, self.pop_size, color=0)
-            black_fitness = self._compute_fitness(results, self.pop_size, color=1)
-
-            # Blend benchmark fitness into selection signal
-            bw = self.benchmark_fitness_weight
-            if bw > 0:
-                w_bench_fit = self._benchmark_fitness_all(white_pop, color=0)
-                b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
-                white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit, strict=True)]
-                black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit, strict=True)]
 
             # Stockfish CPL-based fitness signal (every N generations)
             sf_w_avg_cpl_fit, sf_b_avg_cpl_fit = 0.0, 0.0
@@ -860,8 +910,12 @@ class NeatCPUTrainer:
                     black_fitness[i] -= cc * n_conns
 
             # Tournament scores
-            white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)
-            black_tourn = self._compute_tournament_scores(results, self.pop_size, color=1)
+            if use_curriculum:
+                white_tourn = self._compute_tournament_scores(w_results, self.pop_size, color=0)
+                black_tourn = self._compute_tournament_scores(b_results, self.pop_size, color=1)
+            else:
+                white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)
+                black_tourn = self._compute_tournament_scores(results, self.pop_size, color=1)
 
             # Update Hall of Fame
             self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
@@ -889,8 +943,12 @@ class NeatCPUTrainer:
             b_stats = b_result["stats"]
 
             # Outcome rates
-            w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
-            b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
+            if use_curriculum:
+                w_win, w_draw, w_loss = self._compute_outcome_rates(w_results, color=0)
+                b_win, b_draw, b_loss = self._compute_outcome_rates(b_results, color=1)
+            else:
+                w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
+                b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
 
             # Average game length
             total_moves = sum(g["move_count"] for g in results)
@@ -909,8 +967,12 @@ class NeatCPUTrainer:
             avg_nodes = (w_stats["avg_nodes"] + b_stats["avg_nodes"]) / 2
 
             # Fitness component breakdowns
-            w_breakdown = self._compute_fitness_breakdown(results, color=0)
-            b_breakdown = self._compute_fitness_breakdown(results, color=1)
+            if use_curriculum:
+                w_breakdown = self._compute_fitness_breakdown(w_results, color=0)
+                b_breakdown = self._compute_fitness_breakdown(b_results, color=1)
+            else:
+                w_breakdown = self._compute_fitness_breakdown(results, color=0)
+                b_breakdown = self._compute_fitness_breakdown(results, color=1)
 
             # Benchmark vs random
             w_bench_wr, w_bench_mat, b_bench_wr, b_bench_mat = self._benchmark_vs_random(
@@ -994,7 +1056,15 @@ class NeatCPUTrainer:
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
                 "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
+                "curriculum_stage": self.curriculum_stage,
             }
+
+            # Curriculum promotion check
+            if use_curriculum:
+                bench_wr = (w_bench_wr + b_bench_wr) / 2
+                if bench_wr >= self.curriculum_promotion_threshold:
+                    print(f"  🎓 Curriculum promotion! bench_avg_win_rate={bench_wr:.1%} "
+                          f">= {self.curriculum_promotion_threshold:.0%}")
 
             # Only include SF metrics on benchmark generations
             ran_sf = (self._stockfish_path

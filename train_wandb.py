@@ -54,7 +54,7 @@ DEFAULT_CONFIG = {
     "max_generations": 50,
     "max_moves_per_game": 100,
     "input_size": 389,
-    "output_size": 4096,
+    "output_size": 384,
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
     "use_tournament": True,
     "tournament_opponents": 5,   # 5 opponents/individual for stronger selection pressure
@@ -64,18 +64,23 @@ DEFAULT_CONFIG = {
     "use_opening_book": True,
     "opening_book_depth": 6,
     "move_temperature": 0.5,     # softmax temperature for move selection (0 = deterministic)
+    # Fitness tuning
+    "draw_bonus": 3.0,              # reward surviving to draw (was 0.0)
+    "capture_weight": 0.2,          # reduced — random trading shouldn't dominate
+    "opp_king_safety_weight": 0.0,  # removed — penalizes opponent having intact pawns
+    "benchmark_fitness_weight": 0.3, # blend absolute fitness to counter coevo oscillation
     # NEAT-specific defaults
     "use_neat": True,
     "neat_add_node_rate": 0.15,
     "neat_add_connection_rate": 0.25,
-    "neat_initial_connections_per_output": 10,
+    "neat_initial_connections_per_output": 1,
     "neat_target_species_count": 5,
     "neat_seed_genome_path": "",
     "neat_save_genome_path": "user://neat_best_genome.json",
     # Stockfish CPL fitness signal
-    "sf_fitness_weight": 0.25,      # blend 25% SF CPL fitness into selection
-    "sf_fitness_interval": 5,       # run SF fitness every 5 gens
-    "sf_fitness_top_n": 20,         # test top 20 genomes per color
+    "sf_fitness_weight": 0.4,       # stronger SF signal for better gradient
+    "sf_fitness_interval": 1,       # every generation for consistent signal
+    "sf_fitness_top_n": 50,         # test top 50 genomes per color
 }
 
 _PROJECT_PATH_DEFAULT = next(

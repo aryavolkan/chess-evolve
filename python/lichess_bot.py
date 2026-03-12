@@ -207,6 +207,12 @@ def pick_move(network: SparseNetwork, board: chess.Board,
         if output_size <= 128:
             # Factored: score = outputs[from] + outputs[64 + to]
             score = outputs[from_sq] + outputs[64 + to_sq]
+        elif output_size <= 384:
+            # Piece×dest: score = outputs[piece_type_idx * 64 + to]
+            piece = board.piece_at(from_sq)
+            piece_idx = (piece.piece_type - 1) if piece else 0
+            idx = piece_idx * 64 + to_sq
+            score = outputs[idx] if idx < len(outputs) else 0.0
         else:
             # Full 4096: score = outputs[from * 64 + to]
             idx = from_sq * 64 + to_sq
@@ -240,6 +246,11 @@ def pick_move_ensemble(networks: list[SparseNetwork], board: chess.Board,
             to_sq = move.to_square
             if output_size <= 128:
                 score = outputs[from_sq] + outputs[64 + to_sq]
+            elif output_size <= 384:
+                piece = board.piece_at(from_sq)
+                piece_idx = (piece.piece_type - 1) if piece else 0
+                idx = piece_idx * 64 + to_sq
+                score = outputs[idx] if idx < len(outputs) else 0.0
             else:
                 idx = from_sq * 64 + to_sq
                 score = outputs[idx] if idx < len(outputs) else 0.0

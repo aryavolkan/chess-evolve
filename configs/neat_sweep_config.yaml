@@ -1,0 +1,105 @@
+program: train_wandb.py
+method: bayes
+metric:
+  name: bench_avg_win_rate
+  goal: maximize
+parameters:
+  use_neat:
+    value: true
+  output_size:
+    value: 384
+  max_generations:
+    value: 200
+  max_moves_per_game:
+    value: 100
+  # Curriculum stage 1: train vs random opponents
+  curriculum_stage:
+    value: 1
+  curriculum_random_opponents:
+    values: [20, 30]
+  # Population
+  population_size:
+    values: [100, 200]
+  tournament_opponents:
+    values: [5, 8]
+  # Low temperature — amplify weight signal
+  move_temperature:
+    distribution: uniform
+    min: 0.1
+    max: 0.3
+  # NEAT topology mutation
+  add_node_rate:
+    distribution: uniform
+    min: 0.10
+    max: 0.25
+  add_connection_rate:
+    distribution: uniform
+    min: 0.20
+    max: 0.40
+  add_node_count:
+    values: [1, 2]
+  add_connection_count:
+    values: [3, 5]
+  initial_connections_per_output:
+    value: 1
+  # NEAT speciation
+  target_species_count:
+    values: [5, 10]
+  stagnation_threshold:
+    values: [10, 15]
+  # Weight mutation
+  weight_mutate_rate:
+    distribution: uniform
+    min: 0.7
+    max: 0.9
+  weight_perturb_strength:
+    distribution: uniform
+    min: 0.2
+    max: 0.5
+  # Crossover & selection
+  crossover_rate:
+    distribution: uniform
+    min: 0.60
+    max: 0.85
+  elite_fraction:
+    distribution: uniform
+    min: 0.05
+    max: 0.15
+  survival_fraction:
+    distribution: uniform
+    min: 0.3
+    max: 0.6
+  # No complexity cost or benchmark blending — curriculum provides clean signal
+  complexity_cost:
+    value: 0.0
+  benchmark_fitness_weight:
+    value: 0.0
+  prune_rate:
+    value: 0.0
+  # Fitness tuning
+  draw_bonus:
+    distribution: uniform
+    min: 2.0
+    max: 5.0
+  capture_weight:
+    distribution: uniform
+    min: 0.1
+    max: 0.3
+  opp_king_safety_weight:
+    value: 0.0
+  # Mercy rule
+  mercy_min_moves:
+    value: 30
+  mercy_material_threshold:
+    value: 20.0
+  # No SF fitness blending — keep signal clean for stage 1
+  sf_fitness_weight:
+    value: 0.0
+  sf_bench_interval:
+    value: 20
+  sf_bench_games:
+    value: 6
+  sf_skill_level:
+    value: 0
+  sf_move_time:
+    value: 0.05

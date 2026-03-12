@@ -5,7 +5,7 @@ use rand::SeedableRng;
 use rayon::prelude::*;
 
 use crate::board::ChessBoard;
-use crate::encode::{decode_move, decode_move_factored, dense_from_flat_weights, encode_board};
+use crate::encode::{decode_move, decode_move_factored, decode_move_piece_dest, dense_from_flat_weights, encode_board};
 use crate::evaluate::{king_danger_score, king_safety_score, material_score, mobility_score};
 use crate::sparse_nn::SparseNetwork;
 
@@ -315,6 +315,8 @@ pub fn simulate_neat_game(
         }
         let chosen = if output_size <= 128 {
             decode_move_factored(&output, &legal_moves, temperature, rng)
+        } else if output_size <= 384 {
+            decode_move_piece_dest(&output, &legal_moves, &board, temperature, rng)
         } else {
             decode_move(&output, &legal_moves, temperature, rng)
         };

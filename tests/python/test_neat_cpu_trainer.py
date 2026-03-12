@@ -132,8 +132,8 @@ class TestComputeFitness:
         f_cap = trainer._compute_fitness(cap, pop_size=2, color=0)
         assert f_cap[0] > f_no[0]
 
-    def test_draw_bonus_is_zero(self, trainer):
-        assert trainer.draw_bonus == 0.0
+    def test_draw_bonus_default(self, trainer):
+        assert trainer.draw_bonus == 3.0
 
     def test_loss_penalty_value(self, trainer):
         assert trainer.loss_penalty == -5.0

@@ -58,13 +58,13 @@ class CPUTrainer:
         # Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
         # King safety rewards defending own king AND attacking opponent's king.
         self.win_bonus = 10.0
-        self.draw_bonus = 0.0
+        self.draw_bonus = config.get("draw_bonus", 3.0)
         self.loss_penalty = -5.0
-        self.capture_weight = 0.5
+        self.capture_weight = config.get("capture_weight", 0.2)
         self.material_weight = 1.0
         self.mobility_weight = 0.3
         self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 1.5
+        self.opp_king_safety_weight = config.get("opp_king_safety_weight", 0.0)
         self.king_danger_weight = 1.0
         self.move_count_penalty = -0.002
         self.checkmate_bonus = 10.0
