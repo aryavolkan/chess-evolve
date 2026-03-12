@@ -155,10 +155,10 @@ class TestComputeFitness:
         assert f_cap[0] > f_no[0]
 
     def test_draw_bonus_is_zero(self, trainer):
-        assert trainer.draw_bonus == 0.0
+        assert trainer.fitness_weights["draw_bonus"] == 0.0
 
     def test_loss_penalty_value(self, trainer):
-        assert trainer.loss_penalty == -5.0
+        assert trainer.fitness_weights["loss_penalty"] == -5.0
 
 
 # ===========================================================================
@@ -358,10 +358,12 @@ class TestInitialization:
         assert pop.shape == (5, trainer.genome_size)
         assert pop.dtype == np.float32
 
-    def test_random_individual_shape(self, trainer):
-        ind = trainer._random_individual_np()
-        assert ind.shape == (trainer.genome_size,)
-        assert ind.dtype == np.float32
+    def test_xavier_init_scale(self, trainer):
+        """Verify population uses Xavier initialization scale."""
+        pop = trainer._init_population()
+        expected_scale = (2.0 / trainer.input_size) ** 0.5
+        # Standard deviation should be approximately the Xavier scale
+        assert abs(pop.std() - expected_scale) < 0.1
 
     def test_benchmark_shape(self, trainer):
         assert trainer.benchmark_pop.shape == (20, trainer.genome_size)

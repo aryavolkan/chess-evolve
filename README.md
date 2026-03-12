@@ -39,8 +39,8 @@ The system has three backends: **Rust CPU** (primary), **PyTorch GPU/CPU**, and 
 |-----------|--------|-------------|
 | Win | 10.0 | Bonus for winning the game |
 | Checkmate | 10.0 | Extra bonus for checkmate |
-| Draw | 1.0 | Modest reward for draws |
-| Loss | -3.0 | Penalty for losing |
+| Draw | 0.0 | No bonus (material advantage provides small signal) |
+| Loss | -5.0 | Penalty for losing |
 | Material | 1.0x | Net material advantage |
 | Mobility | 0.3x | Legal move count |
 | Own King Safety | 0.5x | Friendly pawns near king |
@@ -69,10 +69,12 @@ A fixed random population (20 genomes) measures absolute progress, since coevolu
 ```
 chess-evolve/
 ├── train_wandb.py                 # Main entry point (auto-detects backend)
-├── cpu_trainer.py                 # Fixed-topology training loop (Rust backend)
-├── neat_cpu_trainer.py            # NEAT variable-topology training loop
-├── sweep_config.py                # W&B sweep hyperparameter configs
-├── lichess_bot.py                 # Lichess bot (play evolved genomes online)
+├── python/
+│   ├── cpu_trainer.py             # Fixed-topology training loop (Rust backend)
+│   ├── neat_cpu_trainer.py        # NEAT variable-topology training loop
+│   ├── fitness.py                 # Shared fitness computation (used by both trainers)
+│   ├── lichess_bot.py             # Lichess bot (play evolved genomes online)
+│   └── godot_wandb.py             # Godot subprocess integration
 ├── rust/
 │   ├── chess-cpu/                 # PyO3: game simulation, NN forward pass, fitness
 │   ├── evolve-ga/                 # PyO3: GA operators (selection, crossover, mutation)
@@ -96,6 +98,7 @@ chess-evolve/
 │   ├── human_play.gd              # Human vs AI game mode
 │   ├── replay_viewer.gd           # Game replay with PGN export
 │   └── training_dashboard.gd      # Stats display and training controls
+├── configs/                       # JSON training configs and sweep definitions
 ├── overnight-agent/
 │   ├── chess_sweep_worker.py      # W&B sweep worker
 │   ├── chess_monitor.py           # Worker monitor + auto-spawn

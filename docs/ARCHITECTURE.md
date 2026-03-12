@@ -122,11 +122,13 @@ Chess-Evolve uses **coevolutionary neuroevolution** to train chess-playing neura
 ```
 chess-evolve/
 ├── train_wandb.py                 # Main entry point
-├── cpu_trainer.py                 # Fixed-topology trainer (Rust backend)
-├── neat_cpu_trainer.py            # NEAT trainer (Rust backend)
-├── sweep_config.py                # W&B sweep configs
-├── lichess_bot.py                 # Lichess bot integration
-├── godot_wandb.py                 # Godot subprocess integration
+├── python/
+│   ├── cpu_trainer.py             # Fixed-topology trainer (Rust backend)
+│   ├── neat_cpu_trainer.py        # NEAT trainer (Rust backend)
+│   ├── fitness.py                 # Shared fitness computation
+│   ├── lichess_bot.py             # Lichess bot integration
+│   └── godot_wandb.py             # Godot subprocess integration
+├── configs/                       # Sweep configs and JSON training configs
 ├── rust/
 │   ├── chess-cpu/                 # PyO3: game simulation
 │   ├── evolve-ga/                 # PyO3: GA operators
