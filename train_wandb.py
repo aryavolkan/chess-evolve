@@ -302,6 +302,21 @@ _USE_PYTORCH = _detect_pytorch()
 
 # --- Training backends ---
 
+def _make_generation_callback(run):
+    """Create a per-generation callback that logs metrics to W&B and prints progress."""
+    def on_generation(metrics):
+        log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}
+        log_data = _chess_metric_transform(log_data)
+        run.log(log_data)
+        gen = metrics.get("generation", 0)
+        t = metrics.get("generation_time_sec", 0)
+        gps = metrics.get("games_per_sec", 0)
+        wb = metrics.get("white_best", 0)
+        bb = metrics.get("black_best", 0)
+        print(f"  gen {gen}: w_best={wb:.2f} b_best={bb:.2f} {t:.2f}s ({gps:.0f} games/s)")
+    return on_generation
+
+
 def _run_rust_training(run, config, max_gens):
     """Run training via Rust CPU trainer (chess_cpu + evolve_ga or neat_ga)."""
     if config.get("use_neat", False) and _USE_NEAT_RUST:
@@ -313,18 +328,7 @@ def _run_rust_training(run, config, max_gens):
         print("🦀 Rust CPU training mode")
         trainer = CPUTrainer(config, _worker.metrics_path)
 
-    def on_generation(metrics):
-        log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}
-        log_data = _chess_metric_transform(log_data)
-        run.log(log_data)
-        gen = metrics.get("generation", 0)
-        t = metrics.get("generation_time_sec", 0)
-        gps = metrics.get("games_per_sec", 0)
-        wb = metrics.get("white_best", 0)
-        bb = metrics.get("black_best", 0)
-        print(f"  gen {gen}: w_best={wb:.2f} b_best={bb:.2f} {t:.2f}s ({gps:.0f} games/s)")
-
-    final = trainer.train(max_generations=max_gens, on_generation=on_generation)
+    final = trainer.train(max_generations=max_gens, on_generation=_make_generation_callback(run))
 
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: Rust CPU training complete!")
@@ -339,18 +343,7 @@ def _run_pytorch_training(run, config, max_gens, device="cuda"):
 
     trainer = GPUTrainer(config, _worker.metrics_path, device=device)
 
-    def on_generation(metrics):
-        log_data = {k: metrics.get(k, 0) for k in CHESS_LOG_KEYS if k in metrics}
-        log_data = _chess_metric_transform(log_data)
-        run.log(log_data)
-        gen = metrics.get("generation", 0)
-        t = metrics.get("generation_time_sec", 0)
-        gps = metrics.get("games_per_sec", 0)
-        wb = metrics.get("white_best", 0)
-        bb = metrics.get("black_best", 0)
-        print(f"  gen {gen}: w_best={wb:.2f} b_best={bb:.2f} {t:.2f}s ({gps:.0f} games/s)")
-
-    final = trainer.train(max_generations=max_gens, on_generation=on_generation)
+    final = trainer.train(max_generations=max_gens, on_generation=_make_generation_callback(run))
 
     log_final_summary(run, final)
     print(f"✅ Worker {_worker.worker_id}: PyTorch training complete!")
