@@ -75,7 +75,7 @@ black_fitness[pop_size]
 
 ### Selection
 
-**Tournament selection** (k=3): randomly sample 3 individuals, return the best.
+**Tournament selection** (k=2, configurable): randomly sample k individuals, return the best.
 
 ### Evolution Step (`evolve()`)
 1. Sort each population by fitness (descending)
@@ -113,8 +113,8 @@ Fitness is computed per-game by `ChessFitness.evaluate(state, color, move_count)
 |-----------|---------------|---------|
 | Win bonus | 10.0 | Applied if player won |
 | Checkmate bonus | 10.0 | Extra if win was by checkmate |
-| Draw bonus | 1.0 | Applied on draw |
-| Loss penalty | -3.0 | Applied on loss |
+| Draw bonus | 0.0 | No bonus (material advantage provides small signal) |
+| Loss penalty | -5.0 | Applied on loss |
 | Material advantage | 1.0 | `(my_material - opp_material) x weight` |
 | Mobility | 0.3 | `mobility_score(color) x weight` |
 | Own king safety | 0.5 | `king_safety_score(own_color) x weight` |

@@ -4,7 +4,7 @@ CPU-based chess neuroevolution trainer using Rust backends.
 Uses chess_cpu for parallel game simulation and evolve_ga for genetic operators.
 Drop-in replacement for Godot-based training, callable from train_wandb.py.
 """
-import gc
+import heapq
 import json
 import random
 import time
@@ -14,6 +14,14 @@ from pathlib import Path
 import chess_cpu
 import evolve_ga
 import numpy as np
+
+from fitness import (
+    FITNESS_DEFAULTS,
+    aggregate_game_stats,
+    compute_fitness,
+    compute_outcome_rates,
+    compute_tournament_scores,
+)
 
 
 class CPUTrainer:
@@ -54,20 +62,8 @@ class CPUTrainer:
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
-        # Fitness weights — tuned to prioritize winning over material hoarding.
-        # Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
-        # King safety rewards defending own king AND attacking opponent's king.
-        self.win_bonus = 10.0
-        self.draw_bonus = 0.0
-        self.loss_penalty = -5.0
-        self.capture_weight = 0.5
-        self.material_weight = 1.0
-        self.mobility_weight = 0.3
-        self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 1.5
-        self.king_danger_weight = 1.0
-        self.move_count_penalty = -0.002
-        self.checkmate_bonus = 10.0
+        # Fitness weights (shared defaults from fitness.py)
+        self.fitness_weights = dict(FITNESS_DEFAULTS)
 
         # Network weight count
         ih = self.input_size * self.hidden_size
@@ -150,11 +146,6 @@ class CPUTrainer:
         scale = np.float32((2.0 / self.input_size) ** 0.5)  # Xavier init
         return np.random.randn(self.pop_size, self.genome_size).astype(np.float32) * scale
 
-    def _random_individual_np(self) -> np.ndarray:
-        """Create a single random weight vector as numpy float32."""
-        scale = np.float32((2.0 / self.input_size) ** 0.5)
-        return np.random.randn(self.genome_size).astype(np.float32) * scale
-
     def _generate_pairings(self) -> list[tuple[int, int]]:
         """Generate round-robin pairings: each white plays tournament_opponents random blacks."""
         pairings = []
@@ -170,82 +161,8 @@ class CPUTrainer:
         pop_size: int,
         color: int,
     ) -> list[float]:
-        """Compute fitness for each individual of the given color.
-
-        Matches the formula in ai/fitness.gd:evaluate_from_metrics().
-        """
-        fitness = [0.0] * pop_size
-        game_counts = [0] * pop_size
-
-        for game in results:
-            if color == 0:
-                idx = game["white_idx"]
-                my_material = game["white_material"]
-                opp_material = game["black_material"]
-                my_king_safety = game["white_king_safety"]
-                opp_king_safety = game["black_king_safety"]
-                my_mobility = game["white_mobility"]
-                opp_mobility = game["black_mobility"]
-                my_king_danger_inflicted = game.get("white_king_danger", 0.0)
-                my_captures_value = game.get("white_captures_value", 0.0)
-            else:
-                idx = game["black_idx"]
-                my_material = game["black_material"]
-                opp_material = game["white_material"]
-                my_king_safety = game["black_king_safety"]
-                opp_king_safety = game["white_king_safety"]
-                my_mobility = game["black_mobility"]
-                opp_mobility = game["white_mobility"]
-                my_king_danger_inflicted = game.get("black_king_danger", 0.0)
-                my_captures_value = game.get("black_captures_value", 0.0)
-
-            result = game["result"]
-            move_count = game["move_count"]
-            f = 0.0
-
-            # Game result — winning is the primary objective
-            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-            is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
-
-            if result == 2:  # Draw
-                mat_adv = max(-1.0, min(1.0, (my_material - opp_material) / 10.0))
-                f += self.draw_bonus * (0.5 + 0.5 * mat_adv)
-            elif is_win:
-                f += self.win_bonus
-                f += self.checkmate_bonus
-            elif is_loss:
-                f += self.loss_penalty
-
-            # Material difference — secondary continuous signal
-            f += (my_material - opp_material) * self.material_weight
-
-            # Mobility advantage — rewards piece activity
-            f += (my_mobility - opp_mobility) * self.mobility_weight
-
-            # King safety — reward protecting own king
-            f += my_king_safety * self.king_safety_weight
-
-            # Opponent king safety — reward exposing opponent's king
-            f -= opp_king_safety * self.opp_king_safety_weight
-
-            # King danger — reward putting opponent's king in danger
-            f += my_king_danger_inflicted * self.king_danger_weight
-
-            # Capture reward — reward taking material
-            f += my_captures_value * self.capture_weight
-
-            # Move count penalty
-            f += move_count * self.move_count_penalty
-
-            fitness[idx] += f
-            game_counts[idx] += 1
-
-        # Average fitness over games played
-        for i in range(pop_size):
-            if game_counts[i] > 0:
-                fitness[i] /= game_counts[i]
-
-        return fitness
+        """Compute fitness for each individual of the given color."""
+        return compute_fitness(results, pop_size, color, self.fitness_weights)
 
     def _compute_tournament_scores(
         self,
@@ -254,37 +171,7 @@ class CPUTrainer:
         color: int,
     ) -> list[float]:
         """Compute tournament scores: 1.0 for win, 0.5+material_bonus for draw, 0.0 for loss."""
-        scores = [0.0] * pop_size
-        counts = [0] * pop_size
-
-        for game in results:
-            if color == 0:
-                idx = game["white_idx"]
-                my_mat = game["white_material"]
-                opp_mat = game["black_material"]
-            else:
-                idx = game["black_idx"]
-                my_mat = game["black_material"]
-                opp_mat = game["white_material"]
-
-            result = game["result"]
-            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-
-            if is_win:
-                scores[idx] += 1.0
-            elif result == 2:
-                mat_bonus = max(-0.25, min(0.25, (my_mat - opp_mat) / 40.0))
-                scores[idx] += 0.5 + mat_bonus
-            # loss = 0.0
-
-            counts[idx] += 1
-
-        # Average
-        for i in range(pop_size):
-            if counts[i] > 0:
-                scores[i] /= counts[i]
-
-        return scores
+        return compute_tournament_scores(results, pop_size, color)
 
     def _update_hof(
         self,
@@ -320,22 +207,10 @@ class CPUTrainer:
         return population
 
     def _compute_outcome_rates(
-        self, results: list[dict], color: int
+        self, results: list[dict], color: int,
     ) -> tuple[float, float, float]:
         """Compute win/draw/loss rates for a color."""
-        wins = draws = losses = 0
-        for game in results:
-            r = game["result"]
-            is_win = (r == 1 and color == 0) or (r == -1 and color == 1)
-            is_loss = (r == -1 and color == 0) or (r == 1 and color == 1)
-            if is_win:
-                wins += 1
-            elif r == 2:
-                draws += 1
-            elif is_loss:
-                losses += 1
-        total = max(1, wins + draws + losses)
-        return wins / total, draws / total, losses / total
+        return compute_outcome_rates(results, color)
 
     def _speciate_and_evolve(
         self,
@@ -392,7 +267,6 @@ class CPUTrainer:
         del pop_list
         result = np.array(new_pop_list, dtype=np.float32)
         del new_pop_list
-        gc.collect()
         return result, species_count, pruned_reps, threshold
 
     def train(
@@ -477,35 +351,37 @@ class CPUTrainer:
             w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
             b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
 
-            # Average game length
-            total_moves = sum(g["move_count"] for g in results)
+            # Aggregate game stats in a single pass
+            total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
             avg_game_length = total_moves / max(1, num_games)
-
-            # Material averages
-            w_mat_avg = sum(g["white_material"] for g in results) / max(1, num_games)
-            b_mat_avg = sum(g["black_material"] for g in results) / max(1, num_games)
 
             # Games/moves per second
             games_per_sec = num_games / max(0.001, gen_time)
             moves_per_sec = total_moves / max(0.001, gen_time)
 
+            # Cache fitness extremes to avoid redundant recomputation
+            w_best = max(white_fitness)
+            b_best = max(black_fitness)
+            w_sum = sum(white_fitness)
+            b_sum = sum(black_fitness)
+
             # Benchmark vs fixed random opponents (absolute progress measure).
-            # Sort populations by fitness so top individuals are first.
-            w_order = sorted(range(self.pop_size), key=lambda i: white_fitness[i], reverse=True)
-            b_order = sorted(range(self.pop_size), key=lambda i: black_fitness[i], reverse=True)
+            # Select top individuals by fitness using heap (O(n) vs O(n log n) sort).
+            w_top_indices = heapq.nlargest(min(10, self.pop_size), range(self.pop_size), key=lambda i: white_fitness[i])
+            b_top_indices = heapq.nlargest(min(10, self.pop_size), range(self.pop_size), key=lambda i: black_fitness[i])
             w_bench_wr, w_bench_mat, b_bench_wr, b_bench_mat = self._benchmark_vs_random(
-                white_pop[w_order], black_pop[b_order],
+                white_pop[w_top_indices], black_pop[b_top_indices],
             )
 
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
                 "generation": gen,
-                "white_best": max(white_fitness),
-                "white_avg": sum(white_fitness) / len(white_fitness),
-                "black_best": max(black_fitness),
-                "black_avg": sum(black_fitness) / len(black_fitness),
-                "best_fitness": max(max(white_fitness), max(black_fitness)),
-                "avg_fitness": (sum(white_fitness) + sum(black_fitness)) / (2 * self.pop_size),
+                "white_best": w_best,
+                "white_avg": w_sum / len(white_fitness),
+                "black_best": b_best,
+                "black_avg": b_sum / len(black_fitness),
+                "best_fitness": max(w_best, b_best),
+                "avg_fitness": (w_sum + b_sum) / (2 * self.pop_size),
                 "games_played": total_games,
                 "total_games_this_gen": num_games,
                 "avg_game_length": avg_game_length,
@@ -526,7 +402,7 @@ class CPUTrainer:
                 "white_material_avg": w_mat_avg,
                 "black_material_avg": b_mat_avg,
                 "generation_time_sec": gen_time,
-                "combined_best": min(max(white_fitness), max(black_fitness)),
+                "combined_best": min(w_best, b_best),
                 # Elo tracking placeholders (not implemented in CPU trainer)
                 "white_hof_avg_elo": 0,
                 "black_hof_avg_elo": 0,

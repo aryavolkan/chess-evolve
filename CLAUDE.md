@@ -76,6 +76,7 @@ python train_wandb.py --chain 10
 
 2. **Python layer** (`python/`, `train_wandb.py`, `overnight-agent/`):
    - `python/cpu_trainer.py` / `python/neat_cpu_trainer.py`: Training loops using Rust PyO3 crates. Fixed-topology (CPUTrainer) vs variable-topology NEAT (NeatCPUTrainer).
+   - `python/fitness.py`: Shared fitness computation, outcome rates, tournament scores (used by both trainers).
    - `python/lichess_bot.py`: Lichess bot with ensemble voting from Hall of Fame genomes.
    - `train_wandb.py`: Entry point for all training (stays at root). Auto-detects backend, handles W&B logging, sweep integration, chained training.
    - `configs/`: Sweep configs and JSON training configs.
@@ -99,7 +100,11 @@ Populations are numpy float32 arrays (`pop_size x genome_size`). Each generation
 
 ### Fitness function
 
-Primary objective is winning (win_bonus=10 + checkmate_bonus=10 = 20 total). Secondary signals: material difference (1.0x), opponent king safety exposure (1.5x), own king safety (0.5x), mobility (0.3x), move count penalty (-0.002x). The key optimization metric is `combined_best = min(white_best, black_best)` for balanced improvement.
+Primary objective is winning (win_bonus=10 + checkmate_bonus=10 = 20 total). draw_bonus=0, loss_penalty=-5. Secondary signals: material difference (1.0x), opponent king safety exposure (1.5x), own king safety (0.5x), king danger (1.0x), captures (0.5x), mobility (0.3x), move count penalty (-0.002x). Fitness weights are defined in `python/fitness.py` (shared by both trainers). The key optimization metric is `combined_best = min(white_best, black_best)` for balanced improvement.
+
+### Stockfish CPL fitness signal (NEAT only)
+
+The NEAT trainer can blend a Stockfish-based fitness signal into selection. Top N genomes play against Stockfish; their centipawn loss (CPL) maps to a 0-10 fitness score. Config keys: `sf_fitness_weight` (blend fraction, 0=disabled), `sf_fitness_interval` (every N gens), `sf_fitness_top_n`. Requires `stockfish` binary on PATH or `STOCKFISH_PATH` env var.
 
 ### Benchmark system
 

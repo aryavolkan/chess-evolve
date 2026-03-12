@@ -7,6 +7,7 @@ Drop-in replacement for CPUTrainer when use_neat=True.
 """
 from __future__ import annotations
 
+import heapq
 import json
 import os
 import random
@@ -17,6 +18,15 @@ from pathlib import Path
 
 import chess_cpu
 import neat_ga
+
+from fitness import (
+    FITNESS_DEFAULTS,
+    aggregate_game_stats,
+    compute_fitness,
+    compute_fitness_breakdown,
+    compute_outcome_rates,
+    compute_tournament_scores,
+)
 
 
 class NeatCPUTrainer:
@@ -43,18 +53,8 @@ class NeatCPUTrainer:
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
         self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
-        # Fitness weights (same as cpu_trainer.py)
-        self.win_bonus = 10.0
-        self.draw_bonus = 0.0
-        self.loss_penalty = -5.0
-        self.capture_weight = 0.5
-        self.material_weight = 1.0
-        self.mobility_weight = 0.3
-        self.king_safety_weight = 0.5
-        self.opp_king_safety_weight = 1.5
-        self.king_danger_weight = 1.0
-        self.move_count_penalty = -0.002
-        self.checkmate_bonus = 10.0
+        # Fitness weights (shared defaults from fitness.py)
+        self.fitness_weights = dict(FITNESS_DEFAULTS)
 
         # NEAT config for Rust
         self.neat_config = {
@@ -219,176 +219,26 @@ class NeatCPUTrainer:
     def _compute_fitness(
         self, results: list[dict], pop_size: int, color: int,
     ) -> list[float]:
-        """Compute fitness for each individual of the given color.
-
-        Same formula as cpu_trainer.py.
-        """
-        fitness = [0.0] * pop_size
-        game_counts = [0] * pop_size
-
-        for game in results:
-            if color == 0:
-                idx = game["white_idx"]
-                my_material = game["white_material"]
-                opp_material = game["black_material"]
-                my_king_safety = game["white_king_safety"]
-                opp_king_safety = game["black_king_safety"]
-                my_mobility = game["white_mobility"]
-                opp_mobility = game["black_mobility"]
-                my_king_danger_inflicted = game.get("white_king_danger", 0.0)
-                my_captures_value = game.get("white_captures_value", 0.0)
-            else:
-                idx = game["black_idx"]
-                my_material = game["black_material"]
-                opp_material = game["white_material"]
-                my_king_safety = game["black_king_safety"]
-                opp_king_safety = game["white_king_safety"]
-                my_mobility = game["black_mobility"]
-                opp_mobility = game["white_mobility"]
-                my_king_danger_inflicted = game.get("black_king_danger", 0.0)
-                my_captures_value = game.get("black_captures_value", 0.0)
-
-            result = game["result"]
-            move_count = game["move_count"]
-            f = 0.0
-
-            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-            is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
-
-            if result == 2:
-                mat_adv = max(-1.0, min(1.0, (my_material - opp_material) / 10.0))
-                f += self.draw_bonus * (0.5 + 0.5 * mat_adv)
-            elif is_win:
-                f += self.win_bonus
-                f += self.checkmate_bonus
-            elif is_loss:
-                f += self.loss_penalty
-
-            f += (my_material - opp_material) * self.material_weight
-            f += (my_mobility - opp_mobility) * self.mobility_weight
-            f += my_king_safety * self.king_safety_weight
-            f -= opp_king_safety * self.opp_king_safety_weight
-            f += my_king_danger_inflicted * self.king_danger_weight
-            f += my_captures_value * self.capture_weight
-            f += move_count * self.move_count_penalty
-
-            fitness[idx] += f
-            game_counts[idx] += 1
-
-        for i in range(pop_size):
-            if game_counts[i] > 0:
-                fitness[i] /= game_counts[i]
-
-        return fitness
+        """Compute fitness for each individual of the given color."""
+        return compute_fitness(results, pop_size, color, self.fitness_weights)
 
     def _compute_fitness_breakdown(
         self, results: list[dict], color: int,
     ) -> dict[str, float]:
         """Compute average contribution of each fitness component across all games."""
-        totals = {
-            "outcome": 0.0, "material": 0.0, "mobility": 0.0,
-            "king_safety": 0.0, "opp_king_safety": 0.0,
-            "king_danger": 0.0, "captures": 0.0, "move_penalty": 0.0,
-        }
-        n = len(results)
-        if n == 0:
-            return totals
-
-        for game in results:
-            if color == 0:
-                my_mat = game["white_material"]
-                opp_mat = game["black_material"]
-                my_ks = game["white_king_safety"]
-                opp_ks = game["black_king_safety"]
-                my_mob = game["white_mobility"]
-                opp_mob = game["black_mobility"]
-            else:
-                my_mat = game["black_material"]
-                opp_mat = game["white_material"]
-                my_ks = game["black_king_safety"]
-                opp_ks = game["white_king_safety"]
-                my_mob = game["black_mobility"]
-                opp_mob = game["white_mobility"]
-
-            result = game["result"]
-            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-            is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
-
-            if result == 2:
-                mat_adv = max(-1.0, min(1.0, (my_mat - opp_mat) / 10.0))
-                totals["outcome"] += self.draw_bonus * (0.5 + 0.5 * mat_adv)
-            elif is_win:
-                totals["outcome"] += self.win_bonus + self.checkmate_bonus
-            elif is_loss:
-                totals["outcome"] += self.loss_penalty
-
-            totals["material"] += (my_mat - opp_mat) * self.material_weight
-            totals["mobility"] += (my_mob - opp_mob) * self.mobility_weight
-            totals["king_safety"] += my_ks * self.king_safety_weight
-            totals["opp_king_safety"] -= opp_ks * self.opp_king_safety_weight
-            if color == 0:
-                totals["king_danger"] += game.get("white_king_danger", 0.0) * self.king_danger_weight
-            else:
-                totals["king_danger"] += game.get("black_king_danger", 0.0) * self.king_danger_weight
-            if color == 0:
-                totals["captures"] += game.get("white_captures_value", 0.0) * self.capture_weight
-            else:
-                totals["captures"] += game.get("black_captures_value", 0.0) * self.capture_weight
-            totals["move_penalty"] += game["move_count"] * self.move_count_penalty
-
-        return {k: v / n for k, v in totals.items()}
+        return compute_fitness_breakdown(results, color, self.fitness_weights)
 
     def _compute_outcome_rates(
         self, results: list[dict], color: int,
     ) -> tuple[float, float, float]:
         """Compute win/draw/loss rates for a color."""
-        wins = draws = losses = 0
-        for game in results:
-            r = game["result"]
-            is_win = (r == 1 and color == 0) or (r == -1 and color == 1)
-            is_loss = (r == -1 and color == 0) or (r == 1 and color == 1)
-            if is_win:
-                wins += 1
-            elif r == 2:
-                draws += 1
-            elif is_loss:
-                losses += 1
-        total = max(1, wins + draws + losses)
-        return wins / total, draws / total, losses / total
+        return compute_outcome_rates(results, color)
 
     def _compute_tournament_scores(
         self, results: list[dict], pop_size: int, color: int,
     ) -> list[float]:
         """Compute tournament scores: 1.0 for win, 0.5+material_bonus for draw, 0.0 for loss."""
-        scores = [0.0] * pop_size
-        counts = [0] * pop_size
-
-        for game in results:
-            if color == 0:
-                idx = game["white_idx"]
-                my_mat = game["white_material"]
-                opp_mat = game["black_material"]
-            else:
-                idx = game["black_idx"]
-                my_mat = game["black_material"]
-                opp_mat = game["white_material"]
-
-            result = game["result"]
-            is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-
-            if is_win:
-                scores[idx] += 1.0
-            elif result == 2:
-                mat_bonus = max(-0.25, min(0.25, (my_mat - opp_mat) / 40.0))
-                scores[idx] += 0.5 + mat_bonus
-
-            counts[idx] += 1
-
-        for i in range(pop_size):
-            if counts[i] > 0:
-                scores[i] /= counts[i]
-
-        return scores
+        return compute_tournament_scores(results, pop_size, color)
 
     def _update_hof(
         self, hof: list[tuple[float, str]], population: list[str], fitness: list[float],
@@ -608,10 +458,9 @@ class NeatCPUTrainer:
         n = len(population)
         genome_is_white = color == 0
 
-        # Test top N by coevolution fitness
+        # Test top N by coevolution fitness (heap-select, O(n) vs O(n log n) sort)
         top_n = min(self.sf_fitness_top_n, n)
-        ranked = sorted(range(n), key=lambda i: coevo_fitness[i], reverse=True)
-        top_indices = ranked[:top_n]
+        top_indices = heapq.nlargest(top_n, range(n), key=lambda i: coevo_fitness[i])
 
         try:
             engine = chess.engine.SimpleEngine.popen_uci(self._stockfish_path)
@@ -642,8 +491,9 @@ class NeatCPUTrainer:
         if tested_scores:
             tested_scores.sort()
             median = tested_scores[len(tested_scores) // 2]
+            tested_set = set(top_indices)
             for i in range(n):
-                if i not in set(top_indices):
+                if i not in tested_set:
                     sf_fit[i] = median
 
         return sf_fit
@@ -892,13 +742,9 @@ class NeatCPUTrainer:
             w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
             b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
 
-            # Average game length
-            total_moves = sum(g["move_count"] for g in results)
+            # Aggregate game stats in a single pass
+            total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
             avg_game_length = total_moves / max(1, num_games)
-
-            # Material averages
-            w_mat_avg = sum(g["white_material"] for g in results) / max(1, num_games)
-            b_mat_avg = sum(g["black_material"] for g in results) / max(1, num_games)
 
             # Games/moves per second
             games_per_sec = num_games / max(0.001, gen_time)
@@ -926,15 +772,19 @@ class NeatCPUTrainer:
                 )
                 print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f} w_cpl={sf_w_cpl:.0f} b_cpl={sf_b_cpl:.0f}")
 
+            # Cache fitness extremes to avoid redundant recomputation
+            w_best = max(white_fitness)
+            b_best = max(black_fitness)
+
             # Build metrics dict matching CHESS_LOG_KEYS
             metrics = {
                 "generation": gen,
                 # Fitness
-                "white_best": max(white_fitness),
+                "white_best": w_best,
                 "white_avg": sum(white_fitness) / len(white_fitness),
-                "black_best": max(black_fitness),
+                "black_best": b_best,
                 "black_avg": sum(black_fitness) / len(black_fitness),
-                "combined_best": min(max(white_fitness), max(black_fitness)),
+                "combined_best": min(w_best, b_best),
                 # Games
                 "total_games_this_gen": num_games,
                 "avg_game_length": avg_game_length,
