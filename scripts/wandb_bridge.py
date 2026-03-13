@@ -96,6 +96,10 @@ CHESS_LOG_KEYS = [
     # Stockfish fitness signal
     "sf_fitness_white_avg",
     "sf_fitness_black_avg",
+    # Puzzle curriculum
+    "puzzle_accuracy_white",
+    "puzzle_accuracy_black",
+    "puzzle_accuracy_avg",
 ]
 
 

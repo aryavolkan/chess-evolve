@@ -23,6 +23,7 @@ _injected = []
 
 _chess_cpu_mock = types.ModuleType("chess_cpu")
 _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=[])
+_chess_cpu_mock.evaluate_puzzles_batch = MagicMock(return_value=[])
 if "chess_cpu" not in sys.modules:
     sys.modules["chess_cpu"] = _chess_cpu_mock
     _injected.append("chess_cpu")
