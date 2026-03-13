@@ -102,10 +102,24 @@ class NeatCPUTrainer:
         # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
 
-        # Curriculum learning: stage 0 = coevolution (default), stage 1 = vs random
+        # Curriculum learning stages:
+        #   0 = puzzle_easy (Lichess <800 rating)
+        #   1 = puzzle_intermediate (Lichess 800-1200)
+        #   2 = vs random NEAT genomes (was stage 1)
+        #   3 = coevolution (was stage 0 / default)
         self.curriculum_stage = config.get("curriculum_stage", 0)
         self.curriculum_random_opponents = config.get("curriculum_random_opponents", 30)
         self.curriculum_promotion_threshold = config.get("curriculum_promotion_threshold", 0.80)
+
+        # Puzzle curriculum config
+        self.puzzle_stage_files = {
+            0: config.get("puzzle_stage0_file", "data/puzzles/stage0_puzzles.json"),
+            1: config.get("puzzle_stage1_file", "data/puzzles/stage1_puzzles.json"),
+        }
+        self.puzzle_batch_size = config.get("puzzle_batch_size", 50)
+        self.puzzle_accuracy_threshold = config.get("puzzle_accuracy_threshold", 0.5)
+        self.puzzle_temperature = config.get("puzzle_temperature", 0.1)
+        self._puzzle_cache: dict[int, str] = {}  # stage -> JSON string
 
         # Seed genome paths: if set, initialize population from saved best topology
         _seed = config.get("seed_genome_path", "")
@@ -218,6 +232,56 @@ class NeatCPUTrainer:
         opp_config["population_size"] = count
         config_json = json.dumps(opp_config)
         return neat_ga.create_population(config_json)
+
+    def _load_puzzles(self, stage: int) -> str:
+        """Load puzzle JSON for a curriculum stage, caching the result."""
+        if stage in self._puzzle_cache:
+            return self._puzzle_cache[stage]
+        path = self.puzzle_stage_files.get(stage, "")
+        if not path or not os.path.exists(path):
+            print(f"  ⚠ Puzzle file not found for stage {stage}: {path}")
+            self._puzzle_cache[stage] = "[]"
+            return "[]"
+        with open(path) as f:
+            data = f.read()
+        # Validate it's a JSON array
+        puzzles = json.loads(data)
+        # Sample a subset if file has more than batch_size
+        if len(puzzles) > self.puzzle_batch_size:
+            puzzles = random.sample(puzzles, self.puzzle_batch_size)
+            data = json.dumps(puzzles)
+        self._puzzle_cache[stage] = data
+        print(f"  Loaded {len(puzzles)} puzzles for stage {stage} from {path}")
+        return data
+
+    def _compute_puzzle_fitness(
+        self, population: list[str], stage: int,
+    ) -> list[float]:
+        """Evaluate population on chess puzzles via Rust batch evaluator.
+
+        Returns a list of puzzle accuracy scores (0.0-1.0) per genome,
+        scaled to fitness range compatible with game-based fitness.
+        """
+        puzzles_json = self._load_puzzles(stage)
+        if puzzles_json == "[]":
+            return [0.0] * len(population)
+
+        # Resample puzzles each generation for diversity
+        puzzles = json.loads(puzzles_json)
+        if len(puzzles) > self.puzzle_batch_size:
+            puzzles = random.sample(puzzles, self.puzzle_batch_size)
+            puzzles_json = json.dumps(puzzles)
+
+        scores = chess_cpu.evaluate_puzzles_batch(
+            population, puzzles_json,
+            output_size=self.output_size,
+            temperature=self.puzzle_temperature,
+        )
+
+        # Scale puzzle accuracy (0-1) to fitness range
+        # Win bonus + checkmate bonus = 20, so scale to ~20 for perfect score
+        scale = self.fitness_weights["win_bonus"] + self.fitness_weights["checkmate_bonus"]
+        return [s * scale for s in scores]
 
     def _generate_pairings(self) -> list[tuple[int, int]]:
         """Generate pairings: each white plays tournament_opponents random blacks."""
@@ -649,9 +713,14 @@ class NeatCPUTrainer:
         white_config_json = config_json
         black_config_json = config_json
 
-        # Curriculum stage 1: create fixed random opponent pools
-        use_curriculum = self.curriculum_stage >= 1
-        if use_curriculum:
+        # Curriculum setup
+        use_puzzle_curriculum = self.curriculum_stage in (0, 1)
+        use_vs_random = self.curriculum_stage == 2
+        use_coevolution = self.curriculum_stage >= 3
+
+        if use_puzzle_curriculum:
+            print(f"  Curriculum stage {self.curriculum_stage}: puzzle-based training")
+        elif use_vs_random:
             n_opp = self.curriculum_random_opponents
             curriculum_black_opp = self._init_random_opponents(n_opp)
             curriculum_white_opp = self._init_random_opponents(n_opp)
@@ -663,8 +732,19 @@ class NeatCPUTrainer:
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
 
-            if use_curriculum:
-                # Stage 1: each individual plays all random opponents
+            if use_puzzle_curriculum:
+                # Puzzle-based stages: evaluate genomes on chess puzzles
+                white_fitness = self._compute_puzzle_fitness(white_pop, self.curriculum_stage)
+                black_fitness = self._compute_puzzle_fitness(black_pop, self.curriculum_stage)
+
+                # No game results for puzzle stages — create minimal result set for metrics
+                results = []
+                w_results = []
+                b_results = []
+                num_games = 0
+
+            elif use_vs_random:
+                # Stage 2: each individual plays all random opponents
                 # White pop (as white) vs random black opponents
                 w_pairings = [(w, b) for w in range(self.pop_size)
                               for b in range(len(curriculum_black_opp))]
@@ -760,7 +840,10 @@ class NeatCPUTrainer:
                     black_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
 
             # Tournament scores
-            if use_curriculum:
+            if use_puzzle_curriculum:
+                white_tourn = [0.0] * self.pop_size
+                black_tourn = [0.0] * self.pop_size
+            elif use_vs_random:
                 white_tourn = self._compute_tournament_scores(w_results, self.pop_size, color=0)
                 black_tourn = self._compute_tournament_scores(b_results, self.pop_size, color=1)
             else:
@@ -793,7 +876,10 @@ class NeatCPUTrainer:
             b_stats = b_result["stats"]
 
             # Outcome rates
-            if use_curriculum:
+            if use_puzzle_curriculum:
+                w_win, w_draw, w_loss = 0.0, 0.0, 0.0
+                b_win, b_draw, b_loss = 0.0, 0.0, 0.0
+            elif use_vs_random:
                 w_win, w_draw, w_loss = self._compute_outcome_rates(w_results, color=0)
                 b_win, b_draw, b_loss = self._compute_outcome_rates(b_results, color=1)
             else:
@@ -813,7 +899,15 @@ class NeatCPUTrainer:
             avg_nodes = (w_stats["avg_nodes"] + b_stats["avg_nodes"]) / 2
 
             # Fitness component breakdowns
-            if use_curriculum:
+            if use_puzzle_curriculum:
+                empty_bd = {
+                    "outcome": 0.0, "material": 0.0, "mobility": 0.0,
+                    "king_safety": 0.0, "opp_king_safety": 0.0,
+                    "king_danger": 0.0, "captures": 0.0, "move_penalty": 0.0,
+                }
+                w_breakdown = dict(empty_bd)
+                b_breakdown = dict(empty_bd)
+            elif use_vs_random:
                 w_breakdown = self._compute_fitness_breakdown(w_results, color=0)
                 b_breakdown = self._compute_fitness_breakdown(b_results, color=1)
             else:
@@ -909,8 +1003,21 @@ class NeatCPUTrainer:
                 "curriculum_stage": self.curriculum_stage,
             }
 
-            # Curriculum promotion check
-            if use_curriculum:
+            # Puzzle accuracy metrics for puzzle stages
+            if use_puzzle_curriculum:
+                scale = self.fitness_weights["win_bonus"] + self.fitness_weights["checkmate_bonus"]
+                w_acc = max(white_fitness) / scale if scale > 0 else 0.0
+                b_acc = max(black_fitness) / scale if scale > 0 else 0.0
+                avg_acc = (w_acc + b_acc) / 2
+                metrics["puzzle_accuracy_white"] = w_acc
+                metrics["puzzle_accuracy_black"] = b_acc
+                metrics["puzzle_accuracy_avg"] = avg_acc
+                if avg_acc >= self.puzzle_accuracy_threshold:
+                    print(f"  🎓 Puzzle promotion ready! avg_accuracy={avg_acc:.1%} "
+                          f">= {self.puzzle_accuracy_threshold:.0%}")
+
+            # Curriculum promotion check (for vs-random stage)
+            if use_vs_random:
                 bench_wr = (w_bench_wr + b_bench_wr) / 2
                 if bench_wr >= self.curriculum_promotion_threshold:
                     print(f"  🎓 Curriculum promotion! bench_avg_win_rate={bench_wr:.1%} "

@@ -9,6 +9,7 @@ mod board;
 mod encode;
 mod evaluate;
 mod nn;
+mod puzzle;
 mod simulate;
 mod sparse_nn;
 
@@ -268,6 +269,25 @@ fn simulate_neat_games_batch(
         .collect()
 }
 
+/// Evaluate NEAT genomes on chess puzzles.
+///
+/// Returns a list of average puzzle scores (0.0-1.0) per genome.
+/// Score: exact match=1.0, same source=0.3, any capture=0.2, miss=0.0.
+#[pyfunction]
+#[pyo3(signature = (genomes, puzzles_json, output_size = 384, temperature = 0.1))]
+fn evaluate_puzzles_batch(
+    py: Python<'_>,
+    genomes: Vec<String>,
+    puzzles_json: String,
+    output_size: usize,
+    temperature: f32,
+) -> PyResult<Vec<f32>> {
+    let results = py.detach(move || {
+        puzzle::evaluate_puzzles_batch(&genomes, &puzzles_json, output_size, temperature)
+    });
+    Ok(results)
+}
+
 /// Encode a FEN string into the neural network input vector (389 floats).
 /// Useful for debugging and testing.
 #[pyfunction]
@@ -286,6 +306,7 @@ fn chess_cpu(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(simulate_game, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_games_batch, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_neat_games_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_puzzles_batch, m)?)?;
     m.add_function(wrap_pyfunction!(encode_board_fen, m)?)?;
     Ok(())
 }
