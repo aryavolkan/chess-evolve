@@ -16,11 +16,11 @@ import evolve_ga
 import numpy as np
 
 from fitness import (
-    FITNESS_DEFAULTS,
     aggregate_game_stats,
     compute_fitness,
     compute_outcome_rates,
     compute_tournament_scores,
+    merge_fitness_weights,
 )
 
 
@@ -63,10 +63,7 @@ class CPUTrainer:
         self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
         # Fitness weights (shared defaults from fitness.py, config-overridable)
-        self.fitness_weights = dict(FITNESS_DEFAULTS)
-        for key in FITNESS_DEFAULTS:
-            if key in config:
-                self.fitness_weights[key] = config[key]
+        self.fitness_weights = merge_fitness_weights(config)
 
         # Network weight count
         ih = self.input_size * self.hidden_size
@@ -185,7 +182,8 @@ class CPUTrainer:
         """Update Hall of Fame with best individuals from current generation."""
         best_idx = max(range(len(fitness)), key=lambda i: fitness[i])
         best_fit = fitness[best_idx]
-        best_genome = population[best_idx].copy()
+        # No .copy() needed — population is replaced (not mutated) each generation
+        best_genome = population[best_idx]
 
         # Add if HoF not full or better than worst in HoF
         if len(hof) < self.hof_max_size or best_fit > hof[-1][0]:
@@ -406,21 +404,6 @@ class CPUTrainer:
                 "black_material_avg": b_mat_avg,
                 "generation_time_sec": gen_time,
                 "combined_best": min(w_best, b_best),
-                # Elo tracking placeholders (not implemented in CPU trainer)
-                "white_hof_avg_elo": 0,
-                "black_hof_avg_elo": 0,
-                "white_hof_top_elo": 0,
-                "black_hof_top_elo": 0,
-                "white_elo_min": 0,
-                "white_elo_p25": 0,
-                "white_elo_median": 0,
-                "white_elo_p75": 0,
-                "white_elo_max": 0,
-                "black_elo_min": 0,
-                "black_elo_p25": 0,
-                "black_elo_median": 0,
-                "black_elo_p75": 0,
-                "black_elo_max": 0,
                 # Benchmark vs random (absolute progress — NOT relative to opponent)
                 "bench_white_win_rate": w_bench_wr,
                 "bench_white_material_adv": w_bench_mat,

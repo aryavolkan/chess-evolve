@@ -187,6 +187,25 @@ def encode_board(board: chess.Board) -> list[float]:
 # Move selection
 # ---------------------------------------------------------------------------
 
+def _score_move(
+    move: chess.Move, board: chess.Board,
+    outputs: list[float], output_size: int,
+) -> float:
+    """Score a single move given network outputs and encoding scheme."""
+    from_sq = move.from_square
+    to_sq = move.to_square
+    if output_size <= 128:
+        return outputs[from_sq] + outputs[64 + to_sq]
+    elif output_size <= 384:
+        piece = board.piece_at(from_sq)
+        piece_idx = (piece.piece_type - 1) if piece else 0
+        idx = piece_idx * 64 + to_sq
+        return outputs[idx] if idx < len(outputs) else 0.0
+    else:
+        idx = from_sq * 64 + to_sq
+        return outputs[idx] if idx < len(outputs) else 0.0
+
+
 def pick_move(network: SparseNetwork, board: chess.Board,
               output_size: int = DEFAULT_OUTPUT_SIZE) -> chess.Move:
     """Select the best legal move using the NEAT network (deterministic argmax)."""
@@ -197,27 +216,10 @@ def pick_move(network: SparseNetwork, board: chess.Board,
     if not legal_moves:
         raise ValueError("No legal moves available")
 
-    best_move = None
+    best_move = legal_moves[0]
     best_score = float("-inf")
-
     for move in legal_moves:
-        from_sq = move.from_square
-        to_sq = move.to_square
-
-        if output_size <= 128:
-            # Factored: score = outputs[from] + outputs[64 + to]
-            score = outputs[from_sq] + outputs[64 + to_sq]
-        elif output_size <= 384:
-            # Piece×dest: score = outputs[piece_type_idx * 64 + to]
-            piece = board.piece_at(from_sq)
-            piece_idx = (piece.piece_type - 1) if piece else 0
-            idx = piece_idx * 64 + to_sq
-            score = outputs[idx] if idx < len(outputs) else 0.0
-        else:
-            # Full 4096: score = outputs[from * 64 + to]
-            idx = from_sq * 64 + to_sq
-            score = outputs[idx] if idx < len(outputs) else 0.0
-
+        score = _score_move(move, board, outputs, output_size)
         if score > best_score:
             best_score = score
             best_move = move
@@ -237,24 +239,11 @@ def pick_move_ensemble(networks: list[SparseNetwork], board: chess.Board,
     if not legal_moves:
         raise ValueError("No legal moves available")
 
-    # Accumulate scores across all networks
     move_scores = [0.0] * len(legal_moves)
     for network in networks:
         outputs = network.forward(inputs)
         for i, move in enumerate(legal_moves):
-            from_sq = move.from_square
-            to_sq = move.to_square
-            if output_size <= 128:
-                score = outputs[from_sq] + outputs[64 + to_sq]
-            elif output_size <= 384:
-                piece = board.piece_at(from_sq)
-                piece_idx = (piece.piece_type - 1) if piece else 0
-                idx = piece_idx * 64 + to_sq
-                score = outputs[idx] if idx < len(outputs) else 0.0
-            else:
-                idx = from_sq * 64 + to_sq
-                score = outputs[idx] if idx < len(outputs) else 0.0
-            move_scores[i] += score
+            move_scores[i] += _score_move(move, board, outputs, output_size)
 
     best_idx = max(range(len(legal_moves)), key=lambda i: move_scores[i])
     return legal_moves[best_idx]

@@ -20,12 +20,13 @@ import chess_cpu
 import neat_ga
 
 from fitness import (
-    FITNESS_DEFAULTS,
     aggregate_game_stats,
+    blend_fitness,
     compute_fitness,
     compute_fitness_breakdown,
     compute_outcome_rates,
     compute_tournament_scores,
+    merge_fitness_weights,
 )
 
 
@@ -54,10 +55,7 @@ class NeatCPUTrainer:
         self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
 
         # Fitness weights (shared defaults from fitness.py, config-overridable)
-        self.fitness_weights = dict(FITNESS_DEFAULTS)
-        for key in FITNESS_DEFAULTS:
-            if key in config:
-                self.fitness_weights[key] = config[key]
+        self.fitness_weights = merge_fitness_weights(config)
 
         # NEAT config for Rust
         self.neat_config = {
@@ -281,12 +279,12 @@ class NeatCPUTrainer:
         """
         n_test = min(10, self.pop_size)
 
-        # Sort by fitness to get top individuals
-        w_order = sorted(range(self.pop_size), key=lambda i: white_fitness[i], reverse=True)
-        b_order = sorted(range(self.pop_size), key=lambda i: black_fitness[i], reverse=True)
+        # O(n) heap-select instead of O(n log n) sort
+        w_top_idx = heapq.nlargest(n_test, range(self.pop_size), key=lambda i: white_fitness[i])
+        b_top_idx = heapq.nlargest(n_test, range(self.pop_size), key=lambda i: black_fitness[i])
 
-        top_white = [white_pop[i] for i in w_order[:n_test]]
-        top_black = [black_pop[i] for i in b_order[:n_test]]
+        top_white = [white_pop[i] for i in w_top_idx]
+        top_black = [black_pop[i] for i in b_top_idx]
 
         # White evolved vs random benchmark (as black)
         w_pairings = [(w, b) for w in range(n_test) for b in range(self.benchmark_size)]
@@ -733,8 +731,8 @@ class NeatCPUTrainer:
                 if bw > 0:
                     w_bench_fit = self._benchmark_fitness_all(white_pop, color=0)
                     b_bench_fit = self._benchmark_fitness_all(black_pop, color=1)
-                    white_fitness = [(1 - bw) * c + bw * b for c, b in zip(white_fitness, w_bench_fit, strict=True)]
-                    black_fitness = [(1 - bw) * c + bw * b for c, b in zip(black_fitness, b_bench_fit, strict=True)]
+                    white_fitness = blend_fitness(white_fitness, w_bench_fit, bw)
+                    black_fitness = blend_fitness(black_fitness, b_bench_fit, bw)
 
             gen_time = time.time() - gen_start
             total_games += num_games
@@ -745,22 +743,21 @@ class NeatCPUTrainer:
             if sf_w > 0 and self._stockfish_path and gen % self.sf_fitness_interval == 0:
                 sf_white_fit = self._compute_sf_fitness(white_pop, white_fitness, color=0)
                 sf_black_fit = self._compute_sf_fitness(black_pop, black_fitness, color=1)
-                white_fitness = [(1 - sf_w) * c + sf_w * s for c, s in zip(white_fitness, sf_white_fit, strict=True)]
-                black_fitness = [(1 - sf_w) * c + sf_w * s for c, s in zip(black_fitness, sf_black_fit, strict=True)]
+                white_fitness = blend_fitness(white_fitness, sf_white_fit, sf_w)
+                black_fitness = blend_fitness(black_fitness, sf_black_fit, sf_w)
                 sf_w_avg_cpl_fit = sum(sf_white_fit) / max(1, sum(1 for f in sf_white_fit if f > 0))
                 sf_b_avg_cpl_fit = sum(sf_black_fit) / max(1, sum(1 for f in sf_black_fit if f > 0))
 
-            # Parsimony pressure: penalize complexity (enabled connections)
+            # Parsimony pressure: penalize complexity (enabled connections).
+            # Use fast string count instead of full JSON parse per genome.
+            # Rust serde produces "enabled":true (compact), Python json.dumps
+            # produces "enabled": true (with space). Count both.
             cc = self.neat_config.get("complexity_cost", 0.0)
             if cc > 0:
                 for i, gj in enumerate(white_pop):
-                    g = json.loads(gj)
-                    n_conns = sum(1 for c in g["connections"] if c["enabled"])
-                    white_fitness[i] -= cc * n_conns
+                    white_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
                 for i, gj in enumerate(black_pop):
-                    g = json.loads(gj)
-                    n_conns = sum(1 for c in g["connections"] if c["enabled"])
-                    black_fitness[i] -= cc * n_conns
+                    black_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
 
             # Tournament scores
             if use_curriculum:
