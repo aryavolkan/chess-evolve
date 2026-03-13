@@ -170,6 +170,20 @@ CHESS_LOG_KEYS = [
     # Stockfish fitness signal
     "sf_fitness_white_avg",
     "sf_fitness_black_avg",
+    # Curriculum
+    "curriculum_stage",
+    # Puzzle metrics (stage 0)
+    "puzzle_white_accuracy_best",
+    "puzzle_white_accuracy_avg",
+    "puzzle_black_accuracy_best",
+    "puzzle_black_accuracy_avg",
+    "puzzle_accuracy_best",
+    "puzzle_white_soft_score_best",
+    "puzzle_white_soft_score_avg",
+    "puzzle_black_soft_score_best",
+    "puzzle_black_soft_score_avg",
+    "puzzle_soft_score_best",
+    "puzzle_max_rating",
 ]
 
 

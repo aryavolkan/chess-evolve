@@ -472,3 +472,168 @@ pub fn simulate_neat_games_batch(
         })
         .collect()
 }
+
+/// Result of a single puzzle evaluation.
+pub struct PuzzleResult {
+    pub genome_idx: usize,
+    pub correct: u32,
+    pub total: u32,
+    /// Soft score: sum of per-puzzle rank-based scores (0.0 to total).
+    /// Each puzzle contributes 1.0 if correct, else (n_legal - rank) / n_legal
+    /// where rank is the 0-indexed position of the correct move when sorted by
+    /// network output (higher output = lower rank). Gives smooth evolutionary
+    /// signal instead of binary correct/wrong.
+    pub soft_score: f32,
+}
+
+/// Parse a UCI move string (e.g. "e2e4") into the internal move encoding.
+/// Searches legal moves for a matching from-to pair.
+fn uci_to_legal_move(uci: &str, legal_moves: &[u32]) -> Option<u32> {
+    if uci.len() < 4 {
+        return None;
+    }
+    let bytes = uci.as_bytes();
+    let from_file = (bytes[0] - b'a') as u32;
+    let from_rank = (bytes[1] - b'1') as u32;
+    let to_file = (bytes[2] - b'a') as u32;
+    let to_rank = (bytes[3] - b'1') as u32;
+    let from_sq = from_rank * 8 + from_file;
+    let to_sq = to_rank * 8 + to_file;
+
+    legal_moves
+        .iter()
+        .find(|&&m| (m >> 6) & 0x3f == from_sq && m & 0x3f == to_sq)
+        .copied()
+}
+
+/// Score a single legal move using the appropriate output encoding.
+fn score_move(mv: u32, output: &[f32], output_size: usize, board: &ChessBoard) -> f32 {
+    let from = ((mv >> 6) & 0x3f) as usize;
+    let to = (mv & 0x3f) as usize;
+    if output_size <= 128 {
+        // Factored: from-score + to-score
+        let fs = if from < output.len() { output[from] } else { 0.0 };
+        let ts = if 64 + to < output.len() { output[64 + to] } else { 0.0 };
+        fs + ts
+    } else if output_size <= 384 {
+        // Piece × destination
+        let piece_abs = board.piece_at(from).unsigned_abs() as usize;
+        let piece_idx = if (1..=6).contains(&piece_abs) { piece_abs - 1 } else { 0 };
+        let idx = piece_idx * 64 + to;
+        if idx < output.len() { output[idx] } else { 0.0 }
+    } else {
+        // Full 4096 from×to
+        let idx = from * 64 + to;
+        if idx < output.len() { output[idx] } else { 0.0 }
+    }
+}
+
+/// Evaluate a batch of NEAT genomes on chess puzzles in parallel.
+///
+/// Each puzzle is a (FEN, best_move_uci) pair. Each genome is scored on how
+/// many puzzles it solves (picks the correct move). Returns per-genome scores
+/// with both binary `correct` count and continuous `soft_score`.
+pub fn evaluate_puzzles_batch(
+    genomes_json: &[String],
+    fens: &[String],
+    best_moves: &[String],
+    output_size: usize,
+) -> Vec<PuzzleResult> {
+    let input_size = 389;
+    let total = fens.len() as u32;
+
+    // Pre-parse all puzzle positions
+    let puzzles: Vec<_> = fens
+        .iter()
+        .zip(best_moves.iter())
+        .filter_map(|(fen, uci)| {
+            let board = ChessBoard::from_fen(fen)?;
+            Some((board, uci.clone()))
+        })
+        .collect();
+    let actual_total = puzzles.len() as u32;
+
+    genomes_json
+        .par_iter()
+        .enumerate()
+        .map(|(idx, json)| {
+            let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                let net = match SparseNetwork::from_genome_json(json) {
+                    Some(n) => n,
+                    None => {
+                        return PuzzleResult {
+                            genome_idx: idx,
+                            correct: 0,
+                            total: actual_total,
+                            soft_score: 0.0,
+                        };
+                    }
+                };
+
+                let mut inputs = vec![0.0f32; input_size];
+                let mut output = vec![0.0f32; output_size];
+                let mut activations = vec![0.0f32; net.node_count];
+                let mut pseudo_buf = Vec::with_capacity(256);
+                let mut correct = 0u32;
+                let mut soft_score = 0.0f32;
+
+                for (board, expected_uci) in &puzzles {
+                    // Encode position
+                    encode_board(board, &mut inputs);
+
+                    // Forward pass
+                    net.forward_into(&inputs, &mut activations, &mut output);
+
+                    // Get legal moves
+                    let legal_moves = board.get_legal_moves_with_buf(&mut pseudo_buf);
+                    if legal_moves.is_empty() {
+                        continue;
+                    }
+
+                    let expected = match uci_to_legal_move(expected_uci, &legal_moves) {
+                        Some(m) => m,
+                        None => continue,
+                    };
+
+                    // Score all legal moves
+                    let expected_score = score_move(expected, &output, output_size, board);
+
+                    // Count how many legal moves score strictly higher than the correct one
+                    let n_legal = legal_moves.len() as f32;
+                    let mut rank = 0u32; // 0 = best
+                    for &mv in &legal_moves {
+                        let s = score_move(mv, &output, output_size, board);
+                        if s > expected_score {
+                            rank += 1;
+                        }
+                    }
+
+                    if rank == 0 {
+                        // Correct move has highest (or tied-highest) score
+                        correct += 1;
+                        soft_score += 1.0;
+                    } else {
+                        // Partial credit: higher rank = more credit
+                        // rank=1 (2nd best) → (n-1)/n ≈ 0.97 for 30 moves
+                        // rank=n-1 (worst) → 1/n ≈ 0.03
+                        soft_score += (n_legal - rank as f32) / n_legal;
+                    }
+                }
+
+                PuzzleResult {
+                    genome_idx: idx,
+                    correct,
+                    total: actual_total,
+                    soft_score,
+                }
+            }));
+
+            result.unwrap_or(PuzzleResult {
+                genome_idx: idx,
+                correct: 0,
+                total,
+                soft_score: 0.0,
+            })
+        })
+        .collect()
+}

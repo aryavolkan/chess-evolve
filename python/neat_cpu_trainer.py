@@ -102,10 +102,21 @@ class NeatCPUTrainer:
         # Benchmark fitness blending: fraction of selection fitness from benchmark vs random
         self.benchmark_fitness_weight = config.get("benchmark_fitness_weight", 0.0)
 
-        # Curriculum learning: stage 0 = coevolution (default), stage 1 = vs random
-        self.curriculum_stage = config.get("curriculum_stage", 0)
+        # Curriculum learning: stage 0 = puzzles, stage 1 = vs random, default = coevo
+        self.curriculum_stage = config.get("curriculum_stage", -1)
         self.curriculum_random_opponents = config.get("curriculum_random_opponents", 30)
         self.curriculum_promotion_threshold = config.get("curriculum_promotion_threshold", 0.80)
+
+        # Stage 0: puzzle-based fitness
+        self.puzzle_max_rating = config.get("puzzle_max_rating", 800)
+        self.puzzle_count = config.get("puzzle_count", 500)
+        self.puzzle_rating_step = config.get("puzzle_rating_step", 200)
+        self.puzzle_rating_cap = config.get("puzzle_rating_cap", 2000)
+        self.puzzle_advance_threshold = config.get("puzzle_advance_threshold", 0.85)
+        self._w_puzzle_fens: list[str] = []
+        self._w_puzzle_moves: list[str] = []
+        self._b_puzzle_fens: list[str] = []
+        self._b_puzzle_moves: list[str] = []
 
         # Seed genome paths: if set, initialize population from saved best topology
         _seed = config.get("seed_genome_path", "")
@@ -211,6 +222,22 @@ class NeatCPUTrainer:
         bench_config["population_size"] = self.benchmark_size
         config_json = json.dumps(bench_config)
         return neat_ga.create_population(config_json)
+
+    def _load_puzzles(self, max_rating: int) -> None:
+        """Load puzzles split by side-to-move for Stage 0 training."""
+        from puzzles import load_puzzles
+        all_puzzles = load_puzzles(
+            max_rating=max_rating,
+            max_count=self.puzzle_count * 2,
+        )
+        w_puzzles = [p for p in all_puzzles if " w " in p["fen"]][:self.puzzle_count]
+        b_puzzles = [p for p in all_puzzles if " b " in p["fen"]][:self.puzzle_count]
+        self._w_puzzle_fens = [p["fen"] for p in w_puzzles]
+        self._w_puzzle_moves = [p["best_move"] for p in w_puzzles]
+        self._b_puzzle_fens = [p["fen"] for p in b_puzzles]
+        self._b_puzzle_moves = [p["best_move"] for p in b_puzzles]
+        self.puzzle_max_rating = max_rating
+        return len(w_puzzles), len(b_puzzles)
 
     def _init_random_opponents(self, count: int) -> list[str]:
         """Create a fixed pool of random NEAT genomes for curriculum training."""
@@ -649,13 +676,20 @@ class NeatCPUTrainer:
         white_config_json = config_json
         black_config_json = config_json
 
+        # Curriculum stage 0: load puzzles for puzzle-based fitness
+        curriculum_stage = self.curriculum_stage
+        if curriculum_stage == 0:
+            nw, nb = self._load_puzzles(self.puzzle_max_rating)
+            print(f"  Curriculum stage 0: {nw} white + {nb} black puzzles "
+                  f"(max_rating={self.puzzle_max_rating})")
+
         # Curriculum stage 1: create fixed random opponent pools
-        use_curriculum = self.curriculum_stage >= 1
-        if use_curriculum:
+        use_curriculum = curriculum_stage >= 1
+        if curriculum_stage >= 1:
             n_opp = self.curriculum_random_opponents
             curriculum_black_opp = self._init_random_opponents(n_opp)
             curriculum_white_opp = self._init_random_opponents(n_opp)
-            print(f"  Curriculum stage {self.curriculum_stage}: {n_opp} random opponents per color")
+            print(f"  Curriculum stage {curriculum_stage}: {n_opp} random opponents per color")
 
         last_metrics = {}
         total_games = 0
@@ -663,7 +697,36 @@ class NeatCPUTrainer:
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
 
-            if use_curriculum:
+            if curriculum_stage == 0:
+                # Stage 0: puzzle-based fitness only — no games
+                # White pop trains on white-to-move puzzles only,
+                # black pop on black-to-move puzzles only.
+                w_puzzle_results = chess_cpu.evaluate_puzzles_batch(
+                    white_pop, self._w_puzzle_fens, self._w_puzzle_moves,
+                    output_size=self.output_size,
+                )
+                b_puzzle_results = chess_cpu.evaluate_puzzles_batch(
+                    black_pop, self._b_puzzle_fens, self._b_puzzle_moves,
+                    output_size=self.output_size,
+                )
+
+                # Convert soft puzzle score to fitness: soft_score/total * 20
+                # soft_score gives continuous signal (rank-based partial credit)
+                # Scale of 20 matches the max game fitness (win_bonus + checkmate_bonus)
+                white_fitness = [
+                    r["soft_score"] / max(1, r["total"]) * 20.0
+                    for r in w_puzzle_results
+                ]
+                black_fitness = [
+                    r["soft_score"] / max(1, r["total"]) * 20.0
+                    for r in b_puzzle_results
+                ]
+
+                # No game results in puzzle mode
+                results = []
+                num_games = 0
+
+            elif use_curriculum:
                 # Stage 1: each individual plays all random opponents
                 # White pop (as white) vs random black opponents
                 w_pairings = [(w, b) for w in range(self.pop_size)
@@ -760,7 +823,9 @@ class NeatCPUTrainer:
                     black_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
 
             # Tournament scores
-            if use_curriculum:
+            if curriculum_stage == 0:
+                pass  # already set above
+            elif use_curriculum:
                 white_tourn = self._compute_tournament_scores(w_results, self.pop_size, color=0)
                 black_tourn = self._compute_tournament_scores(b_results, self.pop_size, color=1)
             else:
@@ -792,33 +857,45 @@ class NeatCPUTrainer:
             black_config_json = b_result["config"]
             b_stats = b_result["stats"]
 
-            # Outcome rates
-            if use_curriculum:
+            # Outcome rates and game stats
+            if curriculum_stage == 0:
+                w_win, w_draw, w_loss = 0.0, 0.0, 0.0
+                b_win, b_draw, b_loss = 0.0, 0.0, 0.0
+                total_moves, w_mat_avg, b_mat_avg = 0, 0.0, 0.0
+                avg_game_length = 0.0
+                games_per_sec = 0.0
+                moves_per_sec = 0.0
+                _empty_bd = {
+                    "outcome": 0, "material": 0, "mobility": 0,
+                    "king_safety": 0, "opp_king_safety": 0,
+                    "king_danger": 0, "captures": 0, "move_penalty": 0,
+                }
+                w_breakdown = _empty_bd
+                b_breakdown = _empty_bd
+                white_tourn = [0.0] * self.pop_size
+                black_tourn = [0.0] * self.pop_size
+            elif use_curriculum:
                 w_win, w_draw, w_loss = self._compute_outcome_rates(w_results, color=0)
                 b_win, b_draw, b_loss = self._compute_outcome_rates(b_results, color=1)
+                total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
+                avg_game_length = total_moves / max(1, num_games)
+                games_per_sec = num_games / max(0.001, gen_time)
+                moves_per_sec = total_moves / max(0.001, gen_time)
+                w_breakdown = self._compute_fitness_breakdown(w_results, color=0)
+                b_breakdown = self._compute_fitness_breakdown(b_results, color=1)
             else:
                 w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
                 b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
-
-            # Aggregate game stats in a single pass
-            total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
-            avg_game_length = total_moves / max(1, num_games)
-
-            # Games/moves per second
-            games_per_sec = num_games / max(0.001, gen_time)
-            moves_per_sec = total_moves / max(0.001, gen_time)
+                total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
+                avg_game_length = total_moves / max(1, num_games)
+                games_per_sec = num_games / max(0.001, gen_time)
+                moves_per_sec = total_moves / max(0.001, gen_time)
+                w_breakdown = self._compute_fitness_breakdown(results, color=0)
+                b_breakdown = self._compute_fitness_breakdown(results, color=1)
 
             # Genome complexity stats
             avg_conns = (w_stats["avg_connections"] + b_stats["avg_connections"]) / 2
             avg_nodes = (w_stats["avg_nodes"] + b_stats["avg_nodes"]) / 2
-
-            # Fitness component breakdowns
-            if use_curriculum:
-                w_breakdown = self._compute_fitness_breakdown(w_results, color=0)
-                b_breakdown = self._compute_fitness_breakdown(b_results, color=1)
-            else:
-                w_breakdown = self._compute_fitness_breakdown(results, color=0)
-                b_breakdown = self._compute_fitness_breakdown(results, color=1)
 
             # Benchmark vs random
             w_bench_wr, w_bench_mat, b_bench_wr, b_bench_mat = self._benchmark_vs_random(
@@ -906,11 +983,59 @@ class NeatCPUTrainer:
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
                 "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
-                "curriculum_stage": self.curriculum_stage,
+                "curriculum_stage": curriculum_stage,
             }
 
+            # Puzzle-specific metrics for stage 0
+            if curriculum_stage == 0:
+                w_accs = [r["correct"] / max(1, r["total"]) for r in w_puzzle_results]
+                b_accs = [r["correct"] / max(1, r["total"]) for r in b_puzzle_results]
+                w_softs = [r["soft_score"] / max(1, r["total"]) for r in w_puzzle_results]
+                b_softs = [r["soft_score"] / max(1, r["total"]) for r in b_puzzle_results]
+                metrics["puzzle_white_accuracy_best"] = max(w_accs)
+                metrics["puzzle_white_accuracy_avg"] = sum(w_accs) / len(w_accs)
+                metrics["puzzle_black_accuracy_best"] = max(b_accs)
+                metrics["puzzle_black_accuracy_avg"] = sum(b_accs) / len(b_accs)
+                metrics["puzzle_accuracy_best"] = max(
+                    metrics["puzzle_white_accuracy_best"],
+                    metrics["puzzle_black_accuracy_best"],
+                )
+                metrics["puzzle_white_soft_score_best"] = max(w_softs)
+                metrics["puzzle_white_soft_score_avg"] = sum(w_softs) / len(w_softs)
+                metrics["puzzle_black_soft_score_best"] = max(b_softs)
+                metrics["puzzle_black_soft_score_avg"] = sum(b_softs) / len(b_softs)
+                metrics["puzzle_soft_score_best"] = max(
+                    metrics["puzzle_white_soft_score_best"],
+                    metrics["puzzle_black_soft_score_best"],
+                )
+                metrics["puzzle_max_rating"] = self.puzzle_max_rating
+
             # Curriculum promotion check
-            if use_curriculum:
+            if curriculum_stage == 0:
+                best_soft = metrics.get("puzzle_soft_score_best", 0.0)
+
+                # Advance to harder puzzles when soft score is high enough
+                if (best_soft >= self.puzzle_advance_threshold
+                        and self.puzzle_max_rating < self.puzzle_rating_cap):
+                    new_rating = min(
+                        self.puzzle_max_rating + self.puzzle_rating_step,
+                        self.puzzle_rating_cap,
+                    )
+                    nw, nb = self._load_puzzles(new_rating)
+                    print(f"  Puzzle difficulty up! max_rating {self.puzzle_max_rating - self.puzzle_rating_step}"
+                          f" -> {self.puzzle_max_rating} ({nw}w + {nb}b puzzles)")
+
+                # Promote to stage 1 when at cap and still scoring high
+                elif (best_soft >= self.puzzle_advance_threshold
+                      and self.puzzle_max_rating >= self.puzzle_rating_cap):
+                    curriculum_stage = 1
+                    use_curriculum = True
+                    n_opp = self.curriculum_random_opponents
+                    curriculum_black_opp = self._init_random_opponents(n_opp)
+                    curriculum_white_opp = self._init_random_opponents(n_opp)
+                    print(f"  Curriculum promotion 0->1! soft_score={best_soft:.1%} at "
+                          f"max_rating={self.puzzle_max_rating}")
+            elif use_curriculum:
                 bench_wr = (w_bench_wr + b_bench_wr) / 2
                 if bench_wr >= self.curriculum_promotion_threshold:
                     print(f"  🎓 Curriculum promotion! bench_avg_win_rate={bench_wr:.1%} "
