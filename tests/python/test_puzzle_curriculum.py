@@ -53,9 +53,9 @@ class TestPuzzleCurriculumConfig:
             trainer = NeatCPUTrainer(config, f.name)
 
         assert trainer.curriculum_stage == 0
-        assert trainer.puzzle_batch_size == 50
-        assert trainer.puzzle_accuracy_threshold == 0.5
-        assert trainer.puzzle_temperature == 0.1
+        assert trainer.puzzle_count == 500
+        assert trainer.puzzle_max_rating == 800
+        assert trainer.puzzle_advance_threshold == 0.85
 
     def test_puzzle_config_override(self):
         """Verify puzzle config can be overridden."""
@@ -67,21 +67,21 @@ class TestPuzzleCurriculumConfig:
         config = {
             "population_size": 5,
             "output_size": 128,
-            "curriculum_stage": 1,
-            "puzzle_batch_size": 100,
-            "puzzle_accuracy_threshold": 0.7,
-            "puzzle_temperature": 0.05,
+            "curriculum_stage": 0,
+            "puzzle_count": 100,
+            "puzzle_max_rating": 1200,
+            "puzzle_advance_threshold": 0.7,
         }
         with tempfile.NamedTemporaryFile(suffix=".jsonl") as f:
             trainer = NeatCPUTrainer(config, f.name)
 
-        assert trainer.puzzle_batch_size == 100
-        assert trainer.puzzle_accuracy_threshold == 0.7
-        assert trainer.puzzle_temperature == 0.05
+        assert trainer.puzzle_count == 100
+        assert trainer.puzzle_max_rating == 1200
+        assert trainer.puzzle_advance_threshold == 0.7
 
 
 class TestRustPuzzleEvaluator:
-    """Test the Rust puzzle evaluator directly."""
+    """Test the Rust puzzle evaluator (JSON-based) directly."""
 
     def test_evaluate_empty_puzzles(self):
         try:
@@ -89,7 +89,7 @@ class TestRustPuzzleEvaluator:
         except ImportError:
             pytest.skip("chess_cpu not available")
 
-        result = chess_cpu.evaluate_puzzles_batch(["{}", "{}"], "[]", output_size=384, temperature=0.1)
+        result = chess_cpu.evaluate_puzzles_json_batch(["{}", "{}"], "[]", output_size=384, temperature=0.1)
         assert len(result) == 2
         assert all(s == 0.0 for s in result)
 
@@ -99,7 +99,7 @@ class TestRustPuzzleEvaluator:
         except ImportError:
             pytest.skip("chess_cpu not available")
 
-        result = chess_cpu.evaluate_puzzles_batch(["{}"], "not json", output_size=384, temperature=0.1)
+        result = chess_cpu.evaluate_puzzles_json_batch(["{}"], "not json", output_size=384, temperature=0.1)
         assert len(result) == 1
         assert result[0] == 0.0
 
@@ -123,7 +123,7 @@ class TestRustPuzzleEvaluator:
         with open(sample_puzzles_file) as f:
             puzzles_json = f.read()
 
-        scores = chess_cpu.evaluate_puzzles_batch(
+        scores = chess_cpu.evaluate_puzzles_json_batch(
             genomes, puzzles_json, output_size=384, temperature=0.1,
         )
         assert len(scores) == 2
@@ -132,69 +132,34 @@ class TestRustPuzzleEvaluator:
             assert 0.0 <= s <= 1.0
 
 
-class TestPuzzleFitnessComputation:
-    """Test _compute_puzzle_fitness method."""
+class TestRustPuzzleEvaluatorFEN:
+    """Test the Rust FEN-based puzzle evaluator (with soft scoring)."""
 
-    def test_missing_puzzle_file(self):
-        """Fitness should be all zeros when puzzle file doesn't exist."""
-        try:
-            import neat_ga
-
-            from neat_cpu_trainer import NeatCPUTrainer
-        except ImportError:
-            pytest.skip("neat_cpu_trainer or neat_ga not importable")
-
-        config = {
-            "population_size": 3,
-            "output_size": 128,
-            "curriculum_stage": 0,
-            "puzzle_stage0_file": "/nonexistent/puzzles.json",
-        }
-        with tempfile.NamedTemporaryFile(suffix=".jsonl") as f:
-            trainer = NeatCPUTrainer(config, f.name)
-
-        pop_config = json.dumps({
-            "input_count": 389, "output_count": 128,
-            "population_size": 3, "initial_connections_per_output": 1,
-        })
-        pop = neat_ga.create_population(pop_config)
-        fitness = trainer._compute_puzzle_fitness(pop, stage=0)
-        assert len(fitness) == 3
-        assert all(f == 0.0 for f in fitness)
-
-    def test_with_puzzles(self, sample_puzzles_file):
-        """Fitness should be non-negative with valid puzzles.
-
-        Uses chess_cpu.evaluate_puzzles_batch directly to avoid mock
-        interference from test_neat_cpu_trainer which injects a mock
-        chess_cpu into sys.modules.
-        """
+    def test_evaluate_with_fen_puzzles(self):
+        """Test FEN-based evaluate_puzzles_batch returns dict results."""
         try:
             import chess_cpu
             import neat_ga
         except ImportError:
             pytest.skip("chess_cpu or neat_ga not available")
 
-        # Skip if chess_cpu is mocked by test_neat_cpu_trainer
-        if not callable(getattr(chess_cpu, "evaluate_puzzles_batch", None)):
-            pytest.skip("chess_cpu.evaluate_puzzles_batch not available (module mocked)")
-
-        pop_config = json.dumps({
-            "input_count": 389, "output_count": 384,
-            "population_size": 3, "initial_connections_per_output": 1,
+        config = json.dumps({
+            "input_count": 389,
+            "output_count": 384,
+            "population_size": 2,
+            "initial_connections_per_output": 1,
         })
-        genomes = neat_ga.create_population(pop_config)
+        genomes = neat_ga.create_population(config)
 
-        # If neat_ga is also mocked, genomes will be dummy strings
-        if genomes == ["{}"] * len(genomes):
-            pytest.skip("neat_ga is mocked")
+        fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        best_move = "e2e4"
 
-        with open(sample_puzzles_file) as f:
-            puzzles_json = f.read()
-
-        scores = chess_cpu.evaluate_puzzles_batch(
-            genomes, puzzles_json, output_size=384, temperature=0.1,
+        results = chess_cpu.evaluate_puzzles_batch(
+            genomes, [fen], [best_move], output_size=384,
         )
-        assert len(scores) == 3
-        for s in scores:
-            assert 0.0 <= s <= 1.0
+        assert len(results) == 2
+        for r in results:
+            assert "correct" in r
+            assert "total" in r
+            assert "soft_score" in r
+            assert 0.0 <= r["soft_score"] <= 1.0
