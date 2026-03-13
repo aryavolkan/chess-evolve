@@ -20,6 +20,92 @@ FITNESS_DEFAULTS = {
 }
 
 
+def merge_fitness_weights(config: dict) -> dict:
+    """Build fitness weights dict from FITNESS_DEFAULTS, overridden by config."""
+    weights = dict(FITNESS_DEFAULTS)
+    for key in FITNESS_DEFAULTS:
+        if key in config:
+            weights[key] = config[key]
+    return weights
+
+
+def blend_fitness(
+    base: list[float], other: list[float], weight: float,
+) -> list[float]:
+    """Blend two fitness lists: (1-weight)*base + weight*other."""
+    w1 = 1.0 - weight
+    return [w1 * b + weight * o for b, o in zip(base, other, strict=True)]
+
+
+def _extract_game_data(game: dict, color: int) -> tuple:
+    """Extract per-color game data. Returns (idx, my_mat, opp_mat, my_ks, opp_ks,
+    my_mob, opp_mob, my_kd, my_cap, result, move_count, is_win, is_loss)."""
+    if color == 0:
+        idx = game["white_idx"]
+        my_mat = game["white_material"]
+        opp_mat = game["black_material"]
+        my_ks = game["white_king_safety"]
+        opp_ks = game["black_king_safety"]
+        my_mob = game["white_mobility"]
+        opp_mob = game["black_mobility"]
+        my_kd = game.get("white_king_danger", 0.0)
+        my_cap = game.get("white_captures_value", 0.0)
+    else:
+        idx = game["black_idx"]
+        my_mat = game["black_material"]
+        opp_mat = game["white_material"]
+        my_ks = game["black_king_safety"]
+        opp_ks = game["white_king_safety"]
+        my_mob = game["black_mobility"]
+        opp_mob = game["white_mobility"]
+        my_kd = game.get("black_king_danger", 0.0)
+        my_cap = game.get("black_captures_value", 0.0)
+
+    result = game["result"]
+    move_count = game["move_count"]
+    is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
+    is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
+
+    return (idx, my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+            my_kd, my_cap, result, move_count, is_win, is_loss)
+
+
+def _score_game(
+    my_mat: float, opp_mat: float, my_ks: float, opp_ks: float,
+    my_mob: float, opp_mob: float, my_kd: float, my_cap: float,
+    result: int, move_count: int, is_win: bool, is_loss: bool,
+    w: dict,
+) -> tuple[float, dict[str, float]]:
+    """Score a single game. Returns (total_fitness, component_breakdown)."""
+    # Outcome
+    if result == 2:
+        mat_adv = max(-1.0, min(1.0, (my_mat - opp_mat) / 10.0))
+        outcome = w["draw_bonus"] * (0.5 + 0.5 * mat_adv)
+    elif is_win:
+        outcome = w["win_bonus"] + w["checkmate_bonus"]
+    elif is_loss:
+        outcome = w["loss_penalty"]
+    else:
+        outcome = 0.0
+
+    material = (my_mat - opp_mat) * w["material_weight"]
+    mobility = (my_mob - opp_mob) * w["mobility_weight"]
+    king_safety = my_ks * w["king_safety_weight"]
+    opp_king_safety = -opp_ks * w["opp_king_safety_weight"]
+    king_danger = my_kd * w["king_danger_weight"]
+    captures = my_cap * w["capture_weight"]
+    move_penalty = move_count * w["move_count_penalty"]
+
+    total = outcome + material + mobility + king_safety + opp_king_safety + king_danger + captures + move_penalty
+
+    breakdown = {
+        "outcome": outcome, "material": material, "mobility": mobility,
+        "king_safety": king_safety, "opp_king_safety": opp_king_safety,
+        "king_danger": king_danger, "captures": captures, "move_penalty": move_penalty,
+    }
+    return total, breakdown
+
+
 def compute_fitness(
     results: list[dict],
     pop_size: int,
@@ -40,62 +126,14 @@ def compute_fitness(
     fitness = [0.0] * pop_size
     game_counts = [0] * pop_size
 
-    win_bonus = weights["win_bonus"]
-    draw_bonus = weights["draw_bonus"]
-    loss_penalty = weights["loss_penalty"]
-    checkmate_bonus = weights["checkmate_bonus"]
-    material_weight = weights["material_weight"]
-    mobility_weight = weights["mobility_weight"]
-    king_safety_weight = weights["king_safety_weight"]
-    opp_king_safety_weight = weights["opp_king_safety_weight"]
-    king_danger_weight = weights["king_danger_weight"]
-    capture_weight = weights["capture_weight"]
-    move_count_penalty = weights["move_count_penalty"]
-
     for game in results:
-        if color == 0:
-            idx = game["white_idx"]
-            my_material = game["white_material"]
-            opp_material = game["black_material"]
-            my_king_safety = game["white_king_safety"]
-            opp_king_safety = game["black_king_safety"]
-            my_mobility = game["white_mobility"]
-            opp_mobility = game["black_mobility"]
-            my_king_danger = game.get("white_king_danger", 0.0)
-            my_captures = game.get("white_captures_value", 0.0)
-        else:
-            idx = game["black_idx"]
-            my_material = game["black_material"]
-            opp_material = game["white_material"]
-            my_king_safety = game["black_king_safety"]
-            opp_king_safety = game["white_king_safety"]
-            my_mobility = game["black_mobility"]
-            opp_mobility = game["white_mobility"]
-            my_king_danger = game.get("black_king_danger", 0.0)
-            my_captures = game.get("black_captures_value", 0.0)
+        (idx, my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+         my_kd, my_cap, result, move_count, is_win, is_loss) = _extract_game_data(game, color)
 
-        result = game["result"]
-        move_count = game["move_count"]
-        f = 0.0
-
-        is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-        is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
-
-        if result == 2:
-            mat_adv = max(-1.0, min(1.0, (my_material - opp_material) / 10.0))
-            f += draw_bonus * (0.5 + 0.5 * mat_adv)
-        elif is_win:
-            f += win_bonus + checkmate_bonus
-        elif is_loss:
-            f += loss_penalty
-
-        f += (my_material - opp_material) * material_weight
-        f += (my_mobility - opp_mobility) * mobility_weight
-        f += my_king_safety * king_safety_weight
-        f -= opp_king_safety * opp_king_safety_weight
-        f += my_king_danger * king_danger_weight
-        f += my_captures * capture_weight
-        f += move_count * move_count_penalty
+        f, _ = _score_game(
+            my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+            my_kd, my_cap, result, move_count, is_win, is_loss, weights,
+        )
 
         fitness[idx] += f
         game_counts[idx] += 1
@@ -123,42 +161,16 @@ def compute_fitness_breakdown(
         return totals
 
     for game in results:
-        if color == 0:
-            my_mat = game["white_material"]
-            opp_mat = game["black_material"]
-            my_ks = game["white_king_safety"]
-            opp_ks = game["black_king_safety"]
-            my_mob = game["white_mobility"]
-            opp_mob = game["black_mobility"]
-        else:
-            my_mat = game["black_material"]
-            opp_mat = game["white_material"]
-            my_ks = game["black_king_safety"]
-            opp_ks = game["white_king_safety"]
-            my_mob = game["black_mobility"]
-            opp_mob = game["white_mobility"]
+        (_, my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+         my_kd, my_cap, result, move_count, is_win, is_loss) = _extract_game_data(game, color)
 
-        result = game["result"]
-        is_win = (result == 1 and color == 0) or (result == -1 and color == 1)
-        is_loss = (result == -1 and color == 0) or (result == 1 and color == 1)
+        _, breakdown = _score_game(
+            my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+            my_kd, my_cap, result, move_count, is_win, is_loss, weights,
+        )
 
-        if result == 2:
-            mat_adv = max(-1.0, min(1.0, (my_mat - opp_mat) / 10.0))
-            totals["outcome"] += weights["draw_bonus"] * (0.5 + 0.5 * mat_adv)
-        elif is_win:
-            totals["outcome"] += weights["win_bonus"] + weights["checkmate_bonus"]
-        elif is_loss:
-            totals["outcome"] += weights["loss_penalty"]
-
-        totals["material"] += (my_mat - opp_mat) * weights["material_weight"]
-        totals["mobility"] += (my_mob - opp_mob) * weights["mobility_weight"]
-        totals["king_safety"] += my_ks * weights["king_safety_weight"]
-        totals["opp_king_safety"] -= opp_ks * weights["opp_king_safety_weight"]
-        kd_key = "white_king_danger" if color == 0 else "black_king_danger"
-        totals["king_danger"] += game.get(kd_key, 0.0) * weights["king_danger_weight"]
-        cap_key = "white_captures_value" if color == 0 else "black_captures_value"
-        totals["captures"] += game.get(cap_key, 0.0) * weights["capture_weight"]
-        totals["move_penalty"] += game["move_count"] * weights["move_count_penalty"]
+        for k, v in breakdown.items():
+            totals[k] += v
 
     return {k: v / n for k, v in totals.items()}
 
