@@ -19,13 +19,16 @@ import pytest
 # polluting sys.modules for other test files.
 # ---------------------------------------------------------------------------
 
-_injected = []
+# Save any real modules so we can restore them after import
+_saved_modules = {}
+for _name in ("chess_cpu", "neat_ga", "evolve_ga"):
+    if _name in sys.modules:
+        _saved_modules[_name] = sys.modules[_name]
 
 _chess_cpu_mock = types.ModuleType("chess_cpu")
 _chess_cpu_mock.simulate_neat_games_batch = MagicMock(return_value=[])
-if "chess_cpu" not in sys.modules:
-    sys.modules["chess_cpu"] = _chess_cpu_mock
-    _injected.append("chess_cpu")
+_chess_cpu_mock.evaluate_puzzles_batch = MagicMock(return_value=[])
+sys.modules["chess_cpu"] = _chess_cpu_mock
 
 _neat_ga_mock = types.ModuleType("neat_ga")
 _neat_ga_mock.create_population = MagicMock(return_value=["{}"] * 20)
@@ -47,19 +50,20 @@ _neat_ga_mock.evolve_neat_generation = MagicMock(
         "stats": {"avg_connections": 10, "avg_nodes": 400, "species_count": 3, "avg_depth": 2, "avg_width": 5},
     }
 )
-if "neat_ga" not in sys.modules:
-    sys.modules["neat_ga"] = _neat_ga_mock
-    _injected.append("neat_ga")
+sys.modules["neat_ga"] = _neat_ga_mock
 
-if "evolve_ga" not in sys.modules:
-    sys.modules["evolve_ga"] = types.ModuleType("evolve_ga")
-    _injected.append("evolve_ga")
+sys.modules["evolve_ga"] = types.ModuleType("evolve_ga")
 
+# Force-reload neat_cpu_trainer so it picks up our mocks
+sys.modules.pop("neat_cpu_trainer", None)
 from neat_cpu_trainer import NeatCPUTrainer  # noqa: E402
 
-# Clean up mocks so other test files can detect real modules as missing
-for _mod in _injected:
-    sys.modules.pop(_mod, None)
+# Restore real modules so other test files can use them
+for _name, _mod in _saved_modules.items():
+    sys.modules[_name] = _mod
+for _name in ("chess_cpu", "neat_ga", "evolve_ga"):
+    if _name not in _saved_modules:
+        sys.modules.pop(_name, None)
 
 
 # ---------------------------------------------------------------------------

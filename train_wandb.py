@@ -81,6 +81,12 @@ DEFAULT_CONFIG = {
     "sf_fitness_weight": 0.4,       # stronger SF signal for better gradient
     "sf_fitness_interval": 1,       # every generation for consistent signal
     "sf_fitness_top_n": 50,         # test top 50 genomes per color
+    # Puzzle curriculum
+    "puzzle_stage0_file": "data/puzzles/stage0_puzzles.json",
+    "puzzle_stage1_file": "data/puzzles/stage1_puzzles.json",
+    "puzzle_batch_size": 50,
+    "puzzle_accuracy_threshold": 0.5,
+    "puzzle_temperature": 0.1,
 }
 
 _PROJECT_PATH_DEFAULT = next(

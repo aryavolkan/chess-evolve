@@ -739,8 +739,52 @@ impl ChessBoard {
     }
 }
 
-fn encode_move(from: u32, to: u32, flags: u32) -> u32 {
+pub fn encode_move(from: u32, to: u32, flags: u32) -> u32 {
     (from << 6) | to | flags
+}
+
+/// Parse a UCI move string (e.g. "e2e4", "e7e8q") into internal move encoding.
+///
+/// Detects promotion (always queen in this engine) and en passant based on board state.
+/// Returns None if the string is malformed.
+pub fn uci_to_move(uci: &str, board: &ChessBoard) -> Option<u32> {
+    let bytes = uci.as_bytes();
+    if bytes.len() < 4 {
+        return None;
+    }
+    let from_file = bytes[0].wrapping_sub(b'a') as usize;
+    let from_rank = bytes[1].wrapping_sub(b'1') as usize;
+    let to_file = bytes[2].wrapping_sub(b'a') as usize;
+    let to_rank = bytes[3].wrapping_sub(b'1') as usize;
+
+    if from_file >= 8 || from_rank >= 8 || to_file >= 8 || to_rank >= 8 {
+        return None;
+    }
+
+    let from_sq = square(from_file, from_rank);
+    let to_sq = square(to_file, to_rank);
+
+    let mut flags = 0u32;
+    let piece = board.piece_at(from_sq);
+    let abs_p = piece.abs();
+
+    // Promotion (e.g. "e7e8q") — always promote to queen in this engine
+    if abs_p == PIECE_PAWN
+        && ((board.side_to_move == 0 && to_rank == 7)
+            || (board.side_to_move == 1 && to_rank == 0))
+    {
+        flags |= MOVE_FLAG_PROMOTE;
+    }
+
+    // En passant: pawn captures to the en passant square
+    if abs_p == PIECE_PAWN
+        && board.en_passant_sq >= 0
+        && to_sq == board.en_passant_sq as usize
+    {
+        flags |= MOVE_FLAG_EN_PASSANT;
+    }
+
+    Some(encode_move(from_sq as u32, to_sq as u32, flags))
 }
 
 fn file_of(sq: usize) -> usize {
