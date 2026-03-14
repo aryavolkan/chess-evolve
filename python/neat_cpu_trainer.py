@@ -7,6 +7,7 @@ Drop-in replacement for CPUTrainer when use_neat=True.
 """
 from __future__ import annotations
 
+import fcntl
 import heapq
 import json
 import os
@@ -153,73 +154,95 @@ class NeatCPUTrainer:
             print("  Stockfish not found; sf_bench disabled")
 
     def _load_seed(self) -> dict | None:
-        """Load seed genomes from file if it exists."""
+        """Load seed genomes from file if it exists (shared-locked for concurrency)."""
         if self.seed_genome_path and self.seed_genome_path.exists():
             try:
-                return json.loads(self.seed_genome_path.read_text())
+                with open(self.seed_genome_path) as f:
+                    fcntl.flock(f, fcntl.LOCK_SH)
+                    return json.loads(f.read())
             except (json.JSONDecodeError, OSError) as e:
                 print(f"  Warning: could not load seed genome: {e}")
         return None
 
     def _save_best(self, white_pop: list[str], black_pop: list[str],
                    white_fitness: list[float], black_fitness: list[float],
-                   bench_w_wr: float, bench_b_wr: float):
-        """Save best white and black genomes independently when each improves."""
-        prev = {}
-        if self.save_genome_path.exists():
-            try:
-                prev = json.loads(self.save_genome_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
+                   bench_w_wr: float, bench_b_wr: float,
+                   curriculum_stage: int = -1):
+        """Save best genomes with file locking for multi-worker safety.
 
-        prev_w_wr = prev.get("bench_white_win_rate", 0.0)
-        prev_b_wr = prev.get("bench_black_win_rate", 0.0)
+        Uses exclusive flock to prevent concurrent corruption. In puzzle stages,
+        saves based on puzzle fitness instead of benchmark win rate.
+        """
+        try:
+            with open(self.save_genome_path, "a+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.seek(0)
+                raw = f.read()
+                prev = json.loads(raw) if raw.strip() else {}
 
-        w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
-        b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
+                w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
+                b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
 
-        updated = False
-        if bench_w_wr > prev_w_wr:
-            prev["white"] = white_pop[w_best_idx]
-            prev["bench_white_win_rate"] = bench_w_wr
-            print(f"  White seed updated: bench_wr={bench_w_wr:.3f} (was {prev_w_wr:.3f})")
-            updated = True
-        else:
-            print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
+                if curriculum_stage == 0:
+                    # Puzzle stage: save based on puzzle fitness, not benchmark
+                    w_score = max(white_fitness)
+                    b_score = max(black_fitness)
+                    prev_w = prev.get("puzzle_white_best_score", 0.0)
+                    prev_b = prev.get("puzzle_black_best_score", 0.0)
+                    if w_score > prev_w:
+                        prev["white"] = white_pop[w_best_idx]
+                        prev["puzzle_white_best_score"] = w_score
+                        print(f"  White seed updated: puzzle_score={w_score:.3f} (was {prev_w:.3f})")
+                    else:
+                        print(f"  White seed kept: puzzle_score={w_score:.3f} <= existing {prev_w:.3f}")
+                    if b_score > prev_b:
+                        prev["black"] = black_pop[b_best_idx]
+                        prev["puzzle_black_best_score"] = b_score
+                        print(f"  Black seed updated: puzzle_score={b_score:.3f} (was {prev_b:.3f})")
+                    else:
+                        print(f"  Black seed kept: puzzle_score={b_score:.3f} <= existing {prev_b:.3f}")
+                else:
+                    # Game stages: save based on benchmark win rate
+                    prev_w_wr = prev.get("bench_white_win_rate", 0.0)
+                    prev_b_wr = prev.get("bench_black_win_rate", 0.0)
+                    if bench_w_wr > prev_w_wr:
+                        prev["white"] = white_pop[w_best_idx]
+                        prev["bench_white_win_rate"] = bench_w_wr
+                        print(f"  White seed updated: bench_wr={bench_w_wr:.3f} (was {prev_w_wr:.3f})")
+                    else:
+                        print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
+                    if bench_b_wr > prev_b_wr:
+                        prev["black"] = black_pop[b_best_idx]
+                        prev["bench_black_win_rate"] = bench_b_wr
+                        print(f"  Black seed updated: bench_wr={bench_b_wr:.3f} (was {prev_b_wr:.3f})")
+                    else:
+                        print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
-        if bench_b_wr > prev_b_wr:
-            prev["black"] = black_pop[b_best_idx]
-            prev["bench_black_win_rate"] = bench_b_wr
-            print(f"  Black seed updated: bench_wr={bench_b_wr:.3f} (was {prev_b_wr:.3f})")
-            updated = True
-        else:
-            print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
+                # Merge current HoF with previously saved HoF, keep top pop_size by fitness
+                for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
+                    merged: dict[str, float] = {}
+                    for fitness, genome_json in hof:
+                        if genome_json not in merged or fitness > merged[genome_json]:
+                            merged[genome_json] = fitness
+                    for genome_json in prev.get(color_key, []):
+                        if genome_json not in merged:
+                            merged[genome_json] = float("-inf")
+                    ranked = sorted(merged.items(), key=lambda x: -x[1])[:self.pop_size]
+                    prev[color_key] = [genome for genome, _ in ranked]
 
-        # Merge current HoF with previously saved HoF, keep top pop_size by fitness
-        for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
-            # Current run's HoF: list of (fitness, genome_json)
-            merged: dict[str, float] = {}
-            for fitness, genome_json in hof:
-                if genome_json not in merged or fitness > merged[genome_json]:
-                    merged[genome_json] = fitness
-            # Previously saved HoF has no fitness scores; use -inf so
-            # current-run genomes win ties but old ones fill remaining slots
-            for genome_json in prev.get(color_key, []):
-                if genome_json not in merged:
-                    merged[genome_json] = float("-inf")
-            # Sort by fitness descending, keep enough to seed a full population
-            ranked = sorted(merged.items(), key=lambda x: -x[1])[:self.pop_size]
-            prev[color_key] = [genome for genome, _ in ranked]
-        updated = True  # HoF update always triggers save
+                # Persist puzzle progress and curriculum stage
+                prev["puzzle_max_rating"] = self.puzzle_max_rating
+                prev["curriculum_stage"] = curriculum_stage
 
-        if updated:
-            prev["bench_avg_win_rate"] = (
-                prev.get("bench_white_win_rate", 0.0) + prev.get("bench_black_win_rate", 0.0)
-            ) / 2
-            try:
-                self.save_genome_path.write_text(json.dumps(prev))
-            except OSError as e:
-                print(f"  Warning: could not save best genomes: {e}")
+                prev["bench_avg_win_rate"] = (
+                    prev.get("bench_white_win_rate", 0.0) + prev.get("bench_black_win_rate", 0.0)
+                ) / 2
+
+                f.seek(0)
+                f.truncate()
+                f.write(json.dumps(prev))
+        except OSError as e:
+            print(f"  Warning: could not save best genomes: {e}")
 
     def _init_benchmark(self) -> list[str]:
         """Create a fixed random NEAT population for absolute progress measurement."""
@@ -685,6 +708,12 @@ class NeatCPUTrainer:
         # Curriculum stage 0: load puzzles for puzzle-based fitness
         curriculum_stage = self.curriculum_stage
         if curriculum_stage == 0:
+            # Restore puzzle progress from seed if available
+            if seed:
+                saved_rating = seed.get("puzzle_max_rating", self.puzzle_max_rating)
+                if saved_rating > self.puzzle_max_rating:
+                    self.puzzle_max_rating = saved_rating
+                    print(f"  Restored puzzle progress: max_rating={saved_rating}")
             nw, nb = self._load_puzzles(self.puzzle_max_rating)
             print(f"  Curriculum stage 0: {nw} white + {nb} black puzzles "
                   f"(max_rating={self.puzzle_max_rating})")
@@ -1081,6 +1110,7 @@ class NeatCPUTrainer:
         # Save best genomes for seeding next run
         self._save_best(white_pop, black_pop, white_fitness, black_fitness,
                         last_metrics.get("bench_white_win_rate", 0),
-                        last_metrics.get("bench_black_win_rate", 0))
+                        last_metrics.get("bench_black_win_rate", 0),
+                        curriculum_stage=curriculum_stage)
 
         return last_metrics
