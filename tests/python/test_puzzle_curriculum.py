@@ -55,7 +55,7 @@ class TestPuzzleCurriculumConfig:
         assert trainer.curriculum_stage == 0
         assert trainer.puzzle_count == 500
         assert trainer.puzzle_max_rating == 800
-        assert trainer.puzzle_advance_threshold == 0.85
+        assert trainer.puzzle_advance_threshold == 0.75
 
     def test_puzzle_config_override(self):
         """Verify puzzle config can be overridden."""

@@ -9,16 +9,29 @@ parameters:
   output_size:
     value: 384
   max_generations:
-    value: 200
+    value: 300
   max_moves_per_game:
     value: 100
   # Stage 0: puzzle-only fitness
   curriculum_stage:
     value: 0
   puzzle_max_rating:
-    values: [600, 800, 1000]
+    values: [600, 800]
   puzzle_count:
     values: [200, 500]
+  puzzle_rating_step:
+    value: 100
+  puzzle_advance_threshold:
+    value: 0.75
+  puzzle_accuracy_weight:
+    distribution: uniform
+    min: 0.3
+    max: 0.5
+  puzzle_themes:
+    values:
+      - ["mateIn1", "fork", "pin", "hangingPiece"]
+      - ["mateIn1", "fork", "pin", "hangingPiece", "skewer", "discoveredAttack"]
+      - null
   curriculum_promotion_threshold:
     value: 0.80
   # Population

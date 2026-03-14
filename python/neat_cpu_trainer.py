@@ -110,9 +110,14 @@ class NeatCPUTrainer:
         # Stage 0: puzzle-based fitness
         self.puzzle_max_rating = config.get("puzzle_max_rating", 800)
         self.puzzle_count = config.get("puzzle_count", 500)
-        self.puzzle_rating_step = config.get("puzzle_rating_step", 200)
+        self.puzzle_rating_step = config.get("puzzle_rating_step", 100)
         self.puzzle_rating_cap = config.get("puzzle_rating_cap", 2000)
-        self.puzzle_advance_threshold = config.get("puzzle_advance_threshold", 0.85)
+        self.puzzle_advance_threshold = config.get("puzzle_advance_threshold", 0.75)
+        self.puzzle_accuracy_weight = config.get("puzzle_accuracy_weight", 0.4)
+        self.puzzle_themes: set[str] | None = None
+        _themes = config.get("puzzle_themes")
+        if _themes:
+            self.puzzle_themes = set(_themes) if isinstance(_themes, list) else {_themes}
         self._w_puzzle_fens: list[str] = []
         self._w_puzzle_moves: list[str] = []
         self._b_puzzle_fens: list[str] = []
@@ -229,6 +234,7 @@ class NeatCPUTrainer:
         all_puzzles = load_puzzles(
             max_rating=max_rating,
             max_count=self.puzzle_count * 2,
+            themes=self.puzzle_themes,
         )
         w_puzzles = [p for p in all_puzzles if " w " in p["fen"]][:self.puzzle_count]
         b_puzzles = [p for p in all_puzzles if " b " in p["fen"]][:self.puzzle_count]
@@ -710,15 +716,19 @@ class NeatCPUTrainer:
                     output_size=self.output_size,
                 )
 
-                # Convert soft puzzle score to fitness: soft_score/total * 20
-                # soft_score gives continuous signal (rank-based partial credit)
+                # Blended puzzle fitness: mix soft_score (rank-based) with accuracy (exact match)
+                # accuracy_weight=0.4 means 40% exact-match, 60% soft ranking
+                # This pushes evolution toward actually solving puzzles, not just ranking well
                 # Scale of 20 matches the max game fitness (win_bonus + checkmate_bonus)
+                aw = self.puzzle_accuracy_weight
                 white_fitness = [
-                    r["soft_score"] / max(1, r["total"]) * 20.0
+                    ((1 - aw) * r["soft_score"] / max(1, r["total"])
+                     + aw * r["correct"] / max(1, r["total"])) * 20.0
                     for r in w_puzzle_results
                 ]
                 black_fitness = [
-                    r["soft_score"] / max(1, r["total"]) * 20.0
+                    ((1 - aw) * r["soft_score"] / max(1, r["total"])
+                     + aw * r["correct"] / max(1, r["total"])) * 20.0
                     for r in b_puzzle_results
                 ]
 
