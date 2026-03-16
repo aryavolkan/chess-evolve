@@ -746,18 +746,19 @@ class NeatCPUTrainer:
                 )
 
                 # Blended puzzle fitness: mix soft_score (rank-based) with accuracy (exact match)
-                # accuracy_weight=0.4 means 40% exact-match, 60% soft ranking
-                # This pushes evolution toward actually solving puzzles, not just ranking well
+                # Higher accuracy_weight pushes evolution toward actually solving puzzles
+                # Soft score provides gradient when accuracy is near zero
                 # Scale of 20 matches the max game fitness (win_bonus + checkmate_bonus)
                 aw = self.puzzle_accuracy_weight
+                scale = 20.0
                 white_fitness = [
                     ((1 - aw) * r["soft_score"] / max(1, r["total"])
-                     + aw * r["correct"] / max(1, r["total"])) * 20.0
+                     + aw * r["correct"] / max(1, r["total"])) * scale
                     for r in w_puzzle_results
                 ]
                 black_fitness = [
                     ((1 - aw) * r["soft_score"] / max(1, r["total"])
-                     + aw * r["correct"] / max(1, r["total"])) * 20.0
+                     + aw * r["correct"] / max(1, r["total"])) * scale
                     for r in b_puzzle_results
                 ]
 
@@ -1051,10 +1052,12 @@ class NeatCPUTrainer:
 
             # Curriculum promotion check
             if curriculum_stage == 0:
-                best_soft = metrics.get("puzzle_soft_score_best", 0.0)
+                best_accuracy = metrics.get("puzzle_accuracy_best", 0.0)
 
-                # Advance to harder puzzles when soft score is high enough
-                if (best_soft >= self.puzzle_advance_threshold
+                # Advance to harder puzzles when accuracy is high enough
+                # Use accuracy (exact match) not soft_score — soft_score gives
+                # partial credit for "close" moves which advances too easily
+                if (best_accuracy >= self.puzzle_advance_threshold
                         and self.puzzle_max_rating < self.puzzle_rating_cap):
                     new_rating = min(
                         self.puzzle_max_rating + self.puzzle_rating_step,
@@ -1065,14 +1068,14 @@ class NeatCPUTrainer:
                           f" -> {self.puzzle_max_rating} ({nw}w + {nb}b puzzles)")
 
                 # Promote to stage 1 when at cap and still scoring high
-                elif (best_soft >= self.puzzle_advance_threshold
+                elif (best_accuracy >= self.puzzle_advance_threshold
                       and self.puzzle_max_rating >= self.puzzle_rating_cap):
                     curriculum_stage = 1
                     use_curriculum = True
                     n_opp = self.curriculum_random_opponents
                     curriculum_black_opp = self._init_random_opponents(n_opp)
                     curriculum_white_opp = self._init_random_opponents(n_opp)
-                    print(f"  Curriculum promotion 0->1! soft_score={best_soft:.1%} at "
+                    print(f"  Curriculum promotion 0->1! accuracy={best_accuracy:.1%} at "
                           f"max_rating={self.puzzle_max_rating}")
             elif use_curriculum:
                 bench_wr = (w_bench_wr + b_bench_wr) / 2
