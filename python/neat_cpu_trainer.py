@@ -124,6 +124,12 @@ class NeatCPUTrainer:
         self._b_puzzle_fens: list[str] = []
         self._b_puzzle_moves: list[str] = []
 
+        # Fixed benchmark puzzle set for global puzzle evaluation.
+        # Spans all difficulties so scores are comparable across runs.
+        self._bench_puzzle_fens: list[str] = []
+        self._bench_puzzle_moves: list[str] = []
+        self._init_benchmark_puzzles()
+
         # Seed genome paths: if set, initialize population from saved best topology
         _seed = config.get("seed_genome_path", "")
         self.seed_genome_path = Path(_seed) if _seed else None
@@ -167,11 +173,12 @@ class NeatCPUTrainer:
     def _save_best(self, white_pop: list[str], black_pop: list[str],
                    white_fitness: list[float], black_fitness: list[float],
                    bench_w_wr: float, bench_b_wr: float,
-                   curriculum_stage: int = -1):
+                   curriculum_stage: int = -1,
+                   puzzle_bench_w: float = 0.0, puzzle_bench_b: float = 0.0):
         """Save best genomes with file locking for multi-worker safety.
 
         Uses exclusive flock to prevent concurrent corruption. In puzzle stages,
-        saves based on puzzle fitness instead of benchmark win rate.
+        saves based on global puzzle benchmark accuracy (comparable across runs).
         """
         try:
             with open(self.save_genome_path, "a+") as f:
@@ -184,23 +191,21 @@ class NeatCPUTrainer:
                 b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
 
                 if curriculum_stage == 0:
-                    # Puzzle stage: save based on puzzle fitness, not benchmark
-                    w_score = max(white_fitness)
-                    b_score = max(black_fitness)
-                    prev_w = prev.get("puzzle_white_best_score", 0.0)
-                    prev_b = prev.get("puzzle_black_best_score", 0.0)
-                    if w_score > prev_w:
+                    # Puzzle stage: save based on global benchmark puzzle accuracy
+                    prev_w = prev.get("puzzle_bench_white_accuracy", 0.0)
+                    prev_b = prev.get("puzzle_bench_black_accuracy", 0.0)
+                    if puzzle_bench_w > prev_w:
                         prev["white"] = white_pop[w_best_idx]
-                        prev["puzzle_white_best_score"] = w_score
-                        print(f"  White seed updated: puzzle_score={w_score:.3f} (was {prev_w:.3f})")
+                        prev["puzzle_bench_white_accuracy"] = puzzle_bench_w
+                        print(f"  White seed updated: puzzle_bench_acc={puzzle_bench_w:.3f} (was {prev_w:.3f})")
                     else:
-                        print(f"  White seed kept: puzzle_score={w_score:.3f} <= existing {prev_w:.3f}")
-                    if b_score > prev_b:
+                        print(f"  White seed kept: puzzle_bench_acc={puzzle_bench_w:.3f} <= existing {prev_w:.3f}")
+                    if puzzle_bench_b > prev_b:
                         prev["black"] = black_pop[b_best_idx]
-                        prev["puzzle_black_best_score"] = b_score
-                        print(f"  Black seed updated: puzzle_score={b_score:.3f} (was {prev_b:.3f})")
+                        prev["puzzle_bench_black_accuracy"] = puzzle_bench_b
+                        print(f"  Black seed updated: puzzle_bench_acc={puzzle_bench_b:.3f} (was {prev_b:.3f})")
                     else:
-                        print(f"  Black seed kept: puzzle_score={b_score:.3f} <= existing {prev_b:.3f}")
+                        print(f"  Black seed kept: puzzle_bench_acc={puzzle_bench_b:.3f} <= existing {prev_b:.3f}")
                 else:
                     # Game stages: save based on benchmark win rate
                     prev_w_wr = prev.get("bench_white_win_rate", 0.0)
@@ -267,6 +272,52 @@ class NeatCPUTrainer:
         self._b_puzzle_moves = [p["best_move"] for p in b_puzzles]
         self.puzzle_max_rating = max_rating
         return len(w_puzzles), len(b_puzzles)
+
+    def _init_benchmark_puzzles(self):
+        """Load a fixed benchmark puzzle set spanning all difficulty levels.
+
+        Uses 100 puzzles (50 white-to-move, 50 black-to-move) from rating
+        400-1600, sampled deterministically so all workers use the same set.
+        """
+        try:
+            from puzzles import load_puzzles
+            # Load a broad set spanning difficulties — no theme filter
+            all_puzzles = load_puzzles(max_rating=1600, min_popularity=90, max_count=200)
+            w = [p for p in all_puzzles if " w " in p["fen"]][:50]
+            b = [p for p in all_puzzles if " b " in p["fen"]][:50]
+            bench = w + b
+            self._bench_puzzle_fens = [p["fen"] for p in bench]
+            self._bench_puzzle_moves = [p["best_move"] for p in bench]
+            print(f"  Puzzle benchmark: {len(bench)} puzzles (rating ≤1600)")
+        except Exception as e:
+            print(f"  ⚠ Could not load benchmark puzzles: {e}")
+
+    def _evaluate_puzzle_benchmark(
+        self, white_pop: list[str], black_pop: list[str],
+        white_fitness: list[float], black_fitness: list[float],
+    ) -> tuple[float, float]:
+        """Evaluate best genomes on the fixed benchmark puzzle set.
+
+        Returns (white_accuracy, black_accuracy) as fractions 0.0-1.0.
+        """
+        if not self._bench_puzzle_fens:
+            return 0.0, 0.0
+
+        w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
+        b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
+
+        w_results = chess_cpu.evaluate_puzzles_batch(
+            [white_pop[w_best_idx]], self._bench_puzzle_fens, self._bench_puzzle_moves,
+            output_size=self.output_size,
+        )
+        b_results = chess_cpu.evaluate_puzzles_batch(
+            [black_pop[b_best_idx]], self._bench_puzzle_fens, self._bench_puzzle_moves,
+            output_size=self.output_size,
+        )
+
+        w_acc = w_results[0]["correct"] / max(1, w_results[0]["total"]) if w_results else 0.0
+        b_acc = b_results[0]["correct"] / max(1, b_results[0]["total"]) if b_results else 0.0
+        return w_acc, b_acc
 
     def _init_random_opponents(self, count: int) -> list[str]:
         """Create a fixed pool of random NEAT genomes for curriculum training."""
@@ -951,6 +1002,15 @@ class NeatCPUTrainer:
                 )
                 print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f} w_cpl={sf_w_cpl:.0f} b_cpl={sf_b_cpl:.0f}")
 
+            # Puzzle benchmark (every sf_bench_interval gens, reuse the same interval)
+            pb_w_gen, pb_b_gen = 0.0, 0.0
+            bench_interval = max(1, self.sf_bench_interval)
+            if curriculum_stage == 0 and gen % bench_interval == 0:
+                pb_w_gen, pb_b_gen = self._evaluate_puzzle_benchmark(
+                    white_pop, black_pop, white_fitness, black_fitness,
+                )
+                print(f"  Puzzle bench: w_acc={pb_w_gen:.1%} b_acc={pb_b_gen:.1%}")
+
             # Cache fitness extremes to avoid redundant recomputation
             w_best = max(white_fitness)
             b_best = max(black_fitness)
@@ -1049,6 +1109,10 @@ class NeatCPUTrainer:
                     metrics["puzzle_black_soft_score_best"],
                 )
                 metrics["puzzle_max_rating"] = self.puzzle_max_rating
+                if pb_w_gen > 0 or pb_b_gen > 0:
+                    metrics["puzzle_bench_white_accuracy"] = pb_w_gen
+                    metrics["puzzle_bench_black_accuracy"] = pb_b_gen
+                    metrics["puzzle_bench_accuracy"] = (pb_w_gen + pb_b_gen) / 2
 
             # Curriculum promotion check
             if curriculum_stage == 0:
@@ -1110,10 +1174,18 @@ class NeatCPUTrainer:
 
             last_metrics = metrics
 
+        # Evaluate on global puzzle benchmark before saving
+        pb_w, pb_b = self._evaluate_puzzle_benchmark(
+            white_pop, black_pop, white_fitness, black_fitness,
+        )
+        if pb_w > 0 or pb_b > 0:
+            print(f"  Puzzle benchmark: w_acc={pb_w:.1%} b_acc={pb_b:.1%}")
+
         # Save best genomes for seeding next run
         self._save_best(white_pop, black_pop, white_fitness, black_fitness,
                         last_metrics.get("bench_white_win_rate", 0),
                         last_metrics.get("bench_black_win_rate", 0),
-                        curriculum_stage=curriculum_stage)
+                        curriculum_stage=curriculum_stage,
+                        puzzle_bench_w=pb_w, puzzle_bench_b=pb_b)
 
         return last_metrics
