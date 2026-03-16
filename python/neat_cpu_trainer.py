@@ -199,15 +199,36 @@ class NeatCPUTrainer:
                         prev["puzzle_bench_white_accuracy"] = puzzle_bench_w
                         print(f"  White seed updated: puzzle_bench_acc={puzzle_bench_w:.3f} (was {prev_w:.3f})")
                     else:
-                        print(f"  White seed kept: puzzle_bench_acc={puzzle_bench_w:.3f} <= existing {prev_w:.3f}")
+                        # Challenge fallback: beat HoF to prove strength
+                        hof_b = prev.get("black_hof", [])
+                        if hof_b:
+                            wr = self._challenge_hof(white_pop[w_best_idx], 0, hof_b)
+                            if wr > 0.5:
+                                prev["white"] = white_pop[w_best_idx]
+                                prev["puzzle_bench_white_accuracy"] = puzzle_bench_w
+                                print(f"  White seed updated via HoF challenge: wr={wr:.1%} (bench_acc={puzzle_bench_w:.3f})")
+                            else:
+                                print(f"  White seed kept: bench_acc={puzzle_bench_w:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  White seed kept: puzzle_bench_acc={puzzle_bench_w:.3f} <= existing {prev_w:.3f}")
                     if puzzle_bench_b > prev_b:
                         prev["black"] = black_pop[b_best_idx]
                         prev["puzzle_bench_black_accuracy"] = puzzle_bench_b
                         print(f"  Black seed updated: puzzle_bench_acc={puzzle_bench_b:.3f} (was {prev_b:.3f})")
                     else:
-                        print(f"  Black seed kept: puzzle_bench_acc={puzzle_bench_b:.3f} <= existing {prev_b:.3f}")
+                        hof_w = prev.get("white_hof", [])
+                        if hof_w:
+                            wr = self._challenge_hof(black_pop[b_best_idx], 1, hof_w)
+                            if wr > 0.5:
+                                prev["black"] = black_pop[b_best_idx]
+                                prev["puzzle_bench_black_accuracy"] = puzzle_bench_b
+                                print(f"  Black seed updated via HoF challenge: wr={wr:.1%} (bench_acc={puzzle_bench_b:.3f})")
+                            else:
+                                print(f"  Black seed kept: bench_acc={puzzle_bench_b:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  Black seed kept: puzzle_bench_acc={puzzle_bench_b:.3f} <= existing {prev_b:.3f}")
                 else:
-                    # Game stages: save based on benchmark win rate
+                    # Game stages: save based on benchmark win rate, with HoF challenge fallback
                     prev_w_wr = prev.get("bench_white_win_rate", 0.0)
                     prev_b_wr = prev.get("bench_black_win_rate", 0.0)
                     if bench_w_wr > prev_w_wr:
@@ -215,13 +236,33 @@ class NeatCPUTrainer:
                         prev["bench_white_win_rate"] = bench_w_wr
                         print(f"  White seed updated: bench_wr={bench_w_wr:.3f} (was {prev_w_wr:.3f})")
                     else:
-                        print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
+                        hof_b = prev.get("black_hof", [])
+                        if hof_b:
+                            wr = self._challenge_hof(white_pop[w_best_idx], 0, hof_b)
+                            if wr > 0.5:
+                                prev["white"] = white_pop[w_best_idx]
+                                prev["bench_white_win_rate"] = bench_w_wr
+                                print(f"  White seed updated via HoF challenge: wr={wr:.1%} (bench_wr={bench_w_wr:.3f})")
+                            else:
+                                print(f"  White seed kept: bench_wr={bench_w_wr:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
                     if bench_b_wr > prev_b_wr:
                         prev["black"] = black_pop[b_best_idx]
                         prev["bench_black_win_rate"] = bench_b_wr
                         print(f"  Black seed updated: bench_wr={bench_b_wr:.3f} (was {prev_b_wr:.3f})")
                     else:
-                        print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
+                        hof_w = prev.get("white_hof", [])
+                        if hof_w:
+                            wr = self._challenge_hof(black_pop[b_best_idx], 1, hof_w)
+                            if wr > 0.5:
+                                prev["black"] = black_pop[b_best_idx]
+                                prev["bench_black_win_rate"] = bench_b_wr
+                                print(f"  Black seed updated via HoF challenge: wr={wr:.1%} (bench_wr={bench_b_wr:.3f})")
+                            else:
+                                print(f"  Black seed kept: bench_wr={bench_b_wr:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
                 # Merge current HoF with previously saved HoF, keep top pop_size by fitness
                 for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
@@ -248,6 +289,37 @@ class NeatCPUTrainer:
                 f.write(json.dumps(prev))
         except OSError as e:
             print(f"  Warning: could not save best genomes: {e}")
+
+    def _challenge_hof(self, challenger: str, color: int,
+                       hof_genomes: list[str], n_opponents: int = 10) -> float:
+        """Play a challenger genome against HoF opponents, return win rate.
+
+        Used as a fallback when benchmark metrics are stale — if the challenger
+        beats the existing HoF, it's genuinely stronger.
+        """
+        if not hof_genomes:
+            return 1.0  # No opponents to beat, auto-win
+        opponents = hof_genomes[:n_opponents]
+        n_opp = len(opponents)
+        if color == 0:
+            # Challenger plays white vs HoF blacks
+            pairings = [(0, b) for b in range(n_opp)]
+            results = chess_cpu.simulate_neat_games_batch(
+                [challenger], opponents, pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+            )
+            wins = sum(1 for r in results if r["result"] == 1)
+        else:
+            # Challenger plays black vs HoF whites
+            pairings = [(w, 0) for w in range(n_opp)]
+            results = chess_cpu.simulate_neat_games_batch(
+                opponents, [challenger], pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+            )
+            wins = sum(1 for r in results if r["result"] == -1)
+        return wins / max(1, len(results))
 
     def _init_benchmark(self) -> list[str]:
         """Create a fixed random NEAT population for absolute progress measurement."""
