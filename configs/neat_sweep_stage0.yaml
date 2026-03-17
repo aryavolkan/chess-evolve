@@ -22,11 +22,13 @@ parameters:
   puzzle_rating_step:
     value: 100
   puzzle_advance_threshold:
-    value: 0.75
+    distribution: uniform
+    min: 0.30
+    max: 0.50
   puzzle_accuracy_weight:
     distribution: uniform
-    min: 0.3
-    max: 0.5
+    min: 0.5
+    max: 0.8
   puzzle_themes:
     values:
       - ["mateIn1", "fork", "pin", "hangingPiece"]
@@ -56,7 +58,7 @@ parameters:
   add_connection_count:
     values: [3, 5]
   initial_connections_per_output:
-    value: 1
+    values: [3, 5]
   # NEAT speciation
   target_species_count:
     values: [5, 10]

@@ -190,6 +190,10 @@ CHESS_LOG_KEYS = [
     "puzzle_black_soft_score_avg",
     "puzzle_soft_score_best",
     "puzzle_max_rating",
+    # Puzzle benchmark (global, comparable across runs)
+    "puzzle_bench_white_accuracy",
+    "puzzle_bench_black_accuracy",
+    "puzzle_bench_accuracy",
 ]
 
 

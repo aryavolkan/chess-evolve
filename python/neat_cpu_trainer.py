@@ -124,6 +124,12 @@ class NeatCPUTrainer:
         self._b_puzzle_fens: list[str] = []
         self._b_puzzle_moves: list[str] = []
 
+        # Fixed benchmark puzzle set for global puzzle evaluation.
+        # Spans all difficulties so scores are comparable across runs.
+        self._bench_puzzle_fens: list[str] = []
+        self._bench_puzzle_moves: list[str] = []
+        self._init_benchmark_puzzles()
+
         # Seed genome paths: if set, initialize population from saved best topology
         _seed = config.get("seed_genome_path", "")
         self.seed_genome_path = Path(_seed) if _seed else None
@@ -167,11 +173,12 @@ class NeatCPUTrainer:
     def _save_best(self, white_pop: list[str], black_pop: list[str],
                    white_fitness: list[float], black_fitness: list[float],
                    bench_w_wr: float, bench_b_wr: float,
-                   curriculum_stage: int = -1):
+                   curriculum_stage: int = -1,
+                   puzzle_bench_w: float = 0.0, puzzle_bench_b: float = 0.0):
         """Save best genomes with file locking for multi-worker safety.
 
         Uses exclusive flock to prevent concurrent corruption. In puzzle stages,
-        saves based on puzzle fitness instead of benchmark win rate.
+        saves based on global puzzle benchmark accuracy (comparable across runs).
         """
         try:
             with open(self.save_genome_path, "a+") as f:
@@ -184,25 +191,44 @@ class NeatCPUTrainer:
                 b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
 
                 if curriculum_stage == 0:
-                    # Puzzle stage: save based on puzzle fitness, not benchmark
-                    w_score = max(white_fitness)
-                    b_score = max(black_fitness)
-                    prev_w = prev.get("puzzle_white_best_score", 0.0)
-                    prev_b = prev.get("puzzle_black_best_score", 0.0)
-                    if w_score > prev_w:
+                    # Puzzle stage: save based on global benchmark puzzle accuracy
+                    prev_w = prev.get("puzzle_bench_white_accuracy", 0.0)
+                    prev_b = prev.get("puzzle_bench_black_accuracy", 0.0)
+                    if puzzle_bench_w > prev_w:
                         prev["white"] = white_pop[w_best_idx]
-                        prev["puzzle_white_best_score"] = w_score
-                        print(f"  White seed updated: puzzle_score={w_score:.3f} (was {prev_w:.3f})")
+                        prev["puzzle_bench_white_accuracy"] = puzzle_bench_w
+                        print(f"  White seed updated: puzzle_bench_acc={puzzle_bench_w:.3f} (was {prev_w:.3f})")
                     else:
-                        print(f"  White seed kept: puzzle_score={w_score:.3f} <= existing {prev_w:.3f}")
-                    if b_score > prev_b:
+                        # Challenge fallback: beat HoF to prove strength
+                        hof_b = prev.get("black_hof", [])
+                        if hof_b:
+                            wr = self._challenge_hof(white_pop[w_best_idx], 0, hof_b)
+                            if wr > 0.5:
+                                prev["white"] = white_pop[w_best_idx]
+                                prev["puzzle_bench_white_accuracy"] = puzzle_bench_w
+                                print(f"  White seed updated via HoF challenge: wr={wr:.1%} (bench_acc={puzzle_bench_w:.3f})")
+                            else:
+                                print(f"  White seed kept: bench_acc={puzzle_bench_w:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  White seed kept: puzzle_bench_acc={puzzle_bench_w:.3f} <= existing {prev_w:.3f}")
+                    if puzzle_bench_b > prev_b:
                         prev["black"] = black_pop[b_best_idx]
-                        prev["puzzle_black_best_score"] = b_score
-                        print(f"  Black seed updated: puzzle_score={b_score:.3f} (was {prev_b:.3f})")
+                        prev["puzzle_bench_black_accuracy"] = puzzle_bench_b
+                        print(f"  Black seed updated: puzzle_bench_acc={puzzle_bench_b:.3f} (was {prev_b:.3f})")
                     else:
-                        print(f"  Black seed kept: puzzle_score={b_score:.3f} <= existing {prev_b:.3f}")
+                        hof_w = prev.get("white_hof", [])
+                        if hof_w:
+                            wr = self._challenge_hof(black_pop[b_best_idx], 1, hof_w)
+                            if wr > 0.5:
+                                prev["black"] = black_pop[b_best_idx]
+                                prev["puzzle_bench_black_accuracy"] = puzzle_bench_b
+                                print(f"  Black seed updated via HoF challenge: wr={wr:.1%} (bench_acc={puzzle_bench_b:.3f})")
+                            else:
+                                print(f"  Black seed kept: bench_acc={puzzle_bench_b:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  Black seed kept: puzzle_bench_acc={puzzle_bench_b:.3f} <= existing {prev_b:.3f}")
                 else:
-                    # Game stages: save based on benchmark win rate
+                    # Game stages: save based on benchmark win rate, with HoF challenge fallback
                     prev_w_wr = prev.get("bench_white_win_rate", 0.0)
                     prev_b_wr = prev.get("bench_black_win_rate", 0.0)
                     if bench_w_wr > prev_w_wr:
@@ -210,13 +236,33 @@ class NeatCPUTrainer:
                         prev["bench_white_win_rate"] = bench_w_wr
                         print(f"  White seed updated: bench_wr={bench_w_wr:.3f} (was {prev_w_wr:.3f})")
                     else:
-                        print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
+                        hof_b = prev.get("black_hof", [])
+                        if hof_b:
+                            wr = self._challenge_hof(white_pop[w_best_idx], 0, hof_b)
+                            if wr > 0.5:
+                                prev["white"] = white_pop[w_best_idx]
+                                prev["bench_white_win_rate"] = bench_w_wr
+                                print(f"  White seed updated via HoF challenge: wr={wr:.1%} (bench_wr={bench_w_wr:.3f})")
+                            else:
+                                print(f"  White seed kept: bench_wr={bench_w_wr:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  White seed kept: bench_wr={bench_w_wr:.3f} <= existing {prev_w_wr:.3f}")
                     if bench_b_wr > prev_b_wr:
                         prev["black"] = black_pop[b_best_idx]
                         prev["bench_black_win_rate"] = bench_b_wr
                         print(f"  Black seed updated: bench_wr={bench_b_wr:.3f} (was {prev_b_wr:.3f})")
                     else:
-                        print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
+                        hof_w = prev.get("white_hof", [])
+                        if hof_w:
+                            wr = self._challenge_hof(black_pop[b_best_idx], 1, hof_w)
+                            if wr > 0.5:
+                                prev["black"] = black_pop[b_best_idx]
+                                prev["bench_black_win_rate"] = bench_b_wr
+                                print(f"  Black seed updated via HoF challenge: wr={wr:.1%} (bench_wr={bench_b_wr:.3f})")
+                            else:
+                                print(f"  Black seed kept: bench_wr={bench_b_wr:.3f}, hof_wr={wr:.1%}")
+                        else:
+                            print(f"  Black seed kept: bench_wr={bench_b_wr:.3f} <= existing {prev_b_wr:.3f}")
 
                 # Merge current HoF with previously saved HoF, keep top pop_size by fitness
                 for color_key, hof in [("white_hof", self.white_hof), ("black_hof", self.black_hof)]:
@@ -244,6 +290,37 @@ class NeatCPUTrainer:
         except OSError as e:
             print(f"  Warning: could not save best genomes: {e}")
 
+    def _challenge_hof(self, challenger: str, color: int,
+                       hof_genomes: list[str], n_opponents: int = 10) -> float:
+        """Play a challenger genome against HoF opponents, return win rate.
+
+        Used as a fallback when benchmark metrics are stale — if the challenger
+        beats the existing HoF, it's genuinely stronger.
+        """
+        if not hof_genomes:
+            return 1.0  # No opponents to beat, auto-win
+        opponents = hof_genomes[:n_opponents]
+        n_opp = len(opponents)
+        if color == 0:
+            # Challenger plays white vs HoF blacks
+            pairings = [(0, b) for b in range(n_opp)]
+            results = chess_cpu.simulate_neat_games_batch(
+                [challenger], opponents, pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+            )
+            wins = sum(1 for r in results if r["result"] == 1)
+        else:
+            # Challenger plays black vs HoF whites
+            pairings = [(w, 0) for w in range(n_opp)]
+            results = chess_cpu.simulate_neat_games_batch(
+                opponents, [challenger], pairings,
+                output_size=self.output_size, max_moves=self.max_moves,
+                temperature=self.temperature,
+            )
+            wins = sum(1 for r in results if r["result"] == -1)
+        return wins / max(1, len(results))
+
     def _init_benchmark(self) -> list[str]:
         """Create a fixed random NEAT population for absolute progress measurement."""
         bench_config = dict(self.neat_config)
@@ -267,6 +344,52 @@ class NeatCPUTrainer:
         self._b_puzzle_moves = [p["best_move"] for p in b_puzzles]
         self.puzzle_max_rating = max_rating
         return len(w_puzzles), len(b_puzzles)
+
+    def _init_benchmark_puzzles(self):
+        """Load a fixed benchmark puzzle set spanning all difficulty levels.
+
+        Uses 100 puzzles (50 white-to-move, 50 black-to-move) from rating
+        400-1600, sampled deterministically so all workers use the same set.
+        """
+        try:
+            from puzzles import load_puzzles
+            # Load a broad set spanning difficulties — no theme filter
+            all_puzzles = load_puzzles(max_rating=1600, min_popularity=90, max_count=200)
+            w = [p for p in all_puzzles if " w " in p["fen"]][:50]
+            b = [p for p in all_puzzles if " b " in p["fen"]][:50]
+            bench = w + b
+            self._bench_puzzle_fens = [p["fen"] for p in bench]
+            self._bench_puzzle_moves = [p["best_move"] for p in bench]
+            print(f"  Puzzle benchmark: {len(bench)} puzzles (rating ≤1600)")
+        except Exception as e:
+            print(f"  ⚠ Could not load benchmark puzzles: {e}")
+
+    def _evaluate_puzzle_benchmark(
+        self, white_pop: list[str], black_pop: list[str],
+        white_fitness: list[float], black_fitness: list[float],
+    ) -> tuple[float, float]:
+        """Evaluate best genomes on the fixed benchmark puzzle set.
+
+        Returns (white_accuracy, black_accuracy) as fractions 0.0-1.0.
+        """
+        if not self._bench_puzzle_fens:
+            return 0.0, 0.0
+
+        w_best_idx = max(range(len(white_fitness)), key=lambda i: white_fitness[i])
+        b_best_idx = max(range(len(black_fitness)), key=lambda i: black_fitness[i])
+
+        w_results = chess_cpu.evaluate_puzzles_batch(
+            [white_pop[w_best_idx]], self._bench_puzzle_fens, self._bench_puzzle_moves,
+            output_size=self.output_size,
+        )
+        b_results = chess_cpu.evaluate_puzzles_batch(
+            [black_pop[b_best_idx]], self._bench_puzzle_fens, self._bench_puzzle_moves,
+            output_size=self.output_size,
+        )
+
+        w_acc = w_results[0]["correct"] / max(1, w_results[0]["total"]) if w_results else 0.0
+        b_acc = b_results[0]["correct"] / max(1, b_results[0]["total"]) if b_results else 0.0
+        return w_acc, b_acc
 
     def _init_random_opponents(self, count: int) -> list[str]:
         """Create a fixed pool of random NEAT genomes for curriculum training."""
@@ -746,18 +869,19 @@ class NeatCPUTrainer:
                 )
 
                 # Blended puzzle fitness: mix soft_score (rank-based) with accuracy (exact match)
-                # accuracy_weight=0.4 means 40% exact-match, 60% soft ranking
-                # This pushes evolution toward actually solving puzzles, not just ranking well
+                # Higher accuracy_weight pushes evolution toward actually solving puzzles
+                # Soft score provides gradient when accuracy is near zero
                 # Scale of 20 matches the max game fitness (win_bonus + checkmate_bonus)
                 aw = self.puzzle_accuracy_weight
+                scale = 20.0
                 white_fitness = [
                     ((1 - aw) * r["soft_score"] / max(1, r["total"])
-                     + aw * r["correct"] / max(1, r["total"])) * 20.0
+                     + aw * r["correct"] / max(1, r["total"])) * scale
                     for r in w_puzzle_results
                 ]
                 black_fitness = [
                     ((1 - aw) * r["soft_score"] / max(1, r["total"])
-                     + aw * r["correct"] / max(1, r["total"])) * 20.0
+                     + aw * r["correct"] / max(1, r["total"])) * scale
                     for r in b_puzzle_results
                 ]
 
@@ -950,6 +1074,15 @@ class NeatCPUTrainer:
                 )
                 print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f} w_cpl={sf_w_cpl:.0f} b_cpl={sf_b_cpl:.0f}")
 
+            # Puzzle benchmark (every sf_bench_interval gens, reuse the same interval)
+            pb_w_gen, pb_b_gen = 0.0, 0.0
+            bench_interval = max(1, self.sf_bench_interval)
+            if curriculum_stage == 0 and gen % bench_interval == 0:
+                pb_w_gen, pb_b_gen = self._evaluate_puzzle_benchmark(
+                    white_pop, black_pop, white_fitness, black_fitness,
+                )
+                print(f"  Puzzle bench: w_acc={pb_w_gen:.1%} b_acc={pb_b_gen:.1%}")
+
             # Cache fitness extremes to avoid redundant recomputation
             w_best = max(white_fitness)
             b_best = max(black_fitness)
@@ -1048,13 +1181,19 @@ class NeatCPUTrainer:
                     metrics["puzzle_black_soft_score_best"],
                 )
                 metrics["puzzle_max_rating"] = self.puzzle_max_rating
+                if pb_w_gen > 0 or pb_b_gen > 0:
+                    metrics["puzzle_bench_white_accuracy"] = pb_w_gen
+                    metrics["puzzle_bench_black_accuracy"] = pb_b_gen
+                    metrics["puzzle_bench_accuracy"] = (pb_w_gen + pb_b_gen) / 2
 
             # Curriculum promotion check
             if curriculum_stage == 0:
-                best_soft = metrics.get("puzzle_soft_score_best", 0.0)
+                best_accuracy = metrics.get("puzzle_accuracy_best", 0.0)
 
-                # Advance to harder puzzles when soft score is high enough
-                if (best_soft >= self.puzzle_advance_threshold
+                # Advance to harder puzzles when accuracy is high enough
+                # Use accuracy (exact match) not soft_score — soft_score gives
+                # partial credit for "close" moves which advances too easily
+                if (best_accuracy >= self.puzzle_advance_threshold
                         and self.puzzle_max_rating < self.puzzle_rating_cap):
                     new_rating = min(
                         self.puzzle_max_rating + self.puzzle_rating_step,
@@ -1065,14 +1204,14 @@ class NeatCPUTrainer:
                           f" -> {self.puzzle_max_rating} ({nw}w + {nb}b puzzles)")
 
                 # Promote to stage 1 when at cap and still scoring high
-                elif (best_soft >= self.puzzle_advance_threshold
+                elif (best_accuracy >= self.puzzle_advance_threshold
                       and self.puzzle_max_rating >= self.puzzle_rating_cap):
                     curriculum_stage = 1
                     use_curriculum = True
                     n_opp = self.curriculum_random_opponents
                     curriculum_black_opp = self._init_random_opponents(n_opp)
                     curriculum_white_opp = self._init_random_opponents(n_opp)
-                    print(f"  Curriculum promotion 0->1! soft_score={best_soft:.1%} at "
+                    print(f"  Curriculum promotion 0->1! accuracy={best_accuracy:.1%} at "
                           f"max_rating={self.puzzle_max_rating}")
             elif use_curriculum:
                 bench_wr = (w_bench_wr + b_bench_wr) / 2
@@ -1107,10 +1246,18 @@ class NeatCPUTrainer:
 
             last_metrics = metrics
 
+        # Evaluate on global puzzle benchmark before saving
+        pb_w, pb_b = self._evaluate_puzzle_benchmark(
+            white_pop, black_pop, white_fitness, black_fitness,
+        )
+        if pb_w > 0 or pb_b > 0:
+            print(f"  Puzzle benchmark: w_acc={pb_w:.1%} b_acc={pb_b:.1%}")
+
         # Save best genomes for seeding next run
         self._save_best(white_pop, black_pop, white_fitness, black_fitness,
                         last_metrics.get("bench_white_win_rate", 0),
                         last_metrics.get("bench_black_win_rate", 0),
-                        curriculum_stage=curriculum_stage)
+                        curriculum_stage=curriculum_stage,
+                        puzzle_bench_w=pb_w, puzzle_bench_b=pb_b)
 
         return last_metrics
