@@ -33,6 +33,20 @@ STAGES = [
 ]
 
 
+STAGE_WEIGHTS = [
+    # Stage 0: Puzzles — tactics focus
+    {"checkmate_bonus": 15.0, "material_weight": 0.5, "mobility_weight": 0.0, "king_danger_weight": 0.0, "draw_bonus": 0.0, "sf_fitness_weight": 0.0},
+    # Stage 1: Guided Play — don't blunder pieces
+    {"material_weight": 1.5, "mobility_weight": 0.5, "king_danger_weight": 0.5, "sf_fitness_weight": 0.0},
+    # Stage 2: Opponent Ladder — balanced
+    {"material_weight": 1.0, "mobility_weight": 0.3, "king_danger_weight": 1.0, "sf_fitness_weight": 0.0},
+    # Stage 3: SF Shaping — CPL ramps 0.2→0.5 over 20 gens
+    {"material_weight": 0.5, "mobility_weight": 0.1, "king_danger_weight": 0.5},
+    # Stage 4: Coevo Refinement — balanced with light SF validation
+    {"material_weight": 1.0, "mobility_weight": 0.3, "king_danger_weight": 1.0, "sf_fitness_weight": 0.1},
+]
+
+
 class CurriculumManager:
     """Manages curriculum stage, temperature schedule, and stage transitions."""
 
@@ -86,6 +100,16 @@ class CurriculumManager:
         self._consecutive_sf_cpl = 0
         self._ladder_tier = 0
         return True
+
+    def fitness_weights(self) -> dict:
+        """Get fitness weights for current stage, merged with defaults."""
+        from fitness import FITNESS_DEFAULTS
+        weights = dict(FITNESS_DEFAULTS)
+        weights.update(STAGE_WEIGHTS[self.stage])
+        if self.stage == 3:
+            progress = min(1.0, self.gen_in_stage / 20.0)
+            weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
+        return weights
 
     def tick_generation(self):
         """Call at end of each generation to update internal counters."""

@@ -50,3 +50,43 @@ def test_eval_temperature_always_zero():
     for stage in range(5):
         cm.stage = stage
         assert cm.eval_temperature() == 0.0
+
+
+def test_stage_weights_stage0_high_checkmate():
+    cm = CurriculumManager({})
+    cm.stage = 0
+    w = cm.fitness_weights()
+    assert w["checkmate_bonus"] == 15.0
+    assert w["mobility_weight"] == 0.0
+    assert w["sf_fitness_weight"] == 0.0
+
+
+def test_stage_weights_stage1_high_material():
+    cm = CurriculumManager({})
+    cm.stage = 1
+    w = cm.fitness_weights()
+    assert w["material_weight"] == 1.5
+    assert w["mobility_weight"] == 0.5
+
+
+def test_stage_weights_stage3_sf_ramps():
+    cm = CurriculumManager({})
+    cm.stage = 3
+    cm.gen_in_stage = 0
+    w = cm.fitness_weights()
+    assert w["sf_fitness_weight"] == pytest.approx(0.2)
+
+    cm.gen_in_stage = 20
+    w = cm.fitness_weights()
+    assert w["sf_fitness_weight"] == pytest.approx(0.5)
+
+    cm.gen_in_stage = 10
+    w = cm.fitness_weights()
+    assert w["sf_fitness_weight"] == pytest.approx(0.35)
+
+
+def test_stage_weights_stage4_low_sf():
+    cm = CurriculumManager({})
+    cm.stage = 4
+    w = cm.fitness_weights()
+    assert w["sf_fitness_weight"] == pytest.approx(0.1)
