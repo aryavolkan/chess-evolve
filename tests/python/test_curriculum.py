@@ -102,7 +102,7 @@ def test_check_stage0_exit_not_ready():
 def test_check_stage0_exit_ready():
     cm = CurriculumManager({})
     cm.stage = 0
-    metrics = {"puzzle_bench_accuracy": 0.25, "puzzle_max_rating": 800}
+    metrics = {"puzzle_bench_accuracy": 0.15, "puzzle_max_rating": 800}
     assert cm.check_exit(metrics) is True
 
 

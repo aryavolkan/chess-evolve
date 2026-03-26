@@ -129,7 +129,7 @@ class CurriculumManager:
         if self.stage == 0:
             acc = metrics.get("puzzle_bench_accuracy", 0.0)
             rating = metrics.get("puzzle_max_rating", 0)
-            return acc >= 0.20 and rating >= 800
+            return acc >= 0.12 and rating >= 800
 
         elif self.stage == 1:
             wr = metrics.get("bench_avg_win_rate", 0.0)
