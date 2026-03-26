@@ -3,6 +3,7 @@
 Defines 5 training stages, temperature schedules, and stage transition logic.
 """
 from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -168,12 +169,12 @@ class CurriculumManager:
             "best_elo_estimate": elo_estimate,
             "best_genome_id": best_genome_id,
             "puzzle_max_rating": getattr(self, "_puzzle_max_rating", 0),
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
         }
         path.write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def from_run_state(cls, path: Path, config: dict) -> "CurriculumManager":
+    def from_run_state(cls, path: Path, config: dict) -> CurriculumManager:
         """Load from previous run state, starting one stage back."""
         if not path.exists():
             return cls(config)

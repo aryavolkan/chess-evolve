@@ -1267,7 +1267,7 @@ class NeatCPUTrainer:
         )
 
         # Print run summary
-        print(f"\n  Run summary:")
+        print("\n  Run summary:")
         print(f"    End stage: {self.curriculum.stage} ({self.curriculum.stage_name()})")
         print(f"    Elo estimate: {elo}")
         print(f"    Benchmark win rate: {last_metrics.get('bench_avg_win_rate', 0):.1%}")
