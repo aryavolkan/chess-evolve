@@ -87,6 +87,8 @@ DEFAULT_CONFIG = {
     "puzzle_batch_size": 50,
     "puzzle_accuracy_threshold": 0.5,
     "puzzle_temperature": 0.1,
+    "benchmark_size": 50,
+    "eval_temperature": 0.0,
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -194,6 +196,7 @@ CHESS_LOG_KEYS = [
     "puzzle_bench_white_accuracy",
     "puzzle_bench_black_accuracy",
     "puzzle_bench_accuracy",
+    "elo_estimate",
 ]
 
 
@@ -564,21 +567,25 @@ def do_chained_training(config=None, visible=False, max_chains=10):
 
         do_training(run_config, visible=visible)
 
-        # Check if benchmark improved
+        # Check if benchmark improved (use puzzle accuracy during stage 0)
         if candidate_path.exists():
             try:
                 result = json.loads(candidate_path.read_text())
                 new_bench_wr = result.get("bench_avg_win_rate", result.get("bench_white_win_rate", 0.0))
-                print(f"\n  Chain run {chain_idx + 1} bench_avg_win_rate: {new_bench_wr:.3f} (prev: {best_bench_wr:.3f})")
-                if new_bench_wr > best_bench_wr + 0.01:
-                    best_bench_wr = new_bench_wr
+                puzzle_acc = (result.get("puzzle_bench_white_accuracy", 0) + result.get("puzzle_bench_black_accuracy", 0)) / 2
+                # Use puzzle accuracy as progress metric when in puzzle stage
+                progress = max(new_bench_wr, puzzle_acc)
+                prev_progress = best_bench_wr
+                print(f"\n  Chain run {chain_idx + 1} progress: {progress:.3f} (bench_wr={new_bench_wr:.3f}, puzzle_acc={puzzle_acc:.3f}, prev={prev_progress:.3f})")
+                if progress > prev_progress + 0.005:
+                    best_bench_wr = progress
                     # Promote candidate to best
                     candidate_path.rename(save_path)
                     print("  Improvement! Saved as best seed. Continuing to next chain run...")
                 else:
                     # Discard candidate, keep previous best
                     candidate_path.unlink(missing_ok=True)
-                    print(f"  No improvement (delta={new_bench_wr - best_bench_wr:.3f}). Stopping chain.")
+                    print(f"  No improvement (delta={progress - prev_progress:.3f}). Stopping chain.")
                     break
             except (json.JSONDecodeError, OSError):
                 print("  Could not read save file. Stopping chain.")
@@ -587,7 +594,7 @@ def do_chained_training(config=None, visible=False, max_chains=10):
             print("  No save file produced. Stopping chain.")
             break
 
-    print(f"\n  Chained training complete. Best bench_avg_win_rate: {best_bench_wr:.3f}")
+    print(f"\n  Chained training complete. Best progress: {best_bench_wr:.3f}")
 
 
 if __name__ == "__main__":

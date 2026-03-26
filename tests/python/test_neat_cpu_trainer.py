@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -104,6 +105,7 @@ def trainer(tmp_path):
         "input_size": 4,
         "output_size": 3,
         "tournament_opponents": 3,
+        "benchmark_size": 20,
     }
     return NeatCPUTrainer(config, tmp_path / "metrics.jsonl")
 
@@ -640,3 +642,26 @@ class TestComputeFitnessLoss:
         assert fitness[1] < 0 or fitness[1] < trainer._compute_fitness(
             [_make_game_result(result=-1)], pop_size=2, color=1,
         )[1]
+
+
+# ===========================================================================
+# CurriculumManager integration
+# ===========================================================================
+
+def test_trainer_creates_curriculum_manager():
+    config = {"population_size": 10, "curriculum_stage": 0}
+    trainer = NeatCPUTrainer(config, Path("/tmp/test_metrics.jsonl"))
+    assert hasattr(trainer, "curriculum")
+    assert trainer.curriculum.stage == 0
+
+
+def test_trainer_temperature_from_curriculum():
+    config = {"population_size": 10, "curriculum_stage": 1}
+    trainer = NeatCPUTrainer(config, Path("/tmp/test_metrics.jsonl"))
+    assert trainer.curriculum.training_temperature(gen_in_stage=0) == pytest.approx(0.3)
+
+
+def test_trainer_eval_temperature_zero():
+    config = {"population_size": 10}
+    trainer = NeatCPUTrainer(config, Path("/tmp/test_metrics.jsonl"))
+    assert trainer.curriculum.eval_temperature() == 0.0

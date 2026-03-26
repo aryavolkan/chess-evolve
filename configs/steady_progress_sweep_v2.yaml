@@ -1,0 +1,98 @@
+method: bayes
+metric:
+  name: combined_best
+  goal: maximize
+
+parameters:
+  # Locked from sweep v1 winners
+  population_size:
+    value: 150
+
+  max_generations:
+    value: 500
+
+  use_neat:
+    value: true
+
+  curriculum_stage:
+    value: 0
+
+  output_size:
+    value: 384
+
+  input_size:
+    value: 389
+
+  eval_temperature:
+    value: 0.0
+
+  move_temperature:
+    value: 0.1
+
+  benchmark_size:
+    value: 50
+
+  transition_gens:
+    value: 3
+
+  tournament_k:
+    value: 2
+
+  # Narrow search around v1 winners
+  neat_add_node_rate:
+    distribution: uniform
+    min: 0.12
+    max: 0.20
+
+  neat_add_connection_rate:
+    distribution: uniform
+    min: 0.15
+    max: 0.30
+
+  neat_initial_connections_per_output:
+    values: [1, 3]
+
+  neat_target_species_count:
+    values: [5, 8]
+
+  crossover_rate:
+    distribution: uniform
+    min: 0.55
+    max: 0.80
+
+  tournament_opponents:
+    values: [5, 7]
+
+  immigration_rate:
+    distribution: uniform
+    min: 0.08
+    max: 0.18
+
+  # Puzzle curriculum — explore more
+  puzzle_advance_threshold:
+    values: [0.50, 0.65]
+
+  puzzle_accuracy_weight:
+    distribution: uniform
+    min: 0.3
+    max: 0.5
+
+  puzzle_count:
+    values: [300, 500]
+
+  # Fitness
+  draw_bonus:
+    values: [0.0, 1.5]
+
+  checkmate_bonus:
+    value: 15.0
+
+  # Stockfish off during puzzle stage
+  sf_fitness_weight:
+    value: 0.0
+
+  sf_bench_interval:
+    value: 10
+
+  sf_fitness_top_n:
+    value: 50

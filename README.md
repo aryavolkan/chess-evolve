@@ -182,6 +182,13 @@ Requires a Lichess bot account and API token (set `LICHESS_TOKEN` env var). Uses
 3. Use the speed selector (1x, 2x, 4x, 8x) for multiple generations per frame
 4. Every 5 generations the board viewers show **showcase games** from the best networks
 
+## Dependency Rules
+
+- `chess/` — self-contained chess logic, **no AI dependencies**
+- `ai/` — depends on `chess/` only
+- `ui/` — depends on both `ai/` and `chess/`
+- Rust PyO3 crates (`chess-cpu`, `evolve-ga`, `neat-ga`) are independent of each other and of `chess-native`
+
 ## Chess Logic
 
 Full legal move generation including:

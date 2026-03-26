@@ -1,0 +1,99 @@
+method: bayes
+metric:
+  name: combined_best
+  goal: maximize
+
+parameters:
+  population_size:
+    values: [50, 100, 150]
+
+  max_generations:
+    value: 100
+
+  use_neat:
+    value: true
+
+  curriculum_stage:
+    value: 0
+
+  output_size:
+    value: 384
+
+  input_size:
+    value: 389
+
+  eval_temperature:
+    value: 0.0
+
+  benchmark_size:
+    value: 50
+
+  transition_gens:
+    value: 3
+
+  # NEAT topology mutation rates
+  neat_add_node_rate:
+    distribution: uniform
+    min: 0.05
+    max: 0.20
+
+  neat_add_connection_rate:
+    distribution: uniform
+    min: 0.10
+    max: 0.35
+
+  neat_initial_connections_per_output:
+    values: [1, 3, 5]
+
+  neat_target_species_count:
+    values: [3, 5, 8]
+
+  # Evolution parameters
+  crossover_rate:
+    distribution: uniform
+    min: 0.50
+    max: 0.85
+
+  tournament_opponents:
+    values: [3, 5, 7]
+
+  tournament_k:
+    value: 2
+
+  immigration_rate:
+    distribution: uniform
+    min: 0.05
+    max: 0.20
+
+  # Puzzle curriculum
+  puzzle_advance_threshold:
+    values: [0.50, 0.65, 0.75]
+
+  puzzle_accuracy_weight:
+    distribution: uniform
+    min: 0.3
+    max: 0.6
+
+  puzzle_count:
+    values: [300, 500, 800]
+
+  # Temperature
+  move_temperature:
+    values: [0.1, 0.2, 0.3]
+
+  # Fitness tuning
+  draw_bonus:
+    values: [0.0, 1.5, 3.0]
+
+  checkmate_bonus:
+    values: [10.0, 15.0]
+
+  # Stockfish (disabled during puzzle stage)
+  sf_fitness_weight:
+    value: 0.0
+
+  sf_bench_interval:
+    value: 10
+
+  sf_fitness_top_n:
+    value: 50
