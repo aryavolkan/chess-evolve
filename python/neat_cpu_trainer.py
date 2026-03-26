@@ -922,6 +922,15 @@ class NeatCPUTrainer:
                 # Combine results for metrics reporting
                 results = w_results + b_results
                 num_games = len(results)
+
+                # Transition blending: smooth fitness between old and new stage
+                if self.curriculum.is_transitioning() and self.curriculum._prev_stage is not None:
+                    blend_w = self.curriculum.transition_blend_weight()
+                    prev_weights = self.curriculum.fitness_weights_for_stage(self.curriculum._prev_stage)
+                    prev_w_fit = compute_fitness(results, self.pop_size, 0, prev_weights)
+                    prev_b_fit = compute_fitness(results, self.pop_size, 1, prev_weights)
+                    white_fitness = blend_fitness(prev_w_fit, white_fitness, blend_w)
+                    black_fitness = blend_fitness(prev_b_fit, black_fitness, blend_w)
             else:
                 # Standard coevolution
                 pairings = self._generate_pairings()

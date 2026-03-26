@@ -113,6 +113,16 @@ class CurriculumManager:
             weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
         return weights
 
+    def fitness_weights_for_stage(self, stage: int) -> dict:
+        """Get fitness weights for a specific stage (used for transition blending)."""
+        from fitness import FITNESS_DEFAULTS
+        weights = dict(FITNESS_DEFAULTS)
+        weights.update(STAGE_WEIGHTS[stage])
+        if stage == 3:
+            progress = min(1.0, self.gen_in_stage / 20.0)
+            weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
+        return weights
+
     def check_exit(self, metrics: dict) -> bool:
         """Check if current stage exit criteria are met."""
         if self.stage == 0:
