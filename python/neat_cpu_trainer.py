@@ -1212,6 +1212,12 @@ class NeatCPUTrainer:
                 self.curriculum.advance_stage()
                 new_name = self.curriculum.stage_name()
                 print(f"  Curriculum promotion: {old_name} -> {new_name}")
+                # Initialize random opponents when entering stage 1+
+                if self.curriculum.stage >= 1 and not locals().get("curriculum_black_opp"):
+                    n_opp = self.curriculum_random_opponents
+                    curriculum_black_opp = self._init_random_opponents(n_opp)
+                    curriculum_white_opp = self._init_random_opponents(n_opp)
+                    print(f"  Initialized {n_opp} random opponents per color")
             self.curriculum.tick_generation()
 
             # Only include SF metrics on benchmark generations
