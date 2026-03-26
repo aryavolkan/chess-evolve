@@ -114,6 +114,8 @@ CHESS_LOG_KEYS = [
     "puzzle_bench_white_accuracy",
     "puzzle_bench_black_accuracy",
     "puzzle_bench_accuracy",
+    # Elo estimate
+    "elo_estimate",
 ]
 
 
