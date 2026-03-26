@@ -95,14 +95,14 @@ def test_stage_weights_stage4_low_sf():
 def test_check_stage0_exit_not_ready():
     cm = CurriculumManager({})
     cm.stage = 0
-    metrics = {"puzzle_bench_accuracy": 0.50, "puzzle_max_rating": 1200}
+    metrics = {"puzzle_bench_accuracy": 0.10, "puzzle_max_rating": 600}
     assert cm.check_exit(metrics) is False
 
 
 def test_check_stage0_exit_ready():
     cm = CurriculumManager({})
     cm.stage = 0
-    metrics = {"puzzle_bench_accuracy": 0.65, "puzzle_max_rating": 1500}
+    metrics = {"puzzle_bench_accuracy": 0.25, "puzzle_max_rating": 800}
     assert cm.check_exit(metrics) is True
 
 
