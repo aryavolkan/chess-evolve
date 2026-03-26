@@ -105,6 +105,7 @@ def trainer(tmp_path):
         "input_size": 4,
         "output_size": 3,
         "tournament_opponents": 3,
+        "benchmark_size": 20,
     }
     return NeatCPUTrainer(config, tmp_path / "metrics.jsonl")
 
