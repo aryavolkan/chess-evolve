@@ -87,6 +87,8 @@ DEFAULT_CONFIG = {
     "puzzle_batch_size": 50,
     "puzzle_accuracy_threshold": 0.5,
     "puzzle_temperature": 0.1,
+    "benchmark_size": 50,
+    "eval_temperature": 0.0,
 }
 
 _PROJECT_PATH_DEFAULT = next(
@@ -194,6 +196,7 @@ CHESS_LOG_KEYS = [
     "puzzle_bench_white_accuracy",
     "puzzle_bench_black_accuracy",
     "puzzle_bench_accuracy",
+    "elo_estimate",
 ]
 
 

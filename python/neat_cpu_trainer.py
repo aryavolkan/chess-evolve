@@ -140,7 +140,7 @@ class NeatCPUTrainer:
         self.save_genome_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
 
         # Fixed random benchmark population for absolute progress measurement.
-        self.benchmark_size = 20
+        self.benchmark_size = config.get("benchmark_size", 50)
         self.benchmark_genomes = self._init_benchmark()
 
         # Stockfish benchmark: play best genome vs Stockfish every N generations
@@ -1221,6 +1221,8 @@ class NeatCPUTrainer:
                     "sf_fitness_white_avg": sf_w_avg_cpl_fit,
                     "sf_fitness_black_avg": sf_b_avg_cpl_fit,
                 })
+                avg_cpl = (sf_w_cpl + sf_b_cpl) / 2
+                metrics["elo_estimate"] = CurriculumManager.compute_elo_estimate(avg_cpl)
 
             # Write metrics line to file
             try:
