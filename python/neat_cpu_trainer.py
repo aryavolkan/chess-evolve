@@ -20,6 +20,7 @@ from pathlib import Path
 import chess_cpu
 import neat_ga
 
+from curriculum import CurriculumManager
 from fitness import (
     aggregate_game_stats,
     blend_fitness,
@@ -57,6 +58,9 @@ class NeatCPUTrainer:
 
         # Fitness weights (shared defaults from fitness.py, config-overridable)
         self.fitness_weights = merge_fitness_weights(config)
+
+        # Curriculum manager — replaces old curriculum_stage tracking
+        self.curriculum = CurriculumManager(config)
 
         # NEAT config for Rust
         self.neat_config = {
