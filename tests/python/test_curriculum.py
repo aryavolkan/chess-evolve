@@ -163,3 +163,43 @@ def test_transition_blending_active():
     cm.tick_generation()
     assert cm.is_transitioning() is False
     assert cm.transition_blend_weight() == pytest.approx(1.0)
+
+
+import json
+from pathlib import Path
+
+
+def test_save_run_state(tmp_path):
+    cm = CurriculumManager({})
+    cm.stage = 2
+    path = tmp_path / "run_state.json"
+    cm.save_run_state(path, elo_estimate=680, best_genome_id="w_gen87_0")
+    data = json.loads(path.read_text())
+    assert data["highest_stage"] == 2
+    assert data["best_elo_estimate"] == 680
+    assert data["best_genome_id"] == "w_gen87_0"
+    assert "timestamp" in data
+
+
+def test_load_run_state(tmp_path):
+    path = tmp_path / "run_state.json"
+    path.write_text(json.dumps({
+        "highest_stage": 3,
+        "best_elo_estimate": 800,
+        "best_genome_id": "x",
+        "puzzle_max_rating": 1800,
+        "timestamp": "2026-03-25T00:00:00Z",
+    }))
+    cm = CurriculumManager.from_run_state(path, {})
+    assert cm.stage == 2
+
+
+def test_load_run_state_missing_file():
+    cm = CurriculumManager.from_run_state(Path("/nonexistent"), {})
+    assert cm.stage == 0
+
+
+def test_elo_estimate():
+    assert CurriculumManager.compute_elo_estimate(1320) == 680
+    assert CurriculumManager.compute_elo_estimate(0) == 2000
+    assert CurriculumManager.compute_elo_estimate(3000) == 0

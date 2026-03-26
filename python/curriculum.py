@@ -3,6 +3,8 @@
 Defines 5 training stages, temperature schedules, and stage transition logic.
 """
 from __future__ import annotations
+import json
+from pathlib import Path
 
 STAGES = [
     {
@@ -147,3 +149,33 @@ class CurriculumManager:
         self.gen_in_stage += 1
         if self._transition_remaining > 0:
             self._transition_remaining -= 1
+
+    def save_run_state(self, path: Path, elo_estimate: float = 0, best_genome_id: str = ""):
+        """Persist run state for cross-run seeding."""
+        import datetime
+        data = {
+            "highest_stage": self.stage,
+            "best_elo_estimate": elo_estimate,
+            "best_genome_id": best_genome_id,
+            "puzzle_max_rating": getattr(self, "_puzzle_max_rating", 0),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        path.write_text(json.dumps(data, indent=2))
+
+    @classmethod
+    def from_run_state(cls, path: Path, config: dict) -> "CurriculumManager":
+        """Load from previous run state, starting one stage back."""
+        if not path.exists():
+            return cls(config)
+        try:
+            data = json.loads(path.read_text())
+            start_stage = max(0, data.get("highest_stage", 0) - 1)
+            config_with_stage = {**config, "curriculum_stage": start_stage}
+            return cls(config_with_stage)
+        except (json.JSONDecodeError, OSError):
+            return cls(config)
+
+    @staticmethod
+    def compute_elo_estimate(sf_avg_cpl: float) -> int:
+        """Rough Elo estimate from Stockfish average centipawn loss."""
+        return max(0, int(2000 - sf_avg_cpl))
