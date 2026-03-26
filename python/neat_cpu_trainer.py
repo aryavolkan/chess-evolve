@@ -62,13 +62,6 @@ class NeatCPUTrainer:
         # Curriculum manager — replaces old curriculum_stage tracking
         self.curriculum = CurriculumManager(config)
 
-        # Load previous run state for cross-run seeding
-        run_state_path = self.save_genome_path.parent / "run_state.json"
-        if run_state_path.exists() and self.curriculum.stage == 0:
-            self.curriculum = CurriculumManager.from_run_state(run_state_path, config)
-            print(f"  Loaded run state: starting at stage {self.curriculum.stage} "
-                  f"({self.curriculum.stage_name()})")
-
         # NEAT config for Rust
         self.neat_config = {
             "input_count": self.input_size,
@@ -145,6 +138,13 @@ class NeatCPUTrainer:
         _seed = config.get("seed_genome_path", "")
         self.seed_genome_path = Path(_seed) if _seed else None
         self.save_genome_path = Path(config.get("save_genome_path", "neat_best_genomes.json"))
+
+        # Load previous run state for cross-run seeding
+        run_state_path = self.save_genome_path.parent / "run_state.json"
+        if run_state_path.exists() and self.curriculum.stage == 0:
+            self.curriculum = CurriculumManager.from_run_state(run_state_path, config)
+            print(f"  Loaded run state: starting at stage {self.curriculum.stage} "
+                  f"({self.curriculum.stage_name()})")
 
         # Fixed random benchmark population for absolute progress measurement.
         self.benchmark_size = config.get("benchmark_size", 50)
