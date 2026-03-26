@@ -90,3 +90,76 @@ def test_stage_weights_stage4_low_sf():
     cm.stage = 4
     w = cm.fitness_weights()
     assert w["sf_fitness_weight"] == pytest.approx(0.1)
+
+
+def test_check_stage0_exit_not_ready():
+    cm = CurriculumManager({})
+    cm.stage = 0
+    metrics = {"puzzle_bench_accuracy": 0.50, "puzzle_max_rating": 1200}
+    assert cm.check_exit(metrics) is False
+
+
+def test_check_stage0_exit_ready():
+    cm = CurriculumManager({})
+    cm.stage = 0
+    metrics = {"puzzle_bench_accuracy": 0.65, "puzzle_max_rating": 1500}
+    assert cm.check_exit(metrics) is True
+
+
+def test_check_stage1_needs_consecutive():
+    cm = CurriculumManager({})
+    cm.stage = 1
+    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
+    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
+    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is True
+
+
+def test_check_stage1_resets_on_low():
+    cm = CurriculumManager({})
+    cm.stage = 1
+    cm.check_exit({"bench_avg_win_rate": 0.75})
+    cm.check_exit({"bench_avg_win_rate": 0.75})
+    cm.check_exit({"bench_avg_win_rate": 0.50})
+    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
+
+
+def test_check_stage2_exit():
+    cm = CurriculumManager({})
+    cm.stage = 2
+    metrics = {"bench_avg_win_rate": 0.90, "sf_avg_cpl": 700}
+    assert cm.check_exit(metrics) is True
+
+
+def test_check_stage2_no_exit_high_cpl():
+    cm = CurriculumManager({})
+    cm.stage = 2
+    metrics = {"bench_avg_win_rate": 0.90, "sf_avg_cpl": 900}
+    assert cm.check_exit(metrics) is False
+
+
+def test_check_stage3_needs_5_consecutive():
+    cm = CurriculumManager({})
+    cm.stage = 3
+    for _ in range(4):
+        assert cm.check_exit({"sf_avg_cpl": 350}) is False
+    assert cm.check_exit({"sf_avg_cpl": 350}) is True
+
+
+def test_check_stage4_never_exits():
+    cm = CurriculumManager({})
+    cm.stage = 4
+    assert cm.check_exit({}) is False
+
+
+def test_transition_blending_active():
+    cm = CurriculumManager({})
+    cm.stage = 0
+    cm.advance_stage()
+    assert cm.stage == 1
+    assert cm.is_transitioning() is True
+    assert cm.transition_blend_weight() == pytest.approx(0.7)
+    cm.tick_generation()
+    cm.tick_generation()
+    cm.tick_generation()
+    assert cm.is_transitioning() is False
+    assert cm.transition_blend_weight() == pytest.approx(1.0)

@@ -111,6 +111,37 @@ class CurriculumManager:
             weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
         return weights
 
+    def check_exit(self, metrics: dict) -> bool:
+        """Check if current stage exit criteria are met."""
+        if self.stage == 0:
+            acc = metrics.get("puzzle_bench_accuracy", 0.0)
+            rating = metrics.get("puzzle_max_rating", 0)
+            return acc >= 0.60 and rating >= 1400
+
+        elif self.stage == 1:
+            wr = metrics.get("bench_avg_win_rate", 0.0)
+            if wr >= 0.70:
+                self._consecutive_bench_wins += 1
+            else:
+                self._consecutive_bench_wins = 0
+            return self._consecutive_bench_wins >= 3
+
+        elif self.stage == 2:
+            wr = metrics.get("bench_avg_win_rate", 0.0)
+            cpl = metrics.get("sf_avg_cpl", 9999)
+            return wr >= 0.85 and cpl <= 800
+
+        elif self.stage == 3:
+            cpl = metrics.get("sf_avg_cpl", 9999)
+            if cpl <= 400:
+                self._consecutive_sf_cpl += 1
+            else:
+                self._consecutive_sf_cpl = 0
+            return self._consecutive_sf_cpl >= 5
+
+        else:
+            return False
+
     def tick_generation(self):
         """Call at end of each generation to update internal counters."""
         self.gen_in_stage += 1
