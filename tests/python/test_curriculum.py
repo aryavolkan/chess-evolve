@@ -109,31 +109,38 @@ def test_check_stage0_exit_ready():
 def test_check_stage1_needs_consecutive():
     cm = CurriculumManager({})
     cm.stage = 1
-    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
-    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
-    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is True
+    assert cm.check_exit({"bench_avg_win_rate": 0.20}) is False
+    assert cm.check_exit({"bench_avg_win_rate": 0.20}) is False
+    assert cm.check_exit({"bench_avg_win_rate": 0.20}) is True
 
 
 def test_check_stage1_resets_on_low():
     cm = CurriculumManager({})
     cm.stage = 1
-    cm.check_exit({"bench_avg_win_rate": 0.75})
-    cm.check_exit({"bench_avg_win_rate": 0.75})
-    cm.check_exit({"bench_avg_win_rate": 0.50})
-    assert cm.check_exit({"bench_avg_win_rate": 0.75}) is False
+    cm.check_exit({"bench_avg_win_rate": 0.20})
+    cm.check_exit({"bench_avg_win_rate": 0.20})
+    cm.check_exit({"bench_avg_win_rate": 0.05})
+    assert cm.check_exit({"bench_avg_win_rate": 0.20}) is False
 
 
-def test_check_stage2_exit():
+def test_check_stage2_exit_by_win_rate():
     cm = CurriculumManager({})
     cm.stage = 2
-    metrics = {"bench_avg_win_rate": 0.90, "sf_avg_cpl": 700}
+    metrics = {"bench_avg_win_rate": 0.30, "sf_avg_cpl": 9999}
     assert cm.check_exit(metrics) is True
 
 
-def test_check_stage2_no_exit_high_cpl():
+def test_check_stage2_exit_by_cpl():
     cm = CurriculumManager({})
     cm.stage = 2
-    metrics = {"bench_avg_win_rate": 0.90, "sf_avg_cpl": 900}
+    metrics = {"bench_avg_win_rate": 0.05, "sf_avg_cpl": 1100}
+    assert cm.check_exit(metrics) is True
+
+
+def test_check_stage2_no_exit():
+    cm = CurriculumManager({})
+    cm.stage = 2
+    metrics = {"bench_avg_win_rate": 0.10, "sf_avg_cpl": 1500}
     assert cm.check_exit(metrics) is False
 
 
@@ -141,8 +148,8 @@ def test_check_stage3_needs_5_consecutive():
     cm = CurriculumManager({})
     cm.stage = 3
     for _ in range(4):
-        assert cm.check_exit({"sf_avg_cpl": 350}) is False
-    assert cm.check_exit({"sf_avg_cpl": 350}) is True
+        assert cm.check_exit({"sf_avg_cpl": 700}) is False
+    assert cm.check_exit({"sf_avg_cpl": 700}) is True
 
 
 def test_check_stage4_never_exits():

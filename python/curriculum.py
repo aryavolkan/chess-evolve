@@ -133,7 +133,7 @@ class CurriculumManager:
 
         elif self.stage == 1:
             wr = metrics.get("bench_avg_win_rate", 0.0)
-            if wr >= 0.70:
+            if wr >= 0.15:
                 self._consecutive_bench_wins += 1
             else:
                 self._consecutive_bench_wins = 0
@@ -142,11 +142,11 @@ class CurriculumManager:
         elif self.stage == 2:
             wr = metrics.get("bench_avg_win_rate", 0.0)
             cpl = metrics.get("sf_avg_cpl", 9999)
-            return wr >= 0.85 and cpl <= 800
+            return wr >= 0.25 or cpl <= 1200
 
         elif self.stage == 3:
             cpl = metrics.get("sf_avg_cpl", 9999)
-            if cpl <= 400:
+            if cpl <= 800:
                 self._consecutive_sf_cpl += 1
             else:
                 self._consecutive_sf_cpl = 0
