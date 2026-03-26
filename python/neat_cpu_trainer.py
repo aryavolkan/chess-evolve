@@ -62,6 +62,13 @@ class NeatCPUTrainer:
         # Curriculum manager — replaces old curriculum_stage tracking
         self.curriculum = CurriculumManager(config)
 
+        # Load previous run state for cross-run seeding
+        run_state_path = self.save_genome_path.parent / "run_state.json"
+        if run_state_path.exists() and self.curriculum.stage == 0:
+            self.curriculum = CurriculumManager.from_run_state(run_state_path, config)
+            print(f"  Loaded run state: starting at stage {self.curriculum.stage} "
+                  f"({self.curriculum.stage_name()})")
+
         # NEAT config for Rust
         self.neat_config = {
             "input_count": self.input_size,
@@ -1249,5 +1256,21 @@ class NeatCPUTrainer:
                         last_metrics.get("bench_black_win_rate", 0),
                         curriculum_stage=self.curriculum.stage,
                         puzzle_bench_w=pb_w, puzzle_bench_b=pb_b)
+
+        # Save cross-run state
+        run_state_path = self.save_genome_path.parent / "run_state.json"
+        elo = last_metrics.get("elo_estimate", 0)
+        self.curriculum.save_run_state(
+            run_state_path,
+            elo_estimate=elo,
+            best_genome_id=f"gen{max_generations}",
+        )
+
+        # Print run summary
+        print(f"\n  Run summary:")
+        print(f"    End stage: {self.curriculum.stage} ({self.curriculum.stage_name()})")
+        print(f"    Elo estimate: {elo}")
+        print(f"    Benchmark win rate: {last_metrics.get('bench_avg_win_rate', 0):.1%}")
+        print(f"    Generations: {max_generations}")
 
         return last_metrics
