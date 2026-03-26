@@ -62,6 +62,9 @@ python train_wandb.py --sweep <sweep-id>
 
 # Chained runs (each seeds from previous best)
 python train_wandb.py --chain 10
+
+# Steady progress pipeline (5-stage curriculum)
+python train_wandb.py --config configs/steady_progress_config.json
 ```
 
 ## Architecture
@@ -77,6 +80,7 @@ python train_wandb.py --chain 10
 2. **Python layer** (`python/`, `train_wandb.py`, `overnight-agent/`):
    - `python/cpu_trainer.py` / `python/neat_cpu_trainer.py`: Training loops using Rust PyO3 crates. Fixed-topology (CPUTrainer) vs variable-topology NEAT (NeatCPUTrainer).
    - `python/fitness.py`: Shared fitness computation, outcome rates, tournament scores (used by both trainers).
+   - `python/curriculum.py`: 5-stage curriculum manager (stage definitions, temperature annealing, fitness weight tables, cross-run state persistence). Stages: puzzles → guided play → opponent ladder → SF shaping → coevo refinement.
    - `python/lichess_bot.py`: Lichess bot with ensemble voting from Hall of Fame genomes.
    - `train_wandb.py`: Entry point for all training (stays at root). Auto-detects backend, handles W&B logging, sweep integration, chained training.
    - `configs/`: Sweep configs and JSON training configs.
