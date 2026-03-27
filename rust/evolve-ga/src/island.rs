@@ -63,11 +63,7 @@ pub fn migrate(
             // Ensure no island sends to itself
             loop {
                 destinations.shuffle(&mut rng);
-                if sources
-                    .iter()
-                    .zip(destinations.iter())
-                    .all(|(s, d)| s != d)
-                {
+                if sources.iter().zip(destinations.iter()).all(|(s, d)| s != d) {
                     break;
                 }
             }
@@ -75,9 +71,7 @@ pub fn migrate(
         }
         _ => {
             // Ring topology: island i sends to island (i+1) % n
-            (0..n_islands)
-                .map(|i| (i, (i + 1) % n_islands))
-                .collect()
+            (0..n_islands).map(|i| (i, (i + 1) % n_islands)).collect()
         }
     };
 

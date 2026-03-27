@@ -140,14 +140,17 @@ pub fn shared_fitness(
 }
 
 /// Compute Euclidean distance between two weight vectors.
+///
+/// Uses iterator zip for better auto-vectorization (compiler gets aliasing info).
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    let min_len = a.len().min(b.len());
-    let mut sum = 0.0f32;
-    for i in 0..min_len {
-        let diff = a[i] - b[i];
-        sum += diff * diff;
-    }
-    sum.sqrt()
+    a.iter()
+        .zip(b.iter())
+        .map(|(&x, &y)| {
+            let d = x - y;
+            d * d
+        })
+        .sum::<f32>()
+        .sqrt()
 }
 
 #[cfg(test)]
@@ -199,9 +202,9 @@ mod tests {
     fn assign_species_with_previous_reps() {
         let reps = vec![vec![0.0f32; 5], vec![10.0f32; 5]];
         let pop = vec![
-            vec![0.1f32; 5],  // Close to rep 0
-            vec![9.9f32; 5],  // Close to rep 1
-            vec![0.2f32; 5],  // Close to rep 0
+            vec![0.1f32; 5], // Close to rep 0
+            vec![9.9f32; 5], // Close to rep 1
+            vec![0.2f32; 5], // Close to rep 0
         ];
         let (ids, _) = assign_species(pop, 3.0, Some(reps)).unwrap();
         assert_eq!(ids[0], 0);

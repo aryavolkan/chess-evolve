@@ -23,6 +23,31 @@ static var _all_dirs: Array[Vector2i] = [
     Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)
 ]
 
+# Zobrist-style hash table: random numbers for each (piece, square) pair.
+# Piece values range -6..+6 (0=empty), mapped to index 0..12 via piece+6.
+# Table[piece_idx * 64 + square] gives the hash contribution.
+# Uses deterministic seed so hash values are consistent across instances.
+static var _zobrist_table: PackedInt64Array = _init_zobrist()
+static var _zobrist_side: int = 0  # XOR'd when side_to_move == 1
+static var _zobrist_castling: PackedInt64Array = PackedInt64Array()  # 16 entries
+static var _zobrist_ep: PackedInt64Array = PackedInt64Array()  # 65 entries (-1..63 -> 0..64)
+
+static func _init_zobrist() -> PackedInt64Array:
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 0xDEADBEEFC4E55E70  # deterministic
+    var table := PackedInt64Array()
+    table.resize(13 * 64)  # 13 piece types (-6..+6) x 64 squares
+    for i in table.size():
+        table[i] = rng.randi() | (rng.randi() << 32)
+    _zobrist_side = rng.randi() | (rng.randi() << 32)
+    _zobrist_castling.resize(16)
+    for i in 16:
+        _zobrist_castling[i] = rng.randi() | (rng.randi() << 32)
+    _zobrist_ep.resize(65)
+    for i in 65:
+        _zobrist_ep[i] = rng.randi() | (rng.randi() << 32)
+    return table
+
 var board: Array[int] = []  # 64 squares, row-major (0=a1, 63=h8)
 var side_to_move: int = 0  # 0=white, 1=black
 var castling_rights: int = 0b1111  # KQkq bits
@@ -79,14 +104,19 @@ func mark_dirty() -> void:
     encoder_dirty = true
 
 
-func get_position_key() -> String:
-    # Compact key for encoder cache: board + side + castling + ep
-    var parts := PackedStringArray()
-    parts.resize(board.size())
-    for i in board.size():
-        parts[i] = str(board[i])
-    return ",".join(parts) + "|" + str(side_to_move) \
-        + "|" + str(castling_rights) + "|" + str(en_passant_square)
+func get_position_key() -> int:
+    ## Zobrist hash of the position — O(pieces) XOR instead of string allocation.
+    ## Returns an int suitable as a Dictionary key or for repetition detection.
+    var h: int = 0
+    for sq in 64:
+        var p: int = board[sq]
+        if p != 0:
+            h ^= _zobrist_table[(p + 6) * 64 + sq]
+    if side_to_move == 1:
+        h ^= _zobrist_side
+    h ^= _zobrist_castling[castling_rights & 0xF]
+    h ^= _zobrist_ep[en_passant_square + 1]  # -1 maps to index 0
+    return h
 
 
 func rebuild_piece_lists() -> void:

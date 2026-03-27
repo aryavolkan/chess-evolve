@@ -196,8 +196,8 @@ pub fn king_danger_score(board: &ChessBoard, color: u8) -> f32 {
             let piece = board.piece_at(sq);
             let enemy_piece = piece * enemy_sign;
             match enemy_piece {
-                2 | 3 => danger += 0.5,  // enemy knight or bishop nearby
-                4 | 5 => danger += 1.0,  // enemy rook or queen nearby
+                2 | 3 => danger += 0.5, // enemy knight or bishop nearby
+                4 | 5 => danger += 1.0, // enemy rook or queen nearby
                 _ => {}
             }
         }

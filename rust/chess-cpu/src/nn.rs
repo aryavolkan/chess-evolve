@@ -45,13 +45,16 @@ impl DenseNetwork {
             hidden[h] = sum.tanh();
         }
 
+        // Output layer: raw logits (no activation). Move selection uses
+        // relative ranking only, so monotone tanh would not change results
+        // but costs 4096 transcendental calls per position.
         for o in 0..self.output_size {
             let mut sum = self.biases_o[o];
             let offset = o * self.hidden_size;
             for h in 0..self.hidden_size {
                 sum += self.weights_ho[offset + h] * hidden[h];
             }
-            output[o] = sum.tanh();
+            output[o] = sum;
         }
     }
 
@@ -93,8 +96,9 @@ mod tests {
         let inputs = [0.5, -0.5];
         let output = net.forward(&inputs);
         assert_eq!(output.len(), 2);
-        let expected0 = inputs[0].tanh().tanh();
-        let expected1 = inputs[1].tanh().tanh();
+        // Output layer has no activation — raw linear output from hidden tanh
+        let expected0 = inputs[0].tanh(); // hidden tanh, then linear pass-through
+        let expected1 = inputs[1].tanh();
         let eps = 1e-6;
         assert!((output[0] - expected0).abs() < eps);
         assert!((output[1] - expected1).abs() < eps);

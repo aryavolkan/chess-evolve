@@ -770,17 +770,13 @@ pub fn uci_to_move(uci: &str, board: &ChessBoard) -> Option<u32> {
 
     // Promotion (e.g. "e7e8q") — always promote to queen in this engine
     if abs_p == PIECE_PAWN
-        && ((board.side_to_move == 0 && to_rank == 7)
-            || (board.side_to_move == 1 && to_rank == 0))
+        && ((board.side_to_move == 0 && to_rank == 7) || (board.side_to_move == 1 && to_rank == 0))
     {
         flags |= MOVE_FLAG_PROMOTE;
     }
 
     // En passant: pawn captures to the en passant square
-    if abs_p == PIECE_PAWN
-        && board.en_passant_sq >= 0
-        && to_sq == board.en_passant_sq as usize
-    {
+    if abs_p == PIECE_PAWN && board.en_passant_sq >= 0 && to_sq == board.en_passant_sq as usize {
         flags |= MOVE_FLAG_EN_PASSANT;
     }
 

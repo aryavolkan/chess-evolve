@@ -10,18 +10,10 @@ import os
 import sys
 from pathlib import Path
 
-_SHARED = next(
-    (p for p in [
-        os.path.expanduser("~/projects/shared-evolve-utils"),
-        os.path.expanduser("~/Projects/shared-evolve-utils"),
-        os.path.expanduser("~/shared-evolve-utils"),
-    ] if os.path.isdir(p)),
-    "",
-)
-if _SHARED:
-    sys.path.insert(0, _SHARED)
 _PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
 sys.path.insert(0, _PYTHON)
+from constants import CHESS_LOG_KEYS, add_shared_evolve_utils_to_path  # noqa: E402, I001
+add_shared_evolve_utils_to_path()
 _OVERNIGHT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overnight-agent")
 sys.path.insert(0, _OVERNIGHT)
 import wandb  # noqa: E402
@@ -54,7 +46,7 @@ DEFAULT_CONFIG = {
     "max_generations": 50,
     "max_moves_per_game": 100,
     "input_size": 389,
-    "output_size": 384,
+    "output_size": 4096,
     "use_minimax": False,        # minimax too slow in GDScript; direct NN output
     "use_tournament": True,
     "tournament_opponents": 5,   # 5 opponents/individual for stronger selection pressure
@@ -101,103 +93,6 @@ _PROJECT_PATH_DEFAULT = next(
     os.path.dirname(os.path.abspath(__file__)),
 )
 PROJECT_PATH = os.environ.get("CHESS_EVOLVE_PROJECT_PATH", _PROJECT_PATH_DEFAULT)
-
-CHESS_LOG_KEYS = [
-    "generation",
-    # Fitness
-    "white_best",
-    "white_avg",
-    "black_best",
-    "black_avg",
-    "combined_best",
-    # Games
-    "total_games_this_gen",
-    "avg_game_length",
-    "games_per_sec",
-    "moves_per_sec",
-    "generation_time_sec",
-    # Outcome rates
-    "white_win_rate",
-    "white_draw_rate",
-    "black_win_rate",
-    "black_draw_rate",
-    # Tournament scores
-    "white_tournament_score_best",
-    "white_tournament_score_avg",
-    "black_tournament_score_best",
-    "black_tournament_score_avg",
-    # Material
-    "white_material_avg",
-    "black_material_avg",
-    # Hall of Fame
-    "white_hof_size",
-    "black_hof_size",
-    # NEAT topology metrics (per-color)
-    "white_species_count",
-    "black_species_count",
-    "white_depth_avg",
-    "black_depth_avg",
-    "white_width_avg",
-    "black_width_avg",
-    "white_connections_avg",
-    "black_connections_avg",
-    "white_hidden_nodes_avg",
-    "black_hidden_nodes_avg",
-    # Fitness component breakdowns
-    "white_fitness_outcome",
-    "white_fitness_material",
-    "white_fitness_mobility",
-    "white_fitness_king_safety",
-    "white_fitness_opp_king_safety",
-    "white_fitness_king_danger",
-    "white_fitness_captures",
-    "white_fitness_move_penalty",
-    "black_fitness_outcome",
-    "black_fitness_material",
-    "black_fitness_mobility",
-    "black_fitness_king_safety",
-    "black_fitness_opp_king_safety",
-    "black_fitness_king_danger",
-    "black_fitness_captures",
-    "black_fitness_move_penalty",
-    # King danger metrics
-    "white_king_danger_avg",
-    "black_king_danger_avg",
-    # Benchmark vs random (absolute progress)
-    "bench_white_win_rate",
-    "bench_white_material_adv",
-    "bench_black_win_rate",
-    "bench_black_material_adv",
-    "bench_avg_win_rate",
-    # Stockfish benchmark
-    "sf_white_win_rate",
-    "sf_black_win_rate",
-    "sf_avg_game_length",
-    "sf_white_avg_cpl",
-    "sf_black_avg_cpl",
-    # Stockfish fitness signal
-    "sf_fitness_white_avg",
-    "sf_fitness_black_avg",
-    # Curriculum
-    "curriculum_stage",
-    # Puzzle metrics (stage 0)
-    "puzzle_white_accuracy_best",
-    "puzzle_white_accuracy_avg",
-    "puzzle_black_accuracy_best",
-    "puzzle_black_accuracy_avg",
-    "puzzle_accuracy_best",
-    "puzzle_white_soft_score_best",
-    "puzzle_white_soft_score_avg",
-    "puzzle_black_soft_score_best",
-    "puzzle_black_soft_score_avg",
-    "puzzle_soft_score_best",
-    "puzzle_max_rating",
-    # Puzzle benchmark (global, comparable across runs)
-    "puzzle_bench_white_accuracy",
-    "puzzle_bench_black_accuracy",
-    "puzzle_bench_accuracy",
-    "elo_estimate",
-]
 
 
 def _chess_metric_transform(log_data: dict) -> dict:

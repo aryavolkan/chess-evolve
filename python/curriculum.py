@@ -4,8 +4,11 @@ Defines 5 training stages, temperature schedules, and stage transition logic.
 """
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
+
+from fitness import FITNESS_DEFAULTS
 
 STAGES = [
     {
@@ -104,25 +107,22 @@ class CurriculumManager:
         self._ladder_tier = 0
         return True
 
-    def fitness_weights(self) -> dict:
-        """Get fitness weights for current stage, merged with defaults."""
-        from fitness import FITNESS_DEFAULTS
-        weights = dict(FITNESS_DEFAULTS)
-        weights.update(STAGE_WEIGHTS[self.stage])
-        if self.stage == 3:
-            progress = min(1.0, self.gen_in_stage / 20.0)
-            weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
-        return weights
-
-    def fitness_weights_for_stage(self, stage: int) -> dict:
-        """Get fitness weights for a specific stage (used for transition blending)."""
-        from fitness import FITNESS_DEFAULTS
+    def _stage_weights(self, stage: int) -> dict:
+        """Get fitness weights for a specific stage, merged with defaults."""
         weights = dict(FITNESS_DEFAULTS)
         weights.update(STAGE_WEIGHTS[stage])
         if stage == 3:
             progress = min(1.0, self.gen_in_stage / 20.0)
             weights["sf_fitness_weight"] = 0.2 + 0.3 * progress
         return weights
+
+    def fitness_weights(self) -> dict:
+        """Get fitness weights for current stage, merged with defaults."""
+        return self._stage_weights(self.stage)
+
+    def fitness_weights_for_stage(self, stage: int) -> dict:
+        """Get fitness weights for a specific stage (used for transition blending)."""
+        return self._stage_weights(stage)
 
     def check_exit(self, metrics: dict) -> bool:
         """Check if current stage exit criteria are met."""
@@ -163,7 +163,6 @@ class CurriculumManager:
 
     def save_run_state(self, path: Path, elo_estimate: float = 0, best_genome_id: str = ""):
         """Persist run state for cross-run seeding."""
-        import datetime
         data = {
             "highest_stage": self.stage,
             "best_elo_estimate": elo_estimate,

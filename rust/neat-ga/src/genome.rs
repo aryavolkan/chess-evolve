@@ -395,52 +395,78 @@ impl NeatGenome {
     }
 
     /// Compatibility distance between two genomes. Mirrors neat_genome.gd:compatibility().
+    ///
+    /// Uses sorted merge-join on innovation numbers instead of building two
+    /// HashMaps per call — O(n log n) sort + O(n) scan vs O(n) HashMap build
+    /// with high constant factor from hashing and heap allocation.
     pub fn compatibility_distance(a: &NeatGenome, b: &NeatGenome, config: &NeatConfig) -> f32 {
         if a.connections.is_empty() && b.connections.is_empty() {
             return 0.0;
         }
 
-        let mut map_a: HashMap<u32, f32> = HashMap::new();
-        let mut max_innov_a: u32 = 0;
-        for g in &a.connections {
-            map_a.insert(g.innovation, g.weight);
-            if g.innovation > max_innov_a {
-                max_innov_a = g.innovation;
-            }
-        }
+        // Build sorted (innovation, weight) arrays
+        let mut sorted_a: Vec<(u32, f32)> = a
+            .connections
+            .iter()
+            .map(|g| (g.innovation, g.weight))
+            .collect();
+        let mut sorted_b: Vec<(u32, f32)> = b
+            .connections
+            .iter()
+            .map(|g| (g.innovation, g.weight))
+            .collect();
+        sorted_a.sort_unstable_by_key(|&(innov, _)| innov);
+        sorted_b.sort_unstable_by_key(|&(innov, _)| innov);
 
-        let mut map_b: HashMap<u32, f32> = HashMap::new();
-        let mut max_innov_b: u32 = 0;
-        for g in &b.connections {
-            map_b.insert(g.innovation, g.weight);
-            if g.innovation > max_innov_b {
-                max_innov_b = g.innovation;
-            }
-        }
-
+        let max_innov_a = sorted_a.last().map_or(0, |&(i, _)| i);
+        let max_innov_b = sorted_b.last().map_or(0, |&(i, _)| i);
         let smaller_max = max_innov_a.min(max_innov_b);
+
         let mut excess: u32 = 0;
         let mut disjoint: u32 = 0;
         let mut weight_diff_sum: f32 = 0.0;
         let mut matching_count: u32 = 0;
 
-        for (&innov, &wa) in &map_a {
-            if let Some(&wb) = map_b.get(&innov) {
+        // Merge-join scan
+        let mut ia = 0;
+        let mut ib = 0;
+        while ia < sorted_a.len() && ib < sorted_b.len() {
+            let (innov_a, wa) = sorted_a[ia];
+            let (innov_b, wb) = sorted_b[ib];
+            if innov_a == innov_b {
                 weight_diff_sum += (wa - wb).abs();
                 matching_count += 1;
-            } else if innov > smaller_max {
+                ia += 1;
+                ib += 1;
+            } else if innov_a < innov_b {
+                if innov_a > smaller_max {
+                    excess += 1;
+                } else {
+                    disjoint += 1;
+                }
+                ia += 1;
+            } else {
+                if innov_b > smaller_max {
+                    excess += 1;
+                } else {
+                    disjoint += 1;
+                }
+                ib += 1;
+            }
+        }
+        // Remaining genes
+        for &(innov, _) in &sorted_a[ia..] {
+            if innov > smaller_max {
                 excess += 1;
             } else {
                 disjoint += 1;
             }
         }
-        for &innov in map_b.keys() {
-            if !map_a.contains_key(&innov) {
-                if innov > smaller_max {
-                    excess += 1;
-                } else {
-                    disjoint += 1;
-                }
+        for &(innov, _) in &sorted_b[ib..] {
+            if innov > smaller_max {
+                excess += 1;
+            } else {
+                disjoint += 1;
             }
         }
 

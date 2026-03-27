@@ -9,16 +9,10 @@ import sys
 import time
 from pathlib import Path
 
-_SHARED = next(
-    (p for p in [
-        os.path.expanduser("~/projects/shared-evolve-utils"),
-        os.path.expanduser("~/Projects/shared-evolve-utils"),
-        os.path.expanduser("~/shared-evolve-utils"),
-    ] if os.path.isdir(p)),
-    "",
-)
-if _SHARED:
-    sys.path.insert(0, _SHARED)
+_PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python")
+sys.path.insert(0, _PYTHON)
+from constants import CHESS_LOG_KEYS, add_shared_evolve_utils_to_path  # noqa: E402, I001
+add_shared_evolve_utils_to_path()
 import wandb  # noqa: E402
 from global_elite import GlobalElitePool  # noqa: E402
 
@@ -70,36 +64,6 @@ DEFAULT_CONFIG = {
     "use_tournament": True,
     "tournament_opponents": 2,
 }
-
-CHESS_LOG_KEYS = [
-    "generation",
-    "white_best",
-    "white_avg",
-    "black_best",
-    "black_avg",
-    "best_fitness",
-    "avg_fitness",
-    "games_played",
-    "total_games_this_gen",
-    "avg_game_length",
-    "games_per_sec",
-    "moves_per_sec",
-    "white_win_rate",
-    "white_draw_rate",
-    "white_loss_rate",
-    "black_win_rate",
-    "black_draw_rate",
-    "black_loss_rate",
-    "white_hof_size",
-    "black_hof_size",
-    "white_tournament_score_best",
-    "white_tournament_score_avg",
-    "black_tournament_score_best",
-    "black_tournament_score_avg",
-    "white_material_avg",
-    "black_material_avg",
-    "generation_time_sec",
-]
 
 
 def poll_metrics_with_timeout(

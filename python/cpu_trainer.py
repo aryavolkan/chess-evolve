@@ -5,7 +5,6 @@ Uses chess_cpu for parallel game simulation and evolve_ga for genetic operators.
 Drop-in replacement for Godot-based training, callable from train_wandb.py.
 """
 import heapq
-import json
 import random
 import time
 from collections.abc import Callable
@@ -22,6 +21,7 @@ from fitness import (
     compute_tournament_scores,
     merge_fitness_weights,
 )
+from trainer_utils import MetricsWriter, generate_pairings, update_hof
 
 
 class CPUTrainer:
@@ -91,7 +91,7 @@ class CPUTrainer:
         # Fixed random benchmark population for measuring absolute progress.
         # Without this, coevolutionary metrics hide improvement because both
         # sides improve simultaneously, keeping relative metrics flat.
-        self.benchmark_size = 20
+        self.benchmark_size = config.get("benchmark_size", 20)
         self.benchmark_pop = self._init_benchmark()
 
     def _init_benchmark(self) -> np.ndarray:
@@ -148,12 +148,7 @@ class CPUTrainer:
 
     def _generate_pairings(self) -> list[tuple[int, int]]:
         """Generate round-robin pairings: each white plays tournament_opponents random blacks."""
-        pairings = []
-        for w_idx in range(self.pop_size):
-            opponents = random.sample(range(self.pop_size), min(self.tournament_opponents, self.pop_size))
-            for b_idx in opponents:
-                pairings.append((w_idx, b_idx))
-        return pairings
+        return generate_pairings(self.pop_size, self.tournament_opponents)
 
     def _compute_fitness(
         self,
@@ -180,19 +175,7 @@ class CPUTrainer:
         fitness: list[float],
     ) -> list[tuple[float, np.ndarray]]:
         """Update Hall of Fame with best individuals from current generation."""
-        best_idx = max(range(len(fitness)), key=lambda i: fitness[i])
-        best_fit = fitness[best_idx]
-        # No .copy() needed — population is replaced (not mutated) each generation
-        best_genome = population[best_idx]
-
-        # Add if HoF not full or better than worst in HoF
-        if len(hof) < self.hof_max_size or best_fit > hof[-1][0]:
-            hof.append((best_fit, best_genome))
-            hof.sort(key=lambda x: -x[0])
-            if len(hof) > self.hof_max_size:
-                hof.pop()
-
-        return hof
+        return update_hof(hof, population, fitness, self.hof_max_size)
 
     def _apply_immigration(self, population: np.ndarray) -> np.ndarray:
         """Replace a fraction of the population with random individuals."""
@@ -203,8 +186,9 @@ class CPUTrainer:
             return population
         targets = random.sample(replaceable, n_immigrants)
         scale = np.float32((2.0 / self.input_size) ** 0.5)
-        for idx in targets:
-            population[idx] = np.random.randn(self.genome_size).astype(np.float32) * scale
+        # Batch allocation: one randn call instead of n_immigrants separate ones
+        immigrants = np.random.randn(n_immigrants, self.genome_size).astype(np.float32) * scale
+        population[targets] = immigrants
         return population
 
     def _compute_outcome_rates(
@@ -289,6 +273,7 @@ class CPUTrainer:
 
         last_metrics = {}
         total_games = 0
+        metrics_writer = MetricsWriter(self.metrics_path)
 
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
@@ -415,17 +400,14 @@ class CPUTrainer:
                 "neat_species_count": w_species_count + b_species_count,
             }
 
-            # Write metrics line to file
-            try:
-                with open(self.metrics_path, "a") as f:
-                    f.write(json.dumps(metrics) + "\n")
-            except OSError:
-                pass
+            metrics_writer.write(metrics)
 
             # Callback
             if on_generation is not None:
                 on_generation(metrics)
 
             last_metrics = metrics
+
+        metrics_writer.close()
 
         return last_metrics

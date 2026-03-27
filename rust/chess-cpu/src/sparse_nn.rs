@@ -89,8 +89,14 @@ impl SparseNetwork {
             if !conn.enabled {
                 continue;
             }
-            let src_pos = id_to_pos.get(conn.in_id as usize).copied().unwrap_or(usize::MAX);
-            let dst_pos = id_to_pos.get(conn.out_id as usize).copied().unwrap_or(usize::MAX);
+            let src_pos = id_to_pos
+                .get(conn.in_id as usize)
+                .copied()
+                .unwrap_or(usize::MAX);
+            let dst_pos = id_to_pos
+                .get(conn.out_id as usize)
+                .copied()
+                .unwrap_or(usize::MAX);
             if src_pos == usize::MAX || dst_pos == usize::MAX {
                 continue;
             }
@@ -187,19 +193,30 @@ impl SparseNetwork {
             }
         }
 
-        // Evaluate non-input nodes in topological order
+        // Evaluate non-input nodes in topological order.
+        // Safety: edge_offsets, edge_sources, edge_weights, and biases are
+        // validated at construction time in from_genome_data. Using unchecked
+        // indexing here removes per-edge bounds checks from the hot loop.
         for &pos_u32 in &self.eval_order {
             let pos = pos_u32 as usize;
             if pos + 1 >= self.edge_offsets.len() || pos >= activations.len() {
                 continue;
             }
-            let start = self.edge_offsets[pos];
-            let end = self.edge_offsets[pos + 1];
-            let mut sum = self.biases.get(pos).copied().unwrap_or(0.0);
+            // SAFETY: pos < edge_offsets.len()-1 checked above, and
+            // edge_offsets[pos+1] <= edge_sources.len() by construction
+            let start = unsafe { *self.edge_offsets.get_unchecked(pos) };
+            let end = unsafe { *self.edge_offsets.get_unchecked(pos + 1) };
+            let mut sum = unsafe { *self.biases.get_unchecked(pos) };
             for e in start..end {
-                let src = self.edge_sources.get(e).copied().unwrap_or(0);
-                let w = self.edge_weights.get(e).copied().unwrap_or(0.0);
-                let a = activations.get(src).copied().unwrap_or(0.0);
+                // SAFETY: e in start..end where end <= edge_sources.len() by CSR invariant
+                let src = unsafe { *self.edge_sources.get_unchecked(e) };
+                let w = unsafe { *self.edge_weights.get_unchecked(e) };
+                // SAFETY: src is a valid node position set during CSR construction
+                let a = if src < activations.len() {
+                    unsafe { *activations.get_unchecked(src) }
+                } else {
+                    0.0
+                };
                 sum += a * w;
             }
             activations[pos] = sum.tanh();

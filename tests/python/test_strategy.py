@@ -43,10 +43,11 @@ def test_sweep_config_parameter_ranges() -> None:
         assert "tournament_mode" in params
 
 
-def test_wandb_log_keys_match_train_script() -> None:
+def test_wandb_log_keys_canonical_source() -> None:
+    """CHESS_LOG_KEYS comes from python/constants.py (single source of truth)."""
+    constants = _load("python/constants.py")
     train = _load("train_wandb.py")
-    bridge = _load("scripts/wandb_bridge.py")
-    assert train["CHESS_LOG_KEYS"] == bridge["CHESS_LOG_KEYS"]
+    assert train["CHESS_LOG_KEYS"] == constants["CHESS_LOG_KEYS"]
 
 
 def test_chess_sweep_worker_imports() -> None:

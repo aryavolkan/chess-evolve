@@ -248,3 +248,93 @@ def aggregate_game_stats(
         b_mat_sum += g["black_material"]
     n = max(1, len(results))
     return total_moves, w_mat_sum / n, b_mat_sum / n
+
+
+def compute_all_stats(
+    results: list[dict],
+    pop_size: int,
+    color: int,
+    weights: dict,
+) -> dict:
+    """Single-pass computation of fitness, tournament scores, outcome rates, and game stats.
+
+    Replaces 4-6 separate passes over the results list with one combined pass.
+
+    Returns dict with keys:
+        fitness: list[float]
+        tournament_scores: list[float]
+        outcome_rates: (win_rate, draw_rate, loss_rate)
+        game_stats: (total_moves, white_material_avg, black_material_avg)
+        fitness_breakdown: dict[str, float]
+    """
+    fitness = [0.0] * pop_size
+    game_counts = [0] * pop_size
+    scores = [0.0] * pop_size
+    score_counts = [0] * pop_size
+
+    wins = draws = losses = 0
+    total_moves = 0
+    w_mat_sum = 0.0
+    b_mat_sum = 0.0
+
+    breakdown_totals = {
+        "outcome": 0.0, "material": 0.0, "mobility": 0.0,
+        "king_safety": 0.0, "opp_king_safety": 0.0,
+        "king_danger": 0.0, "captures": 0.0, "move_penalty": 0.0,
+    }
+
+    for game in results:
+        (idx, my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+         my_kd, my_cap, result, move_count, is_win, is_loss) = _extract_game_data(game, color)
+
+        f, breakdown = _score_game(
+            my_mat, opp_mat, my_ks, opp_ks, my_mob, opp_mob,
+            my_kd, my_cap, result, move_count, is_win, is_loss, weights,
+        )
+
+        # Fitness accumulation
+        fitness[idx] += f
+        game_counts[idx] += 1
+
+        # Tournament scores
+        if is_win:
+            scores[idx] += 1.0
+        elif result == 2:
+            mat_bonus = max(-0.25, min(0.25, (my_mat - opp_mat) / 40.0))
+            scores[idx] += 0.5 + mat_bonus
+        score_counts[idx] += 1
+
+        # Outcome rates
+        if is_win:
+            wins += 1
+        elif result == 2:
+            draws += 1
+        elif is_loss:
+            losses += 1
+
+        # Game stats
+        total_moves += move_count
+        w_mat_sum += game["white_material"]
+        b_mat_sum += game["black_material"]
+
+        # Breakdown
+        for k, v in breakdown.items():
+            breakdown_totals[k] += v
+
+    # Normalize
+    for i in range(pop_size):
+        if game_counts[i] > 0:
+            fitness[i] /= game_counts[i]
+        if score_counts[i] > 0:
+            scores[i] /= score_counts[i]
+
+    n = max(1, len(results))
+    total_outcomes = max(1, wins + draws + losses)
+
+    return {
+        "fitness": fitness,
+        "tournament_scores": scores,
+        "outcome_rates": (wins / total_outcomes, draws / total_outcomes, losses / total_outcomes),
+        "game_stats": (total_moves, w_mat_sum / n, b_mat_sum / n),
+        "fitness_breakdown": {k: v / n for k, v in breakdown_totals.items()},
+    }

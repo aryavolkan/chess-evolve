@@ -120,12 +120,10 @@ fn evolve_generation(
     // Fill remaining slots
     let mut rng = rand::thread_rng();
     while new_pop.len() < pop_size {
-        let parent_a_idx =
-            selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
+        let parent_a_idx = selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
 
         let child = if rng.gen::<f64>() < crossover_rate {
-            let parent_b_idx =
-                selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
+            let parent_b_idx = selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
             match crossover_mode {
                 "sbx" => crossover::sbx_crossover_impl(
                     &population[parent_a_idx],
