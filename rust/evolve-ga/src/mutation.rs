@@ -276,8 +276,7 @@ mod tests {
     fn adaptive_mutation_adjusts_sigmas() {
         let w = vec![0.0f32; 50];
         let sigmas = vec![0.1f32; 50];
-        let (new_w, new_s) =
-            adaptive_gaussian_mutate(w, sigmas.clone(), None, None, 1e-5).unwrap();
+        let (new_w, new_s) = adaptive_gaussian_mutate(w, sigmas.clone(), None, None, 1e-5).unwrap();
         assert_eq!(new_w.len(), 50);
         assert_eq!(new_s.len(), 50);
         let sigma_changed = new_s

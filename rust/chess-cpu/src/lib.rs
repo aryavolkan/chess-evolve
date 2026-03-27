@@ -322,9 +322,8 @@ fn evaluate_puzzles_json_batch(
 /// Useful for debugging and testing.
 #[pyfunction]
 fn encode_board_fen(fen: &str) -> PyResult<Vec<f32>> {
-    let board = board::ChessBoard::from_fen(fen).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid FEN: {}", fen))
-    })?;
+    let board = board::ChessBoard::from_fen(fen)
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("Invalid FEN: {}", fen)))?;
     let mut out = vec![0.0f32; 389];
     encode::encode_board(&board, &mut out);
     Ok(out)

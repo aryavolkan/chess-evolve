@@ -11,7 +11,6 @@ import fcntl
 import heapq
 import json
 import os
-import random
 import shutil
 import time
 from collections.abc import Callable
@@ -30,6 +29,7 @@ from fitness import (
     compute_tournament_scores,
     merge_fitness_weights,
 )
+from trainer_utils import MetricsWriter, generate_pairings, update_hof
 
 
 class NeatCPUTrainer:
@@ -411,13 +411,7 @@ class NeatCPUTrainer:
 
     def _generate_pairings(self) -> list[tuple[int, int]]:
         """Generate pairings: each white plays tournament_opponents random blacks."""
-        pairings = []
-        for w_idx in range(self.pop_size):
-            opponents = random.sample(range(self.pop_size),
-                                      min(self.tournament_opponents, self.pop_size))
-            for b_idx in opponents:
-                pairings.append((w_idx, b_idx))
-        return pairings
+        return generate_pairings(self.pop_size, self.tournament_opponents)
 
     def _compute_fitness(
         self, results: list[dict], pop_size: int, color: int,
@@ -447,17 +441,7 @@ class NeatCPUTrainer:
         self, hof: list[tuple[float, str]], population: list[str], fitness: list[float],
     ) -> list[tuple[float, str]]:
         """Update Hall of Fame with best individual from current generation."""
-        best_idx = max(range(len(fitness)), key=lambda i: fitness[i])
-        best_fit = fitness[best_idx]
-        best_genome = population[best_idx]
-
-        if len(hof) < self.hof_max_size or best_fit > hof[-1][0]:
-            hof.append((best_fit, best_genome))
-            hof.sort(key=lambda x: -x[0])
-            if len(hof) > self.hof_max_size:
-                hof.pop()
-
-        return hof
+        return update_hof(hof, population, fitness, self.hof_max_size)
 
     def _benchmark_vs_random(
         self, white_pop: list[str], black_pop: list[str],
@@ -860,6 +844,7 @@ class NeatCPUTrainer:
 
         last_metrics = {}
         total_games = 0
+        metrics_writer = MetricsWriter(self.metrics_path)
 
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
@@ -1237,12 +1222,7 @@ class NeatCPUTrainer:
                 avg_cpl = (sf_w_cpl + sf_b_cpl) / 2
                 metrics["elo_estimate"] = CurriculumManager.compute_elo_estimate(avg_cpl)
 
-            # Write metrics line to file
-            try:
-                with open(self.metrics_path, "a") as f:
-                    f.write(json.dumps(metrics) + "\n")
-            except OSError:
-                pass
+            metrics_writer.write(metrics)
 
             if on_generation is not None:
                 on_generation(metrics)
@@ -1278,5 +1258,7 @@ class NeatCPUTrainer:
         print(f"    Elo estimate: {elo}")
         print(f"    Benchmark win rate: {last_metrics.get('bench_avg_win_rate', 0):.1%}")
         print(f"    Generations: {max_generations}")
+
+        metrics_writer.close()
 
         return last_metrics

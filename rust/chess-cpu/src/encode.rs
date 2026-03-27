@@ -5,39 +5,49 @@ use crate::nn::DenseNetwork;
 ///
 /// Layout: 6 piece-type planes × 64 squares (signed: +1 white, -1 black),
 /// then side_to_move, then 4 castling rights.
+///
+/// Uses bitboard iteration to touch only occupied squares (O(pieces) instead
+/// of O(384)) — typically 10-20 pieces vs 384 piece_at lookups.
 pub fn encode_board(board: &ChessBoard, out: &mut [f32]) {
-    out.fill(0.0);
-    let mut idx = 0usize;
-    for piece_type in 1..=6 {
-        for sq in 0..64 {
-            let p = board.piece_at(sq);
-            if p.abs() == piece_type as i8 {
-                out[idx] = if p > 0 { 1.0 } else { -1.0 };
-            }
-            idx += 1;
+    // Zero the 6 piece planes (384 floats). Metadata slots are set unconditionally below.
+    out[..384].fill(0.0);
+
+    // bb[0..6] = white pieces (pawn..king), bb[6..12] = black pieces
+    // Piece type index: pawn=0, knight=1, bishop=2, rook=3, queen=4, king=5
+    for piece_type in 0..6usize {
+        // White pieces: +1.0
+        let mut bb = board.bb[piece_type].0;
+        while bb != 0 {
+            let sq = bb.trailing_zeros() as usize;
+            out[piece_type * 64 + sq] = 1.0;
+            bb &= bb - 1; // clear lowest set bit
+        }
+        // Black pieces: -1.0
+        let mut bb = board.bb[6 + piece_type].0;
+        while bb != 0 {
+            let sq = bb.trailing_zeros() as usize;
+            out[piece_type * 64 + sq] = -1.0;
+            bb &= bb - 1;
         }
     }
-    out[idx] = if board.side_to_move == 0 { 0.0 } else { 1.0 };
-    idx += 1;
-    out[idx] = if board.castling_rights & 0b0001 != 0 {
+
+    out[384] = if board.side_to_move == 0 { 0.0 } else { 1.0 };
+    out[385] = if board.castling_rights & 0b0001 != 0 {
         1.0
     } else {
         0.0
     };
-    idx += 1;
-    out[idx] = if board.castling_rights & 0b0010 != 0 {
+    out[386] = if board.castling_rights & 0b0010 != 0 {
         1.0
     } else {
         0.0
     };
-    idx += 1;
-    out[idx] = if board.castling_rights & 0b0100 != 0 {
+    out[387] = if board.castling_rights & 0b0100 != 0 {
         1.0
     } else {
         0.0
     };
-    idx += 1;
-    out[idx] = if board.castling_rights & 0b1000 != 0 {
+    out[388] = if board.castling_rights & 0b1000 != 0 {
         1.0
     } else {
         0.0
@@ -123,8 +133,16 @@ pub fn decode_move_factored(
         .map(|&mv| {
             let from = ((mv >> 6) & 0x3f) as usize;
             let to = (mv & 0x3f) as usize;
-            let from_score = if from < outputs.len() { outputs[from] } else { 0.0 };
-            let to_score = if 64 + to < outputs.len() { outputs[64 + to] } else { 0.0 };
+            let from_score = if from < outputs.len() {
+                outputs[from]
+            } else {
+                0.0
+            };
+            let to_score = if 64 + to < outputs.len() {
+                outputs[64 + to]
+            } else {
+                0.0
+            };
             from_score + to_score
         })
         .collect();
@@ -189,7 +207,11 @@ pub fn decode_move_piece_dest(
                 0
             };
             let idx = piece_idx * 64 + to;
-            if idx < outputs.len() { outputs[idx] } else { 0.0 }
+            if idx < outputs.len() {
+                outputs[idx]
+            } else {
+                0.0
+            }
         })
         .collect();
 

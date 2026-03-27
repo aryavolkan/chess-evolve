@@ -1,11 +1,13 @@
-use std::collections::HashMap;
 use std::panic;
 
 use rand::SeedableRng;
 use rayon::prelude::*;
 
 use crate::board::ChessBoard;
-use crate::encode::{decode_move, decode_move_factored, decode_move_piece_dest, dense_from_flat_weights, encode_board};
+use crate::encode::{
+    decode_move, decode_move_factored, decode_move_piece_dest, dense_from_flat_weights,
+    encode_board,
+};
 use crate::evaluate::{king_danger_score, king_safety_score, material_score, mobility_score};
 use crate::sparse_nn::SparseNetwork;
 
@@ -49,11 +51,11 @@ fn position_hash(board: &ChessBoard) -> u64 {
 /// Material value of a captured piece (by absolute piece type).
 fn capture_value(piece_abs: i8) -> f32 {
     match piece_abs {
-        1 => 1.0,   // pawn
-        2 => 3.0,   // knight
-        3 => 3.25,  // bishop
-        4 => 5.0,   // rook
-        5 => 9.0,   // queen
+        1 => 1.0,  // pawn
+        2 => 3.0,  // knight
+        3 => 3.25, // bishop
+        4 => 5.0,  // rook
+        5 => 9.0,  // queen
         _ => 0.0,
     }
 }
@@ -83,8 +85,9 @@ pub fn simulate_game(
     let mut inputs = vec![0.0f32; input_size];
     let mut pseudo_buf = Vec::with_capacity(256);
 
-    // Threefold repetition detection
-    let mut position_hashes: HashMap<u64, u8> = HashMap::with_capacity(max_moves);
+    // Threefold repetition detection — Vec-based linear scan.
+    // Positions rarely repeat so linear search over ~0-3 entries is faster than HashMap.
+    let mut position_hashes: Vec<(u64, u8)> = Vec::with_capacity(16);
 
     // Mid-game king danger tracking (sampled every 10 moves)
     let mut w_danger_acc = 0.0f32;
@@ -108,11 +111,14 @@ pub fn simulate_game(
 
         // Threefold repetition check
         let hash = position_hash(&board);
-        let count = position_hashes.entry(hash).or_insert(0);
-        *count += 1;
-        if *count >= 3 {
-            result = 2;
-            break;
+        if let Some(entry) = position_hashes.iter_mut().find(|(h, _)| *h == hash) {
+            entry.1 += 1;
+            if entry.1 >= 3 {
+                result = 2;
+                break;
+            }
+        } else {
+            position_hashes.push((hash, 1));
         }
 
         encode_board(&board, &mut inputs);
@@ -278,7 +284,7 @@ pub fn simulate_neat_game(
     let mut inputs = vec![0.0f32; input_size];
     let mut pseudo_buf = Vec::with_capacity(256);
 
-    let mut position_hashes: HashMap<u64, u8> = HashMap::with_capacity(max_moves);
+    let mut position_hashes: Vec<(u64, u8)> = Vec::with_capacity(16);
 
     let mut w_danger_acc = 0.0f32;
     let mut b_danger_acc = 0.0f32;
@@ -300,11 +306,14 @@ pub fn simulate_neat_game(
         }
 
         let hash = position_hash(&board);
-        let count = position_hashes.entry(hash).or_insert(0);
-        *count += 1;
-        if *count >= 3 {
-            result = 2;
-            break;
+        if let Some(entry) = position_hashes.iter_mut().find(|(h, _)| *h == hash) {
+            entry.1 += 1;
+            if entry.1 >= 3 {
+                result = 2;
+                break;
+            }
+        } else {
+            position_hashes.push((hash, 1));
         }
 
         encode_board(&board, &mut inputs);
@@ -391,7 +400,8 @@ pub fn simulate_neat_game(
 
 /// Simulate a batch of NEAT games in parallel using rayon.
 ///
-/// Each rayon thread: parse genome JSON -> build SparseNetwork -> simulate game.
+/// Pre-builds SparseNetwork objects for all unique genomes to avoid redundant
+/// JSON parsing when the same genome appears in multiple pairings.
 pub fn simulate_neat_games_batch(
     white_genomes_json: &[String],
     black_genomes_json: &[String],
@@ -402,39 +412,61 @@ pub fn simulate_neat_games_batch(
     mercy_min_moves: usize,
     mercy_material_threshold: f32,
 ) -> Vec<GameResult> {
+    // Pre-build all unique SparseNetworks (sequential JSON parse, avoids
+    // redundant parsing when same genome appears in multiple pairings)
+    let white_nets: Vec<Option<SparseNetwork>> = white_genomes_json
+        .iter()
+        .map(|json| SparseNetwork::from_genome_json(json))
+        .collect();
+    let black_nets: Vec<Option<SparseNetwork>> = black_genomes_json
+        .iter()
+        .map(|json| SparseNetwork::from_genome_json(json))
+        .collect();
+
     pairings
         .par_iter()
         .enumerate()
         .map(|(game_idx, &(w_idx, b_idx))| {
             let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                let w_json = &white_genomes_json[w_idx];
-                let b_json = &black_genomes_json[b_idx];
-
-                let w_net = match SparseNetwork::from_genome_json(w_json) {
+                let w_net = match &white_nets[w_idx] {
                     Some(net) => net,
                     None => {
                         return GameResult {
-                            white_idx: w_idx, black_idx: b_idx,
-                            result: -1, move_count: 0,
-                            white_material: 0.0, black_material: 39.0,
-                            white_mobility: 0, black_mobility: 20,
-                            white_king_safety: 0.0, black_king_safety: 0.0,
-                            white_king_danger: 0.0, black_king_danger: 0.0,
-                            white_captures_value: 0.0, black_captures_value: 0.0,
+                            white_idx: w_idx,
+                            black_idx: b_idx,
+                            result: -1,
+                            move_count: 0,
+                            white_material: 0.0,
+                            black_material: 39.0,
+                            white_mobility: 0,
+                            black_mobility: 20,
+                            white_king_safety: 0.0,
+                            black_king_safety: 0.0,
+                            white_king_danger: 0.0,
+                            black_king_danger: 0.0,
+                            white_captures_value: 0.0,
+                            black_captures_value: 0.0,
                         };
                     }
                 };
-                let b_net = match SparseNetwork::from_genome_json(b_json) {
+                let b_net = match &black_nets[b_idx] {
                     Some(net) => net,
                     None => {
                         return GameResult {
-                            white_idx: w_idx, black_idx: b_idx,
-                            result: 1, move_count: 0,
-                            white_material: 39.0, black_material: 0.0,
-                            white_mobility: 20, black_mobility: 0,
-                            white_king_safety: 0.0, black_king_safety: 0.0,
-                            white_king_danger: 0.0, black_king_danger: 0.0,
-                            white_captures_value: 0.0, black_captures_value: 0.0,
+                            white_idx: w_idx,
+                            black_idx: b_idx,
+                            result: 1,
+                            move_count: 0,
+                            white_material: 39.0,
+                            black_material: 0.0,
+                            white_mobility: 20,
+                            black_mobility: 0,
+                            white_king_safety: 0.0,
+                            black_king_safety: 0.0,
+                            white_king_danger: 0.0,
+                            black_king_danger: 0.0,
+                            white_captures_value: 0.0,
+                            black_captures_value: 0.0,
                         };
                     }
                 };
@@ -446,8 +478,8 @@ pub fn simulate_neat_games_batch(
                 );
 
                 let mut gr = simulate_neat_game(
-                    &w_net,
-                    &b_net,
+                    w_net,
+                    b_net,
                     output_size,
                     max_moves,
                     temperature,
@@ -461,13 +493,20 @@ pub fn simulate_neat_games_batch(
             }));
 
             result.unwrap_or(GameResult {
-                white_idx: w_idx, black_idx: b_idx,
-                result: 2, move_count: 0,
-                white_material: 0.0, black_material: 0.0,
-                white_mobility: 0, black_mobility: 0,
-                white_king_safety: 0.0, black_king_safety: 0.0,
-                white_king_danger: 0.0, black_king_danger: 0.0,
-                white_captures_value: 0.0, black_captures_value: 0.0,
+                white_idx: w_idx,
+                black_idx: b_idx,
+                result: 2,
+                move_count: 0,
+                white_material: 0.0,
+                black_material: 0.0,
+                white_mobility: 0,
+                black_mobility: 0,
+                white_king_safety: 0.0,
+                black_king_safety: 0.0,
+                white_king_danger: 0.0,
+                black_king_danger: 0.0,
+                white_captures_value: 0.0,
+                black_captures_value: 0.0,
             })
         })
         .collect()
@@ -512,19 +551,39 @@ fn score_move(mv: u32, output: &[f32], output_size: usize, board: &ChessBoard) -
     let to = (mv & 0x3f) as usize;
     if output_size <= 128 {
         // Factored: from-score + to-score
-        let fs = if from < output.len() { output[from] } else { 0.0 };
-        let ts = if 64 + to < output.len() { output[64 + to] } else { 0.0 };
+        let fs = if from < output.len() {
+            output[from]
+        } else {
+            0.0
+        };
+        let ts = if 64 + to < output.len() {
+            output[64 + to]
+        } else {
+            0.0
+        };
         fs + ts
     } else if output_size <= 384 {
         // Piece × destination
         let piece_abs = board.piece_at(from).unsigned_abs() as usize;
-        let piece_idx = if (1..=6).contains(&piece_abs) { piece_abs - 1 } else { 0 };
+        let piece_idx = if (1..=6).contains(&piece_abs) {
+            piece_abs - 1
+        } else {
+            0
+        };
         let idx = piece_idx * 64 + to;
-        if idx < output.len() { output[idx] } else { 0.0 }
+        if idx < output.len() {
+            output[idx]
+        } else {
+            0.0
+        }
     } else {
         // Full 4096 from×to
         let idx = from * 64 + to;
-        if idx < output.len() { output[idx] } else { 0.0 }
+        if idx < output.len() {
+            output[idx]
+        } else {
+            0.0
+        }
     }
 }
 

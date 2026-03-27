@@ -840,7 +840,7 @@ func _play_game(
         move_count += 1
 
         # Threefold repetition detection
-        var pos_key: String = state.get_position_key()
+        var pos_key: int = state.get_position_key()
         var pos_count: int = position_counts.get(pos_key, 0) + 1
         position_counts[pos_key] = pos_count
         if pos_count >= 3:
