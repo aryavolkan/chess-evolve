@@ -1,6 +1,6 @@
 # Steady Progress Pipeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build a 5-stage NEAT curriculum pipeline where every overnight run produces measurable Elo improvement toward 1200+.
 
@@ -20,7 +20,7 @@
 - Create: `python/curriculum.py`
 - Test: `tests/python/test_curriculum.py`
 
-- [ ] **Step 1: Write failing tests for stage definitions and temperature**
+- [x] **Step 1: Write failing tests for stage definitions and temperature**
 
 ```python
 # tests/python/test_curriculum.py
@@ -80,12 +80,12 @@ def test_eval_temperature_always_zero():
         assert cm.eval_temperature() == 0.0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'curriculum'`
 
-- [ ] **Step 3: Implement `python/curriculum.py`**
+- [x] **Step 3: Implement `python/curriculum.py`**
 
 ```python
 """Curriculum stage management for NEAT chess training.
@@ -186,12 +186,12 @@ class CurriculumManager:
             self._transition_remaining -= 1
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py -v`
 Expected: All 8 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -207,7 +207,7 @@ git commit -m "feat: add curriculum module with stage definitions and temperatur
 - Modify: `python/curriculum.py`
 - Test: `tests/python/test_curriculum.py`
 
-- [ ] **Step 1: Write failing tests for fitness weight lookup**
+- [x] **Step 1: Write failing tests for fitness weight lookup**
 
 Append to `tests/python/test_curriculum.py`:
 
@@ -252,12 +252,12 @@ def test_stage_weights_stage4_low_sf():
     assert w["sf_fitness_weight"] == pytest.approx(0.1)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py::test_stage_weights_stage0_high_checkmate -v`
 Expected: FAIL — `AttributeError: 'CurriculumManager' object has no attribute 'fitness_weights'`
 
-- [ ] **Step 3: Add fitness weight tables to `python/curriculum.py`**
+- [x] **Step 3: Add fitness weight tables to `python/curriculum.py`**
 
 Add after the `STAGES` list:
 
@@ -309,12 +309,12 @@ Add method to `CurriculumManager`:
         return weights
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py -v`
 Expected: All 12 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -330,7 +330,7 @@ git commit -m "feat: add stage-specific fitness weight tables to curriculum"
 - Modify: `python/curriculum.py`
 - Test: `tests/python/test_curriculum.py`
 
-- [ ] **Step 1: Write failing tests for exit criteria checking**
+- [x] **Step 1: Write failing tests for exit criteria checking**
 
 Append to `tests/python/test_curriculum.py`:
 
@@ -411,12 +411,12 @@ def test_transition_blending_active():
     assert cm.transition_blend_weight() == pytest.approx(1.0)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py::test_check_stage0_exit_not_ready -v`
 Expected: FAIL — `AttributeError: 'CurriculumManager' object has no attribute 'check_exit'`
 
-- [ ] **Step 3: Add `check_exit` to `CurriculumManager`**
+- [x] **Step 3: Add `check_exit` to `CurriculumManager`**
 
 Add to `CurriculumManager` in `python/curriculum.py`:
 
@@ -460,12 +460,12 @@ Add to `CurriculumManager` in `python/curriculum.py`:
             return False
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py -v`
 Expected: All 21 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -481,7 +481,7 @@ git commit -m "feat: add stage exit criteria and transition blending to curricul
 - Modify: `python/curriculum.py`
 - Test: `tests/python/test_curriculum.py`
 
-- [ ] **Step 1: Write failing tests for save/load**
+- [x] **Step 1: Write failing tests for save/load**
 
 Append to `tests/python/test_curriculum.py`:
 
@@ -528,12 +528,12 @@ def test_elo_estimate():
     assert CurriculumManager.compute_elo_estimate(3000) == 0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py::test_save_run_state -v`
 Expected: FAIL — `AttributeError`
 
-- [ ] **Step 3: Implement save/load and elo_estimate**
+- [x] **Step 3: Implement save/load and elo_estimate**
 
 Add to `CurriculumManager` in `python/curriculum.py`:
 
@@ -571,12 +571,12 @@ Add to `CurriculumManager` in `python/curriculum.py`:
 
 Also add `import json` at the top of `curriculum.py` and `from pathlib import Path` to the imports.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_curriculum.py -v`
 Expected: All 25 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -592,7 +592,7 @@ git commit -m "feat: add cross-run state persistence and elo estimate to curricu
 - Modify: `python/neat_cpu_trainer.py`
 - Test: `tests/python/test_neat_cpu_trainer.py`
 
-- [ ] **Step 1: Write failing test for curriculum integration**
+- [x] **Step 1: Write failing test for curriculum integration**
 
 Append to `tests/python/test_neat_cpu_trainer.py`:
 
@@ -617,12 +617,12 @@ def test_trainer_eval_temperature_zero():
     assert trainer.curriculum.eval_temperature() == 0.0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_neat_cpu_trainer.py::test_trainer_creates_curriculum_manager -v`
 Expected: FAIL — `AssertionError: 'curriculum' not found`
 
-- [ ] **Step 3: Wire CurriculumManager into NeatCPUTrainer.__init__**
+- [x] **Step 3: Wire CurriculumManager into NeatCPUTrainer.__init__**
 
 In `python/neat_cpu_trainer.py`, add import at top:
 
@@ -637,12 +637,12 @@ In `__init__`, after the line `self.fitness_weights = merge_fitness_weights(conf
         self.curriculum = CurriculumManager(config)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_neat_cpu_trainer.py::test_trainer_creates_curriculum_manager tests/python/test_neat_cpu_trainer.py::test_trainer_temperature_from_curriculum tests/python/test_neat_cpu_trainer.py::test_trainer_eval_temperature_zero -v`
 Expected: All 3 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -659,7 +659,7 @@ git commit -m "feat: wire CurriculumManager into NeatCPUTrainer"
 
 This is the largest task — replacing the inline `curriculum_stage` variable and promotion logic in the `train()` method with calls to `self.curriculum`. This is a refactor of existing logic, not new behavior.
 
-- [ ] **Step 1: Replace temperature usage in train()**
+- [x] **Step 1: Replace temperature usage in train()**
 
 In the `train()` method, find where `self.temperature` is used in `chess_cpu.simulate_neat_games_batch()` calls. Replace with:
 
@@ -673,7 +673,7 @@ And for benchmark evaluations, use:
 eval_temp = self.curriculum.eval_temperature()
 ```
 
-- [ ] **Step 2: Replace fitness weight lookup**
+- [x] **Step 2: Replace fitness weight lookup**
 
 Replace the static `self.fitness_weights` in the train loop with:
 
@@ -683,7 +683,7 @@ weights = self.curriculum.fitness_weights()
 
 This needs to be called each generation since weights change per stage.
 
-- [ ] **Step 3: Replace curriculum promotion logic**
+- [x] **Step 3: Replace curriculum promotion logic**
 
 Replace the block at lines ~1190-1221 that checks `curriculum_stage == 0` and `use_curriculum` with:
 
@@ -697,16 +697,16 @@ if self.curriculum.check_exit(metrics):
 self.curriculum.tick_generation()
 ```
 
-- [ ] **Step 4: Replace `curriculum_stage` variable references**
+- [x] **Step 4: Replace `curriculum_stage` variable references**
 
 Replace all remaining `curriculum_stage` local variable reads with `self.curriculum.stage`. Remove the `curriculum_stage = self.curriculum_stage` line and the `use_curriculum` variable.
 
-- [ ] **Step 5: Run existing tests to verify no regression**
+- [x] **Step 5: Run existing tests to verify no regression**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/test_neat_cpu_trainer.py -v`
 Expected: All existing tests PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -721,7 +721,7 @@ git commit -m "refactor: replace inline curriculum logic with CurriculumManager 
 **Files:**
 - Modify: `python/neat_cpu_trainer.py`
 
-- [ ] **Step 1: Add blending logic after fitness computation**
+- [x] **Step 1: Add blending logic after fitness computation**
 
 In the training loop, after computing fitness for the current stage, add blending during transition periods:
 
@@ -736,7 +736,7 @@ if self.curriculum.is_transitioning():
     black_fitness = blend_fitness(prev_b_fit, black_fitness, blend_w)
 ```
 
-- [ ] **Step 2: Add `fitness_weights_for_stage` to CurriculumManager**
+- [x] **Step 2: Add `fitness_weights_for_stage` to CurriculumManager**
 
 In `python/curriculum.py`, add:
 
@@ -752,12 +752,12 @@ In `python/curriculum.py`, add:
         return weights
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/ -v`
 Expected: All PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -773,7 +773,7 @@ git commit -m "feat: add transition blending between curriculum stages"
 - Modify: `python/neat_cpu_trainer.py`
 - Modify: `train_wandb.py`
 
-- [ ] **Step 1: Increase benchmark size**
+- [x] **Step 1: Increase benchmark size**
 
 In `python/neat_cpu_trainer.py`, change line 139:
 
@@ -784,7 +784,7 @@ self.benchmark_size = 20
 self.benchmark_size = config.get("benchmark_size", 50)
 ```
 
-- [ ] **Step 2: Add `elo_estimate` to metrics logging**
+- [x] **Step 2: Add `elo_estimate` to metrics logging**
 
 In the metrics dict construction in `train()` (~line 1100-1160), add:
 
@@ -795,7 +795,7 @@ if ran_sf:
     metrics["elo_estimate"] = CurriculumManager.compute_elo_estimate(avg_cpl)
 ```
 
-- [ ] **Step 3: Add `elo_estimate` to CHESS_LOG_KEYS in `train_wandb.py`**
+- [x] **Step 3: Add `elo_estimate` to CHESS_LOG_KEYS in `train_wandb.py`**
 
 In `train_wandb.py`, add to the `CHESS_LOG_KEYS` list:
 
@@ -803,19 +803,19 @@ In `train_wandb.py`, add to the `CHESS_LOG_KEYS` list:
     "elo_estimate",
 ```
 
-- [ ] **Step 4: Add `benchmark_size` to DEFAULT_CONFIG in `train_wandb.py`**
+- [x] **Step 4: Add `benchmark_size` to DEFAULT_CONFIG in `train_wandb.py`**
 
 ```python
     "benchmark_size": 50,
     "eval_temperature": 0.0,
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/ -v`
 Expected: All PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -830,7 +830,7 @@ git commit -m "feat: expand benchmark to 50 genomes, add elo_estimate metric"
 **Files:**
 - Modify: `python/neat_cpu_trainer.py`
 
-- [ ] **Step 1: Add run summary at end of train()**
+- [x] **Step 1: Add run summary at end of train()**
 
 Before the `return last_metrics` line at the end of `train()`, add:
 
@@ -852,7 +852,7 @@ Before the `return last_metrics` line at the end of `train()`, add:
         print(f"    Generations: {max_generations}")
 ```
 
-- [ ] **Step 2: Load run state at start of train()**
+- [x] **Step 2: Load run state at start of train()**
 
 In `__init__`, after creating the CurriculumManager, add cross-run state loading:
 
@@ -865,12 +865,12 @@ In `__init__`, after creating the CurriculumManager, add cross-run state loading
                   f"({self.curriculum.stage_name()})")
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/python/ -v`
 Expected: All PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -885,7 +885,7 @@ git commit -m "feat: add run summary and cross-run state persistence"
 **Files:**
 - Create: `configs/steady_progress_config.json`
 
-- [ ] **Step 1: Create the config file**
+- [x] **Step 1: Create the config file**
 
 ```json
 {
@@ -915,7 +915,7 @@ git commit -m "feat: add run summary and cross-run state persistence"
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -930,7 +930,7 @@ git commit -m "feat: add steady progress training config"
 **Files:**
 - Create: `tests/integration/test_curriculum_integration.py`
 
-- [ ] **Step 1: Write integration test**
+- [x] **Step 1: Write integration test**
 
 ```python
 """Integration test: verify curriculum stage transitions fire correctly
@@ -989,12 +989,12 @@ def test_curriculum_manager_full_lifecycle(tmp_path):
     assert cm2.stage == 0
 ```
 
-- [ ] **Step 2: Run integration test**
+- [x] **Step 2: Run integration test**
 
 Run: `cd /Users/aryasen/projects/chess-evolve && python -m pytest tests/integration/test_curriculum_integration.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
@@ -1010,7 +1010,7 @@ git commit -m "test: add curriculum integration test"
 - Modify: `CLAUDE.md`
 - Modify: `docs/superpowers/specs/2026-03-25-steady-progress-pipeline-design.md` (mark as implemented)
 
-- [ ] **Step 1: Add curriculum module to CLAUDE.md architecture section**
+- [x] **Step 1: Add curriculum module to CLAUDE.md architecture section**
 
 In the Python layer description in CLAUDE.md, add:
 
@@ -1018,7 +1018,7 @@ In the Python layer description in CLAUDE.md, add:
    - `python/curriculum.py`: 5-stage curriculum manager (stage definitions, temperature annealing, fitness weight tables, cross-run state persistence). Stages: puzzles → guided play → opponent ladder → SF shaping → coevo refinement.
 ```
 
-- [ ] **Step 2: Add `configs/steady_progress_config.json` mention**
+- [x] **Step 2: Add `configs/steady_progress_config.json` mention**
 
 In the CLAUDE.md training section, add:
 
@@ -1027,7 +1027,7 @@ In the CLAUDE.md training section, add:
 python train_wandb.py --config configs/steady_progress_config.json
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /Users/aryasen/projects/chess-evolve
