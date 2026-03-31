@@ -413,30 +413,6 @@ class NeatCPUTrainer:
         """Generate pairings: each white plays tournament_opponents random blacks."""
         return generate_pairings(self.pop_size, self.tournament_opponents)
 
-    def _compute_fitness(
-        self, results: list[dict], pop_size: int, color: int,
-    ) -> list[float]:
-        """Compute fitness for each individual of the given color."""
-        return compute_fitness(results, pop_size, color, self.fitness_weights)
-
-    def _compute_fitness_breakdown(
-        self, results: list[dict], color: int,
-    ) -> dict[str, float]:
-        """Compute average contribution of each fitness component across all games."""
-        return compute_fitness_breakdown(results, color, self.fitness_weights)
-
-    def _compute_outcome_rates(
-        self, results: list[dict], color: int,
-    ) -> tuple[float, float, float]:
-        """Compute win/draw/loss rates for a color."""
-        return compute_outcome_rates(results, color)
-
-    def _compute_tournament_scores(
-        self, results: list[dict], pop_size: int, color: int,
-    ) -> list[float]:
-        """Compute tournament scores: 1.0 for win, 0.5+material_bonus for draw, 0.0 for loss."""
-        return compute_tournament_scores(results, pop_size, color)
-
     def _update_hof(
         self, hof: list[tuple[float, str]], population: list[str], fitness: list[float],
     ) -> list[tuple[float, str]]:
@@ -740,18 +716,7 @@ class NeatCPUTrainer:
                 for w, b in pairings
             ]
 
-        return self._compute_fitness(results, n, color=color)
-
-    def _genome_stats(self, population: list[str]) -> tuple[float, float]:
-        """Compute average connections and nodes across population."""
-        total_conns = 0
-        total_nodes = 0
-        for genome_json in population:
-            g = json.loads(genome_json)
-            total_conns += sum(1 for c in g["connections"] if c["enabled"])
-            total_nodes += len(g["nodes"])
-        n = max(1, len(population))
-        return total_conns / n, total_nodes / n
+        return compute_fitness(results, n, color, self.fitness_weights)
 
     def train(
         self,
@@ -848,6 +813,8 @@ class NeatCPUTrainer:
         last_metrics = {}
         total_games = 0
         metrics_writer = MetricsWriter(self.metrics_path)
+        w_stats: dict = {}
+        b_stats: dict = {}
 
         for gen in range(1, max_generations + 1):
             gen_start = time.time()
@@ -915,8 +882,8 @@ class NeatCPUTrainer:
                     mercy_material_threshold=self.mercy_material_threshold,
                 )
 
-                white_fitness = self._compute_fitness(w_results, self.pop_size, color=0)
-                black_fitness = self._compute_fitness(b_results, self.pop_size, color=1)
+                white_fitness = compute_fitness(w_results, self.pop_size, 0, self.fitness_weights)
+                black_fitness = compute_fitness(b_results, self.pop_size, 1, self.fitness_weights)
 
                 # Combine results for metrics reporting
                 results = w_results + b_results
@@ -961,8 +928,8 @@ class NeatCPUTrainer:
                 num_games = len(results)
 
                 # Compute coevolution fitness
-                white_fitness = self._compute_fitness(results, self.pop_size, color=0)
-                black_fitness = self._compute_fitness(results, self.pop_size, color=1)
+                white_fitness = compute_fitness(results, self.pop_size, 0, self.fitness_weights)
+                black_fitness = compute_fitness(results, self.pop_size, 1, self.fitness_weights)
 
                 # Blend benchmark fitness into selection signal
                 bw = self.benchmark_fitness_weight
@@ -986,26 +953,25 @@ class NeatCPUTrainer:
                 sf_w_avg_cpl_fit = sum(sf_white_fit) / max(1, sum(1 for f in sf_white_fit if f > 0))
                 sf_b_avg_cpl_fit = sum(sf_black_fit) / max(1, sum(1 for f in sf_black_fit if f > 0))
 
-            # Parsimony pressure: penalize complexity (enabled connections).
-            # Use fast string count instead of full JSON parse per genome.
-            # Rust serde produces "enabled":true (compact), Python json.dumps
-            # produces "enabled": true (with space). Count both.
             cc = self.neat_config.get("complexity_cost", 0.0)
             if cc > 0:
-                for i, gj in enumerate(white_pop):
-                    white_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
-                for i, gj in enumerate(black_pop):
-                    black_fitness[i] -= cc * (gj.count('"enabled":true') + gj.count('"enabled": true'))
+                # Use Rust-returned average connections instead of scanning JSON strings
+                w_avg_conn = w_stats.get("avg_connections", 0) if isinstance(w_stats, dict) else 0
+                b_avg_conn = b_stats.get("avg_connections", 0) if isinstance(b_stats, dict) else 0
+                for i in range(len(white_fitness)):
+                    white_fitness[i] -= cc * w_avg_conn
+                for i in range(len(black_fitness)):
+                    black_fitness[i] -= cc * b_avg_conn
 
             # Tournament scores
             if self.curriculum.stage == 0:
                 pass  # already set above
             elif self.curriculum.stage >= 1:
-                white_tourn = self._compute_tournament_scores(w_results, self.pop_size, color=0)
-                black_tourn = self._compute_tournament_scores(b_results, self.pop_size, color=1)
+                white_tourn = compute_tournament_scores(w_results, self.pop_size, 0)
+                black_tourn = compute_tournament_scores(b_results, self.pop_size, 1)
             else:
-                white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)
-                black_tourn = self._compute_tournament_scores(results, self.pop_size, color=1)
+                white_tourn = compute_tournament_scores(results, self.pop_size, 0)
+                black_tourn = compute_tournament_scores(results, self.pop_size, 1)
 
             # Update Hall of Fame
             self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
@@ -1033,23 +999,23 @@ class NeatCPUTrainer:
                 white_tourn = [0.0] * self.pop_size
                 black_tourn = [0.0] * self.pop_size
             elif self.curriculum.stage >= 1:
-                w_win, w_draw, w_loss = self._compute_outcome_rates(w_results, color=0)
-                b_win, b_draw, b_loss = self._compute_outcome_rates(b_results, color=1)
+                w_win, w_draw, w_loss = compute_outcome_rates(w_results, 0)
+                b_win, b_draw, b_loss = compute_outcome_rates(b_results, 1)
                 total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
                 avg_game_length = total_moves / max(1, num_games)
                 games_per_sec = num_games / max(0.001, gen_time)
                 moves_per_sec = total_moves / max(0.001, gen_time)
-                w_breakdown = self._compute_fitness_breakdown(w_results, color=0)
-                b_breakdown = self._compute_fitness_breakdown(b_results, color=1)
+                w_breakdown = compute_fitness_breakdown(w_results, 0, self.fitness_weights)
+                b_breakdown = compute_fitness_breakdown(b_results, 1, self.fitness_weights)
             else:
-                w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
-                b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
+                w_win, w_draw, w_loss = compute_outcome_rates(results, 0)
+                b_win, b_draw, b_loss = compute_outcome_rates(results, 1)
                 total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
                 avg_game_length = total_moves / max(1, num_games)
                 games_per_sec = num_games / max(0.001, gen_time)
                 moves_per_sec = total_moves / max(0.001, gen_time)
-                w_breakdown = self._compute_fitness_breakdown(results, color=0)
-                b_breakdown = self._compute_fitness_breakdown(results, color=1)
+                w_breakdown = compute_fitness_breakdown(results, 0, self.fitness_weights)
+                b_breakdown = compute_fitness_breakdown(results, 1, self.fitness_weights)
 
             # Genome complexity stats
             avg_conns = (w_stats["avg_connections"] + b_stats["avg_connections"]) / 2

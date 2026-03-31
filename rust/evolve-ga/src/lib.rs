@@ -125,7 +125,7 @@ fn evolve_generation(
     while new_pop.len() < pop_size {
         let parent_a_idx = selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
 
-        let child = if rng.gen::<f64>() < crossover_rate {
+        let mut child = if rng.gen::<f64>() < crossover_rate {
             let parent_b_idx = selection::tournament_select_impl(&fitness, tournament_k, &mut rng);
             match crossover_mode {
                 "sbx" => crossover::sbx_crossover_impl(
@@ -150,9 +150,8 @@ fn evolve_generation(
             population[parent_a_idx].clone()
         };
 
-        let mutated =
-            mutation::gaussian_mutate_impl(&child, mutation_rate, mutation_strength, &mut rng);
-        new_pop.push(mutated);
+        mutation::gaussian_mutate_in_place(&mut child, mutation_rate, mutation_strength, &mut rng);
+        new_pop.push(child);
     }
 
     Ok(new_pop)

@@ -27,9 +27,10 @@ use rand_distr::{Cauchy, Distribution, Normal};
 ///     Mutated weight vector
 #[pyfunction]
 #[pyo3(signature = (weights, mutation_rate = 0.15, strength = 0.2))]
-pub fn gaussian_mutate(weights: Vec<f32>, mutation_rate: f64, strength: f64) -> Vec<f32> {
+pub fn gaussian_mutate(mut weights: Vec<f32>, mutation_rate: f64, strength: f64) -> Vec<f32> {
     let mut rng = rand::thread_rng();
-    gaussian_mutate_impl(&weights, mutation_rate, strength, &mut rng)
+    gaussian_mutate_in_place(&mut weights, mutation_rate, strength, &mut rng);
+    weights
 }
 
 /// Internal Gaussian mutation implementation.
@@ -64,6 +65,40 @@ pub fn gaussian_mutate_impl<R: Rng>(
     }
 
     result
+}
+
+/// In-place Gaussian mutation with geometric skip optimization.
+///
+/// Same algorithm as `gaussian_mutate_impl` but mutates the weight vector
+/// in-place, avoiding an allocation + copy.
+pub fn gaussian_mutate_in_place<R: Rng>(
+    weights: &mut [f32],
+    mutation_rate: f64,
+    mutation_strength: f64,
+    rng: &mut R,
+) {
+    let n = weights.len();
+    if n == 0 || mutation_rate <= 0.0 {
+        return;
+    }
+
+    let normal = Normal::new(0.0, mutation_strength).unwrap();
+
+    if mutation_rate >= 1.0 {
+        for w in weights.iter_mut() {
+            *w += normal.sample(rng) as f32;
+        }
+        return;
+    }
+
+    // Geometric skip: jump to next mutation index using inverse CDF
+    let log1mp = (1.0 - mutation_rate).ln();
+    let mut i = (rng.gen::<f64>().max(1e-15).ln() / log1mp).floor() as usize;
+    while i < n {
+        weights[i] += normal.sample(rng) as f32;
+        let skip = (rng.gen::<f64>().max(1e-15).ln() / log1mp).floor() as usize;
+        i += 1 + skip;
+    }
 }
 
 /// Adaptive Gaussian mutation with per-gene step sizes.

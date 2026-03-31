@@ -135,17 +135,14 @@ impl SparseNetwork {
             }
         }
 
-        // eval_order = non-input nodes in topological order
-        let input_set: std::collections::HashSet<usize> = sorted_nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| n.node_type == 0)
-            .map(|(pos, _)| pos)
-            .collect();
+        // eval_order = non-input nodes in topological order.
+        // Since sorted_nodes is sorted by node_type (0=input first),
+        // inputs occupy positions 0..n_inputs — use a simple range check.
+        let n_inputs = sorted_nodes.iter().filter(|n| n.node_type == 0).count();
 
         let eval_order: Vec<u32> = topo_order
             .iter()
-            .filter(|pos| !input_set.contains(pos))
+            .filter(|&&pos| pos >= n_inputs)
             .map(|&pos| pos as u32)
             .collect();
 

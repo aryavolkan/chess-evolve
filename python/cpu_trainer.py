@@ -15,10 +15,7 @@ import evolve_ga
 import numpy as np
 
 from fitness import (
-    aggregate_game_stats,
-    compute_fitness,
-    compute_outcome_rates,
-    compute_tournament_scores,
+    compute_all_stats,
     merge_fitness_weights,
 )
 from trainer_utils import MetricsWriter, generate_pairings, update_hof
@@ -152,24 +149,6 @@ class CPUTrainer:
         """Generate round-robin pairings: each white plays tournament_opponents random blacks."""
         return generate_pairings(self.pop_size, self.tournament_opponents)
 
-    def _compute_fitness(
-        self,
-        results: list[dict],
-        pop_size: int,
-        color: int,
-    ) -> list[float]:
-        """Compute fitness for each individual of the given color."""
-        return compute_fitness(results, pop_size, color, self.fitness_weights)
-
-    def _compute_tournament_scores(
-        self,
-        results: list[dict],
-        pop_size: int,
-        color: int,
-    ) -> list[float]:
-        """Compute tournament scores: 1.0 for win, 0.5+material_bonus for draw, 0.0 for loss."""
-        return compute_tournament_scores(results, pop_size, color)
-
     def _update_hof(
         self,
         hof: list[tuple[float, np.ndarray]],
@@ -192,12 +171,6 @@ class CPUTrainer:
         immigrants = np.random.randn(n_immigrants, self.genome_size).astype(np.float32) * scale
         population[targets] = immigrants
         return population
-
-    def _compute_outcome_rates(
-        self, results: list[dict], color: int,
-    ) -> tuple[float, float, float]:
-        """Compute win/draw/loss rates for a color."""
-        return compute_outcome_rates(results, color)
 
     def _speciate_and_evolve(
         self,
@@ -307,13 +280,14 @@ class CPUTrainer:
             num_games = len(results)
             total_games += num_games
 
-            # Compute fitness
-            white_fitness = self._compute_fitness(results, self.pop_size, color=0)
-            black_fitness = self._compute_fitness(results, self.pop_size, color=1)
+            # Single-pass stats for each color (replaces 7 separate result-list passes)
+            w_stats = compute_all_stats(results, self.pop_size, color=0, weights=self.fitness_weights)
+            b_stats = compute_all_stats(results, self.pop_size, color=1, weights=self.fitness_weights)
 
-            # Tournament scores
-            white_tourn = self._compute_tournament_scores(results, self.pop_size, color=0)
-            black_tourn = self._compute_tournament_scores(results, self.pop_size, color=1)
+            white_fitness = w_stats["fitness"]
+            black_fitness = b_stats["fitness"]
+            white_tourn = w_stats["tournament_scores"]
+            black_tourn = b_stats["tournament_scores"]
 
             # Update Hall of Fame
             self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
@@ -343,12 +317,10 @@ class CPUTrainer:
             white_pop = self._apply_immigration(white_pop)
             black_pop = self._apply_immigration(black_pop)
 
-            # Outcome rates
-            w_win, w_draw, w_loss = self._compute_outcome_rates(results, color=0)
-            b_win, b_draw, b_loss = self._compute_outcome_rates(results, color=1)
-
-            # Aggregate game stats in a single pass
-            total_moves, w_mat_avg, b_mat_avg = aggregate_game_stats(results)
+            # Outcome rates and game stats (already computed in single pass above)
+            w_win, w_draw, w_loss = w_stats["outcome_rates"]
+            b_win, b_draw, b_loss = b_stats["outcome_rates"]
+            total_moves, w_mat_avg, b_mat_avg = w_stats["game_stats"]
             avg_game_length = total_moves / max(1, num_games)
 
             # Games/moves per second
@@ -404,6 +376,7 @@ class CPUTrainer:
                 "bench_white_material_adv": w_bench_mat,
                 "bench_black_win_rate": b_bench_wr,
                 "bench_black_material_adv": b_bench_mat,
+                "bench_avg_win_rate": (w_bench_wr + b_bench_wr) / 2,
                 # Species metrics (weight-distance speciation, not NEAT topology)
                 "neat_hidden_nodes_avg": 0,  # fixed topology — no hidden node growth
                 "neat_connections_avg": self.genome_size,  # fixed topology — all connections

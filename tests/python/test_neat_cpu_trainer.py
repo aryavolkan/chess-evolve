@@ -1,8 +1,8 @@
 """Tests for NeatCPUTrainer pure-Python logic.
 
 Mocks the Rust backends (chess_cpu, neat_ga) so we can test fitness
-computation, seed loading/saving, genome stats, HoF management, and
-outcome rates without compiled extensions.
+computation, seed loading/saving, HoF management, and outcome rates
+without compiled extensions.
 """
 from __future__ import annotations
 
@@ -57,6 +57,7 @@ sys.modules["evolve_ga"] = types.ModuleType("evolve_ga")
 
 # Force-reload neat_cpu_trainer so it picks up our mocks
 sys.modules.pop("neat_cpu_trainer", None)
+from fitness import compute_fitness, compute_outcome_rates, compute_tournament_scores  # noqa: E402
 from neat_cpu_trainer import NeatCPUTrainer  # noqa: E402
 
 # Restore real modules so other test files can use them
@@ -117,25 +118,25 @@ def trainer(tmp_path):
 class TestComputeFitness:
     def test_white_win(self, trainer):
         results = [_make_game_result(result=1, white_material=20.0, black_material=5.0)]
-        fitness = trainer._compute_fitness(results, pop_size=2, color=0)
+        fitness = compute_fitness(results, 2, 0, trainer.fitness_weights)
         assert fitness[0] > 0
 
     def test_draw_material_advantage(self, trainer):
         adv = [_make_game_result(result=2, white_material=20.0, black_material=5.0)]
         disadv = [_make_game_result(result=2, white_material=5.0, black_material=20.0)]
-        f_adv = trainer._compute_fitness(adv, pop_size=2, color=0)
-        f_disadv = trainer._compute_fitness(disadv, pop_size=2, color=0)
+        f_adv = compute_fitness(adv, 2, 0, trainer.fitness_weights)
+        f_disadv = compute_fitness(disadv, 2, 0, trainer.fitness_weights)
         assert f_adv[0] > f_disadv[0]
 
     def test_no_games_yields_zero(self, trainer):
-        fitness = trainer._compute_fitness([], pop_size=3, color=0)
+        fitness = compute_fitness([], 3, 0, trainer.fitness_weights)
         assert fitness == [0.0, 0.0, 0.0]
 
     def test_captures_increase_fitness(self, trainer):
         no_cap = [_make_game_result(result=2, white_captures_value=0.0)]
         cap = [_make_game_result(result=2, white_captures_value=9.0)]
-        f_no = trainer._compute_fitness(no_cap, pop_size=2, color=0)
-        f_cap = trainer._compute_fitness(cap, pop_size=2, color=0)
+        f_no = compute_fitness(no_cap, 2, 0, trainer.fitness_weights)
+        f_cap = compute_fitness(cap, 2, 0, trainer.fitness_weights)
         assert f_cap[0] > f_no[0]
 
     def test_draw_bonus_default(self, trainer):
@@ -152,12 +153,12 @@ class TestComputeFitness:
 class TestComputeTournamentScores:
     def test_win_scores_one(self, trainer):
         results = [_make_game_result(result=1)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, 2, 0)
         assert scores[0] == 1.0
 
     def test_loss_scores_zero(self, trainer):
         results = [_make_game_result(result=-1)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, 2, 0)
         assert scores[0] == 0.0
 
 
@@ -203,13 +204,13 @@ class TestComputeOutcomeRates:
             _make_game_result(result=-1),
             _make_game_result(result=2),
         ]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, 0)
         assert abs(w - 0.25) < 1e-6
         assert abs(d - 0.50) < 1e-6
         assert abs(l - 0.25) < 1e-6
 
     def test_empty_no_crash(self, trainer):
-        w, d, l = trainer._compute_outcome_rates([], color=0)
+        w, d, l = compute_outcome_rates([], 0)
         assert (w, d, l) == (0.0, 0.0, 0.0)
 
 
@@ -409,47 +410,6 @@ class TestSeedIO:
 
 
 # ===========================================================================
-# _genome_stats
-# ===========================================================================
-
-class TestGenomeStats:
-    def test_counts_enabled_connections(self, trainer):
-        genome = json.dumps({
-            "nodes": [{"id": 0}, {"id": 1}, {"id": 2}],
-            "connections": [
-                {"in": 0, "out": 1, "weight": 0.5, "enabled": True},
-                {"in": 1, "out": 2, "weight": 0.3, "enabled": False},
-                {"in": 0, "out": 2, "weight": 0.1, "enabled": True},
-            ],
-        })
-        avg_conns, avg_nodes = trainer._genome_stats([genome])
-        assert avg_conns == 2.0
-        assert avg_nodes == 3.0
-
-    def test_averages_across_population(self, trainer):
-        g1 = json.dumps({
-            "nodes": [{"id": 0}, {"id": 1}],
-            "connections": [{"in": 0, "out": 1, "weight": 0.5, "enabled": True}],
-        })
-        g2 = json.dumps({
-            "nodes": [{"id": 0}, {"id": 1}, {"id": 2}],
-            "connections": [
-                {"in": 0, "out": 1, "weight": 0.5, "enabled": True},
-                {"in": 1, "out": 2, "weight": 0.3, "enabled": True},
-                {"in": 0, "out": 2, "weight": 0.1, "enabled": True},
-            ],
-        })
-        avg_conns, avg_nodes = trainer._genome_stats([g1, g2])
-        assert avg_conns == 2.0  # (1+3)/2
-        assert avg_nodes == 2.5  # (2+3)/2
-
-    def test_empty_population(self, trainer):
-        avg_conns, avg_nodes = trainer._genome_stats([])
-        assert avg_conns == 0.0
-        assert avg_nodes == 0.0
-
-
-# ===========================================================================
 # _generate_pairings
 # ===========================================================================
 
@@ -495,21 +455,21 @@ class TestInitialization:
 class TestComputeOutcomeRatesEdgeCases:
     def test_all_wins(self, trainer):
         results = [_make_game_result(result=1) for _ in range(5)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, 0)
         assert w == 1.0
         assert d == 0.0
         assert l == 0.0
 
     def test_all_draws(self, trainer):
         results = [_make_game_result(result=2) for _ in range(5)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, 0)
         assert w == 0.0
         assert d == 1.0
         assert l == 0.0
 
     def test_all_losses(self, trainer):
         results = [_make_game_result(result=-1) for _ in range(5)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, 0)
         assert w == 0.0
         assert d == 0.0
         assert l == 1.0
@@ -517,13 +477,13 @@ class TestComputeOutcomeRatesEdgeCases:
     def test_black_perspective(self, trainer):
         """result=-1 is black win; result=1 is black loss."""
         results = [_make_game_result(result=-1)]
-        w, d, l = trainer._compute_outcome_rates(results, color=1)
+        w, d, l = compute_outcome_rates(results, 1)
         assert w == 1.0
         assert l == 0.0
 
     def test_rates_sum_to_one(self, trainer):
         results = [_make_game_result(result=r) for r in [1, 2, -1, 2, 1]]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, 0)
         assert abs(w + d + l - 1.0) < 1e-6
 
 
@@ -630,17 +590,17 @@ class TestComputeFitnessLoss:
     def test_loss_gives_lower_fitness(self, trainer):
         win = [_make_game_result(result=1)]
         loss = [_make_game_result(result=-1)]
-        f_win = trainer._compute_fitness(win, pop_size=2, color=0)
-        f_loss = trainer._compute_fitness(loss, pop_size=2, color=0)
+        f_win = compute_fitness(win, 2, 0, trainer.fitness_weights)
+        f_loss = compute_fitness(loss, 2, 0, trainer.fitness_weights)
         assert f_win[0] > f_loss[0]
 
     def test_black_loss_from_result_one(self, trainer):
         """result=1 (white wins) should be a loss for black."""
         results = [_make_game_result(result=1)]
-        fitness = trainer._compute_fitness(results, pop_size=2, color=1)
+        fitness = compute_fitness(results, 2, 1, trainer.fitness_weights)
         # Black should get loss penalty + negative material diff
-        assert fitness[1] < 0 or fitness[1] < trainer._compute_fitness(
-            [_make_game_result(result=-1)], pop_size=2, color=1,
+        assert fitness[1] < 0 or fitness[1] < compute_fitness(
+            [_make_game_result(result=-1)], 2, 1, trainer.fitness_weights,
         )[1]
 
 

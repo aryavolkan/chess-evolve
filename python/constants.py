@@ -38,8 +38,11 @@ CHESS_LOG_KEYS = [
     "black_best",
     "black_avg",
     "combined_best",
+    "best_fitness",
+    "avg_fitness",
     # Games
     "total_games_this_gen",
+    "games_played",
     "avg_game_length",
     "games_per_sec",
     "moves_per_sec",
@@ -49,6 +52,8 @@ CHESS_LOG_KEYS = [
     "white_draw_rate",
     "black_win_rate",
     "black_draw_rate",
+    "white_loss_rate",
+    "black_loss_rate",
     # Tournament scores
     "white_tournament_score_best",
     "white_tournament_score_avg",

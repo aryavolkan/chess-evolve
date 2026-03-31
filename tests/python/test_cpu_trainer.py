@@ -40,6 +40,7 @@ if "evolve_ga" not in sys.modules:
     _injected.append("evolve_ga")
 
 from cpu_trainer import CPUTrainer  # noqa: E402
+from fitness import compute_fitness, compute_outcome_rates, compute_tournament_scores  # noqa: E402
 
 # Clean up mocks so test_evolve_ga.py can detect the real module is missing
 for _mod in _injected:
@@ -91,27 +92,27 @@ class TestComputeFitness:
     def test_white_win_gives_positive_fitness(self, trainer):
         results = [_make_game_result(white_idx=0, black_idx=1, result=1, move_count=30,
                                      white_material=20.0, black_material=5.0)]
-        fitness = trainer._compute_fitness(results, pop_size=2, color=0)
+        fitness = compute_fitness(results, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert fitness[0] > 0, "white win should produce positive fitness"
 
     def test_white_loss_gives_lower_fitness(self, trainer):
         win_results = [_make_game_result(result=1)]
         loss_results = [_make_game_result(result=-1)]
-        win_f = trainer._compute_fitness(win_results, pop_size=2, color=0)
-        loss_f = trainer._compute_fitness(loss_results, pop_size=2, color=0)
+        win_f = compute_fitness(win_results, pop_size=2, color=0, weights=trainer.fitness_weights)
+        loss_f = compute_fitness(loss_results, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert win_f[0] > loss_f[0]
 
     def test_draw_fitness_scales_with_material_advantage(self, trainer):
         adv_results = [_make_game_result(result=2, white_material=20.0, black_material=5.0)]
         disadv_results = [_make_game_result(result=2, white_material=5.0, black_material=20.0)]
-        f_adv = trainer._compute_fitness(adv_results, pop_size=2, color=0)
-        f_disadv = trainer._compute_fitness(disadv_results, pop_size=2, color=0)
+        f_adv = compute_fitness(adv_results, pop_size=2, color=0, weights=trainer.fitness_weights)
+        f_disadv = compute_fitness(disadv_results, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert f_adv[0] > f_disadv[0]
 
     def test_black_win_is_result_minus_one(self, trainer):
         """result=-1 means black wins. Verify black's perspective."""
         results = [_make_game_result(result=-1, black_material=20.0, white_material=5.0)]
-        fitness = trainer._compute_fitness(results, pop_size=2, color=1)
+        fitness = compute_fitness(results, pop_size=2, color=1, weights=trainer.fitness_weights)
         assert fitness[1] > 0
 
     def test_averages_over_multiple_games(self, trainer):
@@ -119,41 +120,41 @@ class TestComputeFitness:
             _make_game_result(white_idx=0, result=1, white_material=15.0, black_material=10.0, move_count=20),
             _make_game_result(white_idx=0, result=-1, white_material=5.0, black_material=15.0, move_count=20),
         ]
-        fitness = trainer._compute_fitness(results, pop_size=2, color=0)
+        fitness = compute_fitness(results, pop_size=2, color=0, weights=trainer.fitness_weights)
         # Should be average of win fitness + loss fitness
         assert isinstance(fitness[0], float)
 
     def test_individual_with_no_games_has_zero_fitness(self, trainer):
         results = [_make_game_result(white_idx=0)]
-        fitness = trainer._compute_fitness(results, pop_size=3, color=0)
+        fitness = compute_fitness(results, pop_size=3, color=0, weights=trainer.fitness_weights)
         assert fitness[2] == 0.0, "individual with no games should have 0 fitness"
 
     def test_move_count_penalty_applied(self, trainer):
         short = [_make_game_result(result=2, move_count=10)]
         long = [_make_game_result(result=2, move_count=100)]
-        f_short = trainer._compute_fitness(short, pop_size=2, color=0)
-        f_long = trainer._compute_fitness(long, pop_size=2, color=0)
+        f_short = compute_fitness(short, pop_size=2, color=0, weights=trainer.fitness_weights)
+        f_long = compute_fitness(long, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert f_short[0] > f_long[0], "shorter games should have higher fitness (less penalty)"
 
     def test_mobility_advantage_increases_fitness(self, trainer):
         high_mob = [_make_game_result(result=2, white_mobility=20, black_mobility=5)]
         low_mob = [_make_game_result(result=2, white_mobility=5, black_mobility=20)]
-        f_high = trainer._compute_fitness(high_mob, pop_size=2, color=0)
-        f_low = trainer._compute_fitness(low_mob, pop_size=2, color=0)
+        f_high = compute_fitness(high_mob, pop_size=2, color=0, weights=trainer.fitness_weights)
+        f_low = compute_fitness(low_mob, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert f_high[0] > f_low[0]
 
     def test_king_safety_increases_fitness(self, trainer):
         safe = [_make_game_result(result=2, white_king_safety=5.0)]
         unsafe = [_make_game_result(result=2, white_king_safety=0.0)]
-        f_safe = trainer._compute_fitness(safe, pop_size=2, color=0)
-        f_unsafe = trainer._compute_fitness(unsafe, pop_size=2, color=0)
+        f_safe = compute_fitness(safe, pop_size=2, color=0, weights=trainer.fitness_weights)
+        f_unsafe = compute_fitness(unsafe, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert f_safe[0] > f_unsafe[0]
 
     def test_captures_increase_fitness(self, trainer):
         no_cap = [_make_game_result(result=2, white_captures_value=0.0)]
         cap = [_make_game_result(result=2, white_captures_value=9.0)]
-        f_no = trainer._compute_fitness(no_cap, pop_size=2, color=0)
-        f_cap = trainer._compute_fitness(cap, pop_size=2, color=0)
+        f_no = compute_fitness(no_cap, pop_size=2, color=0, weights=trainer.fitness_weights)
+        f_cap = compute_fitness(cap, pop_size=2, color=0, weights=trainer.fitness_weights)
         assert f_cap[0] > f_no[0]
 
     def test_draw_bonus_default(self, trainer):
@@ -170,28 +171,28 @@ class TestComputeFitness:
 class TestComputeTournamentScores:
     def test_win_scores_one(self, trainer):
         results = [_make_game_result(result=1)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, pop_size=2, color=0)
         assert scores[0] == 1.0
 
     def test_loss_scores_zero(self, trainer):
         results = [_make_game_result(result=-1)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, pop_size=2, color=0)
         assert scores[0] == 0.0
 
     def test_draw_scores_around_half(self, trainer):
         results = [_make_game_result(result=2, white_material=10.0, black_material=10.0)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, pop_size=2, color=0)
         assert 0.0 <= scores[0] <= 1.0
         assert abs(scores[0] - 0.5) < 0.3
 
     def test_draw_material_bonus_clamped(self, trainer):
         results = [_make_game_result(result=2, white_material=100.0, black_material=0.0)]
-        scores = trainer._compute_tournament_scores(results, pop_size=2, color=0)
+        scores = compute_tournament_scores(results, pop_size=2, color=0)
         assert scores[0] <= 0.75, "draw bonus should be clamped at 0.25"
 
     def test_individual_with_no_games_scores_zero(self, trainer):
         results = [_make_game_result(white_idx=0)]
-        scores = trainer._compute_tournament_scores(results, pop_size=3, color=0)
+        scores = compute_tournament_scores(results, pop_size=3, color=0)
         assert scores[2] == 0.0
 
 
@@ -274,21 +275,21 @@ class TestApplyImmigration:
 class TestComputeOutcomeRates:
     def test_all_wins(self, trainer):
         results = [_make_game_result(result=1) for _ in range(10)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, color=0)
         assert w == 1.0
         assert d == 0.0
         assert l == 0.0
 
     def test_all_draws(self, trainer):
         results = [_make_game_result(result=2) for _ in range(10)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, color=0)
         assert w == 0.0
         assert d == 1.0
         assert l == 0.0
 
     def test_all_losses(self, trainer):
         results = [_make_game_result(result=-1) for _ in range(10)]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, color=0)
         assert w == 0.0
         assert d == 0.0
         assert l == 1.0
@@ -300,18 +301,18 @@ class TestComputeOutcomeRates:
             _make_game_result(result=-1),
             _make_game_result(result=2),
         ]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, color=0)
         assert abs(w - 0.25) < 1e-6
         assert abs(d - 0.50) < 1e-6
         assert abs(l - 0.25) < 1e-6
 
     def test_rates_sum_to_one(self, trainer):
         results = [_make_game_result(result=r) for r in [1, 2, -1, 2, 1]]
-        w, d, l = trainer._compute_outcome_rates(results, color=0)
+        w, d, l = compute_outcome_rates(results, color=0)
         assert abs(w + d + l - 1.0) < 1e-6
 
     def test_empty_results_no_crash(self, trainer):
-        w, d, l = trainer._compute_outcome_rates([], color=0)
+        w, d, l = compute_outcome_rates([], color=0)
         assert w == 0.0
         assert d == 0.0
         assert l == 0.0
@@ -319,7 +320,7 @@ class TestComputeOutcomeRates:
     def test_black_perspective(self, trainer):
         """result=-1 is a black win, result=1 is a black loss."""
         results = [_make_game_result(result=-1)]
-        w, d, l = trainer._compute_outcome_rates(results, color=1)
+        w, d, l = compute_outcome_rates(results, color=1)
         assert w == 1.0
         assert l == 0.0
 
