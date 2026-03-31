@@ -153,6 +153,97 @@ fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
         .sqrt()
 }
 
+/// Assign species using flat byte buffer (avoids Python list-of-lists overhead).
+///
+/// population_bytes: numpy .tobytes() — flat f32 array (pop_size * genome_size * 4 bytes)
+/// genome_size: number of floats per individual
+/// representatives_bytes: optional flat byte buffer for previous reps (n_reps * genome_size * 4 bytes)
+/// n_reps: number of representatives (needed to split the flat buffer)
+#[pyfunction]
+#[pyo3(signature = (population_bytes, genome_size, threshold = 3.0, representatives_bytes = None, n_reps = 0))]
+pub fn assign_species_flat(
+    population_bytes: &[u8],
+    genome_size: usize,
+    threshold: f64,
+    representatives_bytes: Option<&[u8]>,
+    n_reps: usize,
+) -> PyResult<(Vec<usize>, Vec<u8>)> {
+    if genome_size == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "genome_size must be > 0",
+        ));
+    }
+
+    let float_bytes = std::mem::size_of::<f32>();
+    let stride = genome_size * float_bytes;
+    let pop_size = population_bytes.len() / stride;
+
+    if pop_size == 0 {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    let threshold = threshold as f32;
+
+    // Parse representatives from flat bytes
+    let initial_reps: Vec<&[f32]> = if let Some(rep_bytes) = representatives_bytes {
+        (0..n_reps)
+            .map(|i| {
+                let start = i * stride;
+                let end = start + stride;
+                let bytes = &rep_bytes[start..end];
+                // Safety: f32 alignment from numpy tobytes is guaranteed
+                unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const f32, genome_size) }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Reinterpret population bytes as f32 slices
+    let pop_slices: Vec<&[f32]> = (0..pop_size)
+        .map(|i| {
+            let start = i * stride;
+            let bytes = &population_bytes[start..start + stride];
+            unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const f32, genome_size) }
+        })
+        .collect();
+
+    let mut species_ids = Vec::with_capacity(pop_size);
+    let mut owned_reps: Vec<Vec<f32>> = initial_reps.iter().map(|s| s.to_vec()).collect();
+
+    for individual in &pop_slices {
+        let mut min_dist = f32::INFINITY;
+        let mut best_species = 0;
+
+        for (sid, rep) in owned_reps.iter().enumerate() {
+            let dist = euclidean_distance(individual, rep);
+            if dist < min_dist {
+                min_dist = dist;
+                best_species = sid;
+            }
+        }
+
+        if min_dist <= threshold && !owned_reps.is_empty() {
+            species_ids.push(best_species);
+        } else {
+            let new_id = owned_reps.len();
+            owned_reps.push(individual.to_vec());
+            species_ids.push(new_id);
+        }
+    }
+
+    // Return reps as flat bytes
+    let mut reps_bytes = Vec::with_capacity(owned_reps.len() * stride);
+    for rep in &owned_reps {
+        let bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(rep.as_ptr() as *const u8, rep.len() * float_bytes)
+        };
+        reps_bytes.extend_from_slice(bytes);
+    }
+
+    Ok((species_ids, reps_bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

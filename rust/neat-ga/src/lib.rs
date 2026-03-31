@@ -294,6 +294,133 @@ fn create_multi_seeded_population(
     Ok(result.into())
 }
 
+/// Opaque population state that persists between generations.
+/// Eliminates JSON serialize/deserialize on the evolve path.
+#[pyclass]
+struct NeatPopulation {
+    population: Vec<genome::NeatGenome>,
+    species_list: Vec<species::Species>,
+    tracker: innovation::InnovationTracker,
+    config: config::NeatConfig,
+    next_species_id: u32,
+}
+
+#[pymethods]
+impl NeatPopulation {
+    /// Create from initial population JSON (output of create_population_with_tracker).
+    #[staticmethod]
+    fn from_json(
+        population_json: Vec<String>,
+        config_json: &str,
+        tracker_json: &str,
+        species_json: Option<&str>,
+    ) -> PyResult<Self> {
+        let config: config::NeatConfig = serde_json::from_str(config_json).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid config JSON: {e}"))
+        })?;
+        let tracker: innovation::InnovationTracker =
+            serde_json::from_str(tracker_json).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid tracker JSON: {e}"))
+            })?;
+        let species_list: Vec<species::Species> = match species_json {
+            Some(s) if !s.is_empty() && s != "[]" && s != "null" => serde_json::from_str(s)
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!("Invalid species JSON: {e}"))
+                })?,
+            _ => Vec::new(),
+        };
+        let next_species_id = species_list.iter().map(|s| s.id + 1).max().unwrap_or(0);
+        let population: Vec<genome::NeatGenome> = population_json
+            .iter()
+            .map(|s| serde_json::from_str(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid genome JSON: {e}"))
+            })?;
+
+        Ok(Self {
+            population,
+            species_list,
+            tracker,
+            config,
+            next_species_id,
+        })
+    }
+
+    /// Run one evolution step. Mutates internal state without any JSON serialization.
+    /// Returns stats dict.
+    fn evolve(&mut self, py: Python<'_>, fitness: Vec<f32>) -> PyResult<Py<PyDict>> {
+        let mut rng = rand::rngs::SmallRng::from_entropy();
+        let stats = evolution::evolve_neat_generation(
+            &mut self.population,
+            &fitness,
+            &mut self.species_list,
+            &mut self.config,
+            &mut self.tracker,
+            &mut self.next_species_id,
+            &mut rng,
+        );
+
+        let stats_dict = PyDict::new(py);
+        stats_dict.set_item("species_count", stats.species_count)?;
+        stats_dict.set_item("best_fitness", stats.best_fitness)?;
+        stats_dict.set_item("avg_fitness", stats.avg_fitness)?;
+        stats_dict.set_item("avg_connections", stats.avg_connections)?;
+        stats_dict.set_item("avg_nodes", stats.avg_nodes)?;
+        stats_dict.set_item("best_connections", stats.best_connections)?;
+        stats_dict.set_item("best_nodes", stats.best_nodes)?;
+        stats_dict.set_item("avg_depth", stats.avg_depth)?;
+        stats_dict.set_item("avg_width", stats.avg_width)?;
+        Ok(stats_dict.into())
+    }
+
+    /// Export current genomes as JSON strings (needed for chess_cpu simulation).
+    fn get_genomes_json(&self) -> PyResult<Vec<String>> {
+        self.population
+            .iter()
+            .map(|g| {
+                serde_json::to_string(g).map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+                })
+            })
+            .collect()
+    }
+
+    /// Export full state as JSON (for saving/seeding next run).
+    fn export_state(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        let pop_json: Vec<String> = self
+            .population
+            .iter()
+            .map(serde_json::to_string)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+            })?;
+        let species_json = serde_json::to_string(&self.species_list).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+        })?;
+        let tracker_json = serde_json::to_string(&self.tracker).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+        })?;
+        let config_json = serde_json::to_string(&self.config).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialize error: {e}"))
+        })?;
+
+        let result = PyDict::new(py);
+        result.set_item("population", pop_json)?;
+        result.set_item("species", species_json)?;
+        result.set_item("tracker", tracker_json)?;
+        result.set_item("config", config_json)?;
+        Ok(result.into())
+    }
+
+    /// Get population size.
+    #[getter]
+    fn pop_size(&self) -> usize {
+        self.population.len()
+    }
+}
+
 /// Compute compatibility distance between two genomes (for debugging).
 #[pyfunction]
 fn compatibility_distance(
@@ -322,5 +449,6 @@ fn neat_ga(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_multi_seeded_population, m)?)?;
     m.add_function(wrap_pyfunction!(evolve_neat_generation, m)?)?;
     m.add_function(wrap_pyfunction!(compatibility_distance, m)?)?;
+    m.add_class::<NeatPopulation>()?;
     Ok(())
 }

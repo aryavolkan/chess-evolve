@@ -818,10 +818,13 @@ class NeatCPUTrainer:
             black_pop: list[str] = init_result["population"]
             black_tracker_json: str = init_result["tracker"]
 
-        white_species_json = "[]"
-        black_species_json = "[]"
-        white_config_json = config_json
-        black_config_json = config_json
+        # Wrap populations in opaque NeatPopulation to avoid per-generation JSON round-trips
+        white_neat_pop = neat_ga.NeatPopulation.from_json(
+            white_pop, config_json, white_tracker_json, "[]",
+        )
+        black_neat_pop = neat_ga.NeatPopulation.from_json(
+            black_pop, config_json, black_tracker_json, "[]",
+        )
 
         # Curriculum stage 0: load puzzles for puzzle-based fitness
         if self.curriculum.stage == 0:
@@ -850,6 +853,10 @@ class NeatCPUTrainer:
             gen_start = time.time()
             temperature = self.curriculum.training_temperature()
             self.fitness_weights = self.curriculum.fitness_weights()
+
+            # Export genome JSON strings for simulation (the only serialization point)
+            white_pop = white_neat_pop.get_genomes_json()
+            black_pop = black_neat_pop.get_genomes_json()
 
             if self.curriculum.stage == 0:
                 # Stage 0: puzzle-based fitness only — no games
@@ -1004,26 +1011,9 @@ class NeatCPUTrainer:
             self.white_hof = self._update_hof(self.white_hof, white_pop, white_fitness)
             self.black_hof = self._update_hof(self.black_hof, black_pop, black_fitness)
 
-            # Evolve via Rust NEAT
-            w_result = neat_ga.evolve_neat_generation(
-                white_pop, white_fitness,
-                white_species_json, white_config_json, white_tracker_json,
-            )
-            white_pop = w_result["population"]
-            white_species_json = w_result["species"]
-            white_tracker_json = w_result["tracker"]
-            white_config_json = w_result["config"]
-            w_stats = w_result["stats"]
-
-            b_result = neat_ga.evolve_neat_generation(
-                black_pop, black_fitness,
-                black_species_json, black_config_json, black_tracker_json,
-            )
-            black_pop = b_result["population"]
-            black_species_json = b_result["species"]
-            black_tracker_json = b_result["tracker"]
-            black_config_json = b_result["config"]
-            b_stats = b_result["stats"]
+            # Evolve via Rust NEAT (in-place, no JSON round-trip)
+            w_stats = white_neat_pop.evolve(white_fitness)
+            b_stats = black_neat_pop.evolve(black_fitness)
 
             # Outcome rates and game stats
             if self.curriculum.stage == 0:
@@ -1228,6 +1218,10 @@ class NeatCPUTrainer:
                 on_generation(metrics)
 
             last_metrics = metrics
+
+        # Export final evolved genomes for saving
+        white_pop = white_neat_pop.get_genomes_json()
+        black_pop = black_neat_pop.get_genomes_json()
 
         # Evaluate on global puzzle benchmark before saving
         pb_w, pb_b = self._evaluate_puzzle_benchmark(

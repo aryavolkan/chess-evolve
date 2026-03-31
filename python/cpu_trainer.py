@@ -84,9 +84,11 @@ class CPUTrainer:
         self.black_hof: list[tuple[float, np.ndarray]] = []
         self.hof_max_size = 10
 
-        # Species representatives (persisted across generations)
-        self.white_species_reps: list[list[float]] | None = None
-        self.black_species_reps: list[list[float]] | None = None
+        # Species representatives as flat bytes (persisted across generations)
+        self.white_species_reps_bytes: bytes | None = None
+        self.black_species_reps_bytes: bytes | None = None
+        self.white_n_reps: int = 0
+        self.black_n_reps: int = 0
 
         # Fixed random benchmark population for measuring absolute progress.
         # Without this, coevolutionary metrics hide improvement because both
@@ -201,27 +203,30 @@ class CPUTrainer:
         self,
         population: np.ndarray,
         fitness: list[float],
-        species_reps: list[list[float]] | None,
+        species_reps_bytes: bytes | None,
+        n_reps: int,
         threshold: float,
-    ) -> tuple[np.ndarray, int, list[list[float]], float]:
+    ) -> tuple[np.ndarray, int, bytes, int, float]:
         """Assign species, apply fitness sharing, evolve.
 
-        Returns (new_pop, species_count, new_reps, adjusted_threshold).
-        Dynamically adjusts threshold to converge on target_species.
+        Returns (new_pop, species_count, new_reps_bytes, new_n_reps, adjusted_threshold).
+        Uses flat-bytes API to avoid numpy->list-of-lists->numpy round-trip.
         """
-        pop_list = population.tolist()
+        pop_bytes = population.tobytes()
 
         # Speciation: assign individuals to species by weight-vector distance
-        species_ids, new_reps = evolve_ga.assign_species(
-            pop_list,
+        species_ids, new_reps_bytes = evolve_ga.assign_species_flat(
+            pop_bytes,
+            self.genome_size,
             threshold=threshold,
-            representatives=species_reps,
+            representatives_bytes=species_reps_bytes,
+            n_reps=n_reps,
         )
 
-        # Prune empty species: only keep representatives that have members.
+        # Count species
+        n_reps_new = len(new_reps_bytes) // (self.genome_size * 4)
         active = set(species_ids)
-        pruned_reps = [rep for sid, rep in enumerate(new_reps) if sid in active]
-        species_count = len(pruned_reps)
+        species_count = len(active)
 
         # Dynamic threshold adjustment (matching NEAT approach):
         # Proportional step: the farther from target, the bigger the adjustment.
@@ -240,8 +245,9 @@ class CPUTrainer:
         else:
             selection_fit = fitness
 
-        new_pop_list = evolve_ga.evolve_generation(
-            pop_list,
+        new_pop_bytes = evolve_ga.evolve_generation_flat(
+            pop_bytes,
+            self.genome_size,
             selection_fit,
             elite_count=self.elite_count,
             mutation_rate=self.mutation_rate,
@@ -249,10 +255,10 @@ class CPUTrainer:
             crossover_rate=self.crossover_rate,
             tournament_k=self.tournament_k,
         )
-        del pop_list
-        result = np.array(new_pop_list, dtype=np.float32)
-        del new_pop_list
-        return result, species_count, pruned_reps, threshold
+        result = np.frombuffer(new_pop_bytes, dtype=np.float32).reshape(
+            self.pop_size, self.genome_size,
+        ).copy()
+        return result, species_count, bytes(new_reps_bytes), n_reps_new, threshold
 
     def train(
         self,
@@ -316,17 +322,21 @@ class CPUTrainer:
             # Speciate + evolve populations via Rust GA operators.
             # Fitness sharing encourages diversity by penalizing crowded species.
             # Threshold adapts dynamically to hit target_species.
-            white_pop, w_species_count, self.white_species_reps, self.white_spec_threshold = (
-                self._speciate_and_evolve(
-                    white_pop, white_fitness, self.white_species_reps,
-                    self.white_spec_threshold,
-                )
+            (
+                white_pop, w_species_count,
+                self.white_species_reps_bytes, self.white_n_reps,
+                self.white_spec_threshold,
+            ) = self._speciate_and_evolve(
+                white_pop, white_fitness, self.white_species_reps_bytes,
+                self.white_n_reps, self.white_spec_threshold,
             )
-            black_pop, b_species_count, self.black_species_reps, self.black_spec_threshold = (
-                self._speciate_and_evolve(
-                    black_pop, black_fitness, self.black_species_reps,
-                    self.black_spec_threshold,
-                )
+            (
+                black_pop, b_species_count,
+                self.black_species_reps_bytes, self.black_n_reps,
+                self.black_spec_threshold,
+            ) = self._speciate_and_evolve(
+                black_pop, black_fitness, self.black_species_reps_bytes,
+                self.black_n_reps, self.black_spec_threshold,
             )
 
             # Immigration

@@ -31,8 +31,10 @@ if "chess_cpu" not in sys.modules:
 
 _evolve_ga_mock = types.ModuleType("evolve_ga")
 _evolve_ga_mock.assign_species = MagicMock(return_value=([0] * 10, [[0.0] * 10]))
+_evolve_ga_mock.assign_species_flat = MagicMock(return_value=([0] * 10, b"\x00" * 40))
 _evolve_ga_mock.shared_fitness = MagicMock(side_effect=lambda f, *a, **kw: f)
 _evolve_ga_mock.evolve_generation = MagicMock(side_effect=lambda pop, *a, **kw: pop)
+_evolve_ga_mock.evolve_generation_flat = MagicMock(side_effect=lambda pop_bytes, genome_size, *a, **kw: pop_bytes)
 if "evolve_ga" not in sys.modules:
     sys.modules["evolve_ga"] = _evolve_ga_mock
     _injected.append("evolve_ga")
@@ -387,8 +389,8 @@ class TestSpeciateAndEvolve:
     def test_returns_correct_shapes(self, trainer):
         pop = trainer._init_population()
         fitness = [float(i) for i in range(trainer.pop_size)]
-        new_pop, sp_count, new_reps, threshold = trainer._speciate_and_evolve(
-            pop, fitness, None, trainer.white_spec_threshold,
+        new_pop, sp_count, new_reps_bytes, new_n_reps, threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, 0, trainer.white_spec_threshold,
         )
         assert new_pop.shape == pop.shape
         assert new_pop.dtype == np.float32
@@ -397,17 +399,16 @@ class TestSpeciateAndEvolve:
 
     def test_threshold_increases_when_too_many_species(self, trainer):
         """If species_count > target_species, threshold should increase."""
-        # Mock assign_species to return many species
         pop = trainer._init_population()
         fitness = [1.0] * trainer.pop_size
-        many_species = list(range(trainer.pop_size))  # each individual = own species
-        reps = [[0.0]] * trainer.pop_size
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(many_species, reps))
+        many_species = list(range(trainer.pop_size))
+        reps_bytes = b"\x00" * (trainer.pop_size * trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(many_species, reps_bytes))
 
-        trainer.target_species = 2  # force target much lower
+        trainer.target_species = 2
         initial_threshold = 10.0
-        _, _, _, new_threshold = trainer._speciate_and_evolve(
-            pop, fitness, None, initial_threshold,
+        _, _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, 0, initial_threshold,
         )
         assert new_threshold > initial_threshold
 
@@ -416,13 +417,13 @@ class TestSpeciateAndEvolve:
         pop = trainer._init_population()
         fitness = [1.0] * trainer.pop_size
         one_species = [0] * trainer.pop_size
-        reps = [[0.0]]
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        reps_bytes = b"\x00" * (trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(one_species, reps_bytes))
 
         trainer.target_species = 20
         initial_threshold = 10.0
-        _, _, _, new_threshold = trainer._speciate_and_evolve(
-            pop, fitness, None, initial_threshold,
+        _, _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, 0, initial_threshold,
         )
         assert new_threshold < initial_threshold
 
@@ -430,12 +431,12 @@ class TestSpeciateAndEvolve:
         pop = trainer._init_population()
         fitness = [1.0] * trainer.pop_size
         one_species = [0] * trainer.pop_size
-        reps = [[0.0]]
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        reps_bytes = b"\x00" * (trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(one_species, reps_bytes))
 
         trainer.target_species = 1000
-        _, _, _, new_threshold = trainer._speciate_and_evolve(
-            pop, fitness, None, 0.5,  # below floor
+        _, _, _, _, new_threshold = trainer._speciate_and_evolve(
+            pop, fitness, None, 0, 0.5,
         )
         assert new_threshold >= 1.0
 
@@ -445,11 +446,11 @@ class TestSpeciateAndEvolve:
         pop = trainer._init_population()
         fitness = [float(i) for i in range(trainer.pop_size)]
         one_species = [0] * trainer.pop_size
-        reps = [[0.0]]
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        reps_bytes = b"\x00" * (trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(one_species, reps_bytes))
         _evolve_ga_mock.shared_fitness.reset_mock()
 
-        trainer._speciate_and_evolve(pop, fitness, None, 10.0)
+        trainer._speciate_and_evolve(pop, fitness, None, 0, 10.0)
         _evolve_ga_mock.shared_fitness.assert_not_called()
 
     def test_fitness_sharing_enabled(self, trainer):
@@ -458,25 +459,26 @@ class TestSpeciateAndEvolve:
         pop = trainer._init_population()
         fitness = [float(i) for i in range(trainer.pop_size)]
         one_species = [0] * trainer.pop_size
-        reps = [[0.0]]
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        reps_bytes = b"\x00" * (trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(one_species, reps_bytes))
         _evolve_ga_mock.shared_fitness.reset_mock()
 
-        trainer._speciate_and_evolve(pop, fitness, None, 10.0)
+        trainer._speciate_and_evolve(pop, fitness, None, 0, 10.0)
         _evolve_ga_mock.shared_fitness.assert_called_once()
 
     def test_passes_species_reps(self, trainer):
-        """Previous representatives should be forwarded to assign_species."""
+        """Previous representative bytes should be forwarded to assign_species_flat."""
         pop = trainer._init_population()
         fitness = [1.0] * trainer.pop_size
-        prev_reps = [[1.0, 2.0], [3.0, 4.0]]
+        prev_reps_bytes = b"\x01\x02\x03\x04" * (trainer.genome_size * 2)
         one_species = [0] * trainer.pop_size
-        reps = [[0.0]]
-        _evolve_ga_mock.assign_species = MagicMock(return_value=(one_species, reps))
+        reps_bytes = b"\x00" * (trainer.genome_size * 4)
+        _evolve_ga_mock.assign_species_flat = MagicMock(return_value=(one_species, reps_bytes))
 
-        trainer._speciate_and_evolve(pop, fitness, prev_reps, 10.0)
-        call_kwargs = _evolve_ga_mock.assign_species.call_args
-        assert call_kwargs[1]["representatives"] == prev_reps
+        trainer._speciate_and_evolve(pop, fitness, prev_reps_bytes, 2, 10.0)
+        call_kwargs = _evolve_ga_mock.assign_species_flat.call_args
+        assert call_kwargs[1]["representatives_bytes"] == prev_reps_bytes
+        assert call_kwargs[1]["n_reps"] == 2
 
 
 # ===========================================================================
