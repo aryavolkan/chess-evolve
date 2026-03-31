@@ -35,3 +35,9 @@ neat_best_genomes.json
 # Rust
 rust/**/target/
 rust/**/Cargo.lock
+
+download.lock
+lichess_db_puzzle.csv
+run_state.json
+.vscode/*
+!.vscode/settings.json

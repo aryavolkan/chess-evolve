@@ -1,0 +1,8 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "rust/chess-cpu/Cargo.toml",
+        "rust/chess-native/Cargo.toml",
+        "rust/evolve-ga/Cargo.toml",
+        "rust/neat-ga/Cargo.toml"
+    ]
+}
