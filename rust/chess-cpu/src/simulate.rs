@@ -9,6 +9,7 @@ use crate::encode::{
     encode_board,
 };
 use crate::evaluate::{king_danger_score, king_safety_score, material_score, mobility_score};
+use crate::nn::DenseNetwork;
 use crate::sparse_nn::SparseNetwork;
 
 /// Result of a single simulated game.
@@ -60,7 +61,11 @@ fn capture_value(piece_abs: i8) -> f32 {
     }
 }
 
-/// Simulate a single chess game between two neural networks.
+/// Simulate a single chess game between two neural networks (from flat weight slices).
+///
+/// This is a convenience wrapper that builds `DenseNetwork` objects from flat weights
+/// and delegates to `simulate_game_with_nets`. For batch simulation, prefer
+/// `simulate_games_batch_flat` which pre-builds networks to avoid redundant copies.
 pub fn simulate_game(
     white_weights: &[f32],
     black_weights: &[f32],
@@ -75,7 +80,33 @@ pub fn simulate_game(
 ) -> GameResult {
     let white_net = dense_from_flat_weights(input_size, hidden_size, output_size, white_weights);
     let black_net = dense_from_flat_weights(input_size, hidden_size, output_size, black_weights);
+    simulate_game_with_nets(
+        &white_net,
+        &black_net,
+        input_size,
+        hidden_size,
+        output_size,
+        max_moves,
+        temperature,
+        mercy_min_moves,
+        mercy_material_threshold,
+        rng,
+    )
+}
 
+/// Simulate a single chess game between two pre-built dense neural networks.
+pub fn simulate_game_with_nets(
+    white_net: &DenseNetwork,
+    black_net: &DenseNetwork,
+    input_size: usize,
+    hidden_size: usize,
+    output_size: usize,
+    max_moves: usize,
+    temperature: f32,
+    mercy_min_moves: usize,
+    mercy_material_threshold: f32,
+    rng: &mut impl rand::Rng,
+) -> GameResult {
     let mut board = ChessBoard::startpos();
     let mut move_count = 0usize;
     let mut result: i32 = 2; // default draw
@@ -123,9 +154,9 @@ pub fn simulate_game(
 
         encode_board(&board, &mut inputs);
         let net = if board.side_to_move == 0 {
-            &white_net
+            white_net
         } else {
-            &black_net
+            black_net
         };
         net.forward_into(&inputs, &mut hidden, &mut output);
         let chosen = decode_move(&output, &legal_moves, temperature, rng);
@@ -213,6 +244,10 @@ pub fn simulate_game(
 ///
 /// Populations are flat contiguous f32 slices: individual i's weights are at
 /// `[i * genome_size .. (i+1) * genome_size]`.
+///
+/// Pre-builds `DenseNetwork` objects for all genomes before the parallel loop
+/// to avoid redundant ~1.1 MB Vec copies when the same genome appears in
+/// multiple pairings.
 pub fn simulate_games_batch_flat(
     white_flat: &[f32],
     black_flat: &[f32],
@@ -226,14 +261,38 @@ pub fn simulate_games_batch_flat(
     mercy_min_moves: usize,
     mercy_material_threshold: f32,
 ) -> Vec<GameResult> {
+    // Pre-build all DenseNetworks (avoids redundant Vec copy per game)
+    let n_white = white_flat.len() / genome_size;
+    let n_black = black_flat.len() / genome_size;
+    let white_nets: Vec<DenseNetwork> = (0..n_white)
+        .map(|i| {
+            let start = i * genome_size;
+            dense_from_flat_weights(
+                input_size,
+                hidden_size,
+                output_size,
+                &white_flat[start..start + genome_size],
+            )
+        })
+        .collect();
+    let black_nets: Vec<DenseNetwork> = (0..n_black)
+        .map(|i| {
+            let start = i * genome_size;
+            dense_from_flat_weights(
+                input_size,
+                hidden_size,
+                output_size,
+                &black_flat[start..start + genome_size],
+            )
+        })
+        .collect();
+
     pairings
         .par_iter()
         .enumerate()
         .map(|(game_idx, &(w_idx, b_idx))| {
-            let w_start = w_idx * genome_size;
-            let b_start = b_idx * genome_size;
-            let w_weights = &white_flat[w_start..w_start + genome_size];
-            let b_weights = &black_flat[b_start..b_start + genome_size];
+            let w_net = &white_nets[w_idx];
+            let b_net = &black_nets[b_idx];
 
             // Each thread gets its own RNG seeded from game index for reproducibility
             let mut rng = rand::rngs::SmallRng::seed_from_u64(
@@ -241,9 +300,9 @@ pub fn simulate_games_batch_flat(
                     .wrapping_mul(6364136223846793005)
                     .wrapping_add(1442695040888963407),
             );
-            let mut gr = simulate_game(
-                w_weights,
-                b_weights,
+            let mut gr = simulate_game_with_nets(
+                w_net,
+                b_net,
                 input_size,
                 hidden_size,
                 output_size,
