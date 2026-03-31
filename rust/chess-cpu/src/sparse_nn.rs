@@ -194,26 +194,26 @@ impl SparseNetwork {
         }
 
         // Evaluate non-input nodes in topological order.
-        // Safety: edge_offsets, edge_sources, edge_weights, and biases are
-        // validated at construction time in from_genome_data. Using unchecked
-        // indexing here removes per-edge bounds checks from the hot loop.
+        // Uses unchecked indexing on edge_offsets/biases (guarded by pos check)
+        // but safe indexing on edge_sources/edge_weights to handle malformed genomes
+        // that violate the CSR invariant.
+        let n_edges = self.edge_sources.len();
         for &pos_u32 in &self.eval_order {
             let pos = pos_u32 as usize;
             if pos + 1 >= self.edge_offsets.len() || pos >= activations.len() {
                 continue;
             }
-            // SAFETY: pos < edge_offsets.len()-1 checked above, and
-            // edge_offsets[pos+1] <= edge_sources.len() by construction
+            // SAFETY: pos+1 < edge_offsets.len() checked above
             let start = unsafe { *self.edge_offsets.get_unchecked(pos) };
             let end = unsafe { *self.edge_offsets.get_unchecked(pos + 1) };
             let mut sum = unsafe { *self.biases.get_unchecked(pos) };
-            for e in start..end {
-                // SAFETY: e in start..end where end <= edge_sources.len() by CSR invariant
-                let src = unsafe { *self.edge_sources.get_unchecked(e) };
-                let w = unsafe { *self.edge_weights.get_unchecked(e) };
-                // SAFETY: src is a valid node position set during CSR construction
+            // Clamp end to actual edge array length to guard against malformed CSR
+            let safe_end = end.min(n_edges);
+            for e in start..safe_end {
+                let src = self.edge_sources[e];
+                let w = self.edge_weights[e];
                 let a = if src < activations.len() {
-                    unsafe { *activations.get_unchecked(src) }
+                    activations[src]
                 } else {
                     0.0
                 };
