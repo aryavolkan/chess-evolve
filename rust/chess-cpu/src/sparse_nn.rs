@@ -41,8 +41,6 @@ pub struct SparseNetwork {
     pub edge_offsets: Vec<usize>, // edge_offsets[p]..edge_offsets[p+1]
     /// Node ID -> position mapping. Indexed by node ID.
     pub id_to_pos: Vec<usize>,
-    /// Maximum node ID + 1 (size of id_to_pos).
-    pub max_id: usize,
 }
 
 impl SparseNetwork {
@@ -170,7 +168,6 @@ impl SparseNetwork {
             edge_weights,
             edge_offsets,
             id_to_pos,
-            max_id,
         })
     }
 

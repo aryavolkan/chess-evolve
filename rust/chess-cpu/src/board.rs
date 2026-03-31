@@ -285,6 +285,8 @@ impl ChessBoard {
         }
     }
 
+    /// Convenience wrapper that allocates a fresh buffer. Used in tests.
+    #[cfg(test)]
     pub fn get_legal_moves(&self) -> Vec<u32> {
         let mut pseudo = Vec::with_capacity(256);
         self.get_legal_moves_with_buf(&mut pseudo)
