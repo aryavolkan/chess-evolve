@@ -160,6 +160,9 @@ pub fn blx_alpha_crossover(
 }
 
 /// Internal BLX-alpha crossover implementation.
+///
+/// Uses f32 arithmetic throughout — no transcendental ops, just
+/// min/max/range/gen_range, so f64 precision is unnecessary.
 pub fn blx_alpha_crossover_impl<R: Rng>(
     parent_a: &[f32],
     parent_b: &[f32],
@@ -168,17 +171,17 @@ pub fn blx_alpha_crossover_impl<R: Rng>(
 ) -> Vec<f32> {
     let n = parent_a.len();
     let mut child = Vec::with_capacity(n);
+    let alpha_f32 = alpha as f32;
 
     for i in 0..n {
-        let a = parent_a[i] as f64;
-        let b = parent_b[i] as f64;
+        let a = parent_a[i];
+        let b = parent_b[i];
         let lo = a.min(b);
         let hi = a.max(b);
         let range = hi - lo;
-        let ext = range * alpha;
-
-        let c = rng.gen_range((lo - ext)..=(hi + ext));
-        child.push(c as f32);
+        let ext = range * alpha_f32;
+        let c: f32 = rng.gen_range((lo - ext)..=(hi + ext));
+        child.push(c);
     }
 
     child
