@@ -24,7 +24,7 @@ if [ ! -d monitor/frontend/node_modules ]; then
 fi
 
 # Start frontend
-cd monitor/frontend && npx vite --port 5173 > /tmp/monitor-frontend.log 2>&1 &
+cd monitor/frontend && npm run dev > /tmp/monitor-frontend.log 2>&1 &
 FE_PID=$!
 cd "$DIR"
 echo "Frontend started: PID $FE_PID (port 5173)"
