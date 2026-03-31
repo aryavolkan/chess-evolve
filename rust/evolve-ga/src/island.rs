@@ -27,6 +27,7 @@ use rand::seq::SliceRandom;
 ///
 /// Returns:
 ///     Tuple of (new_islands, new_fitness) with migrations applied
+#[allow(clippy::type_complexity)]
 #[pyfunction]
 #[pyo3(signature = (islands, island_fitness, n_migrants = 2, topology = "ring"))]
 pub fn migrate(
