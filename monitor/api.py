@@ -248,7 +248,7 @@ def list_sweeps():
         api = wandb.Api()
         runs = list(api.runs("chess-evolve", per_page=50, order="-created_at"))
 
-        # Group by sweep
+        # Group by sweep, tracking insertion order (runs are sorted by -created_at)
         sweeps: dict[str, dict] = {}
         for r in runs:
             sid = r.sweep.id if r.sweep else None
@@ -272,7 +272,8 @@ def list_sweeps():
                 if cur is None or bwr > cur:
                     sweeps[sid]["best_metric"] = round(bwr, 3)
 
-        result = sorted(sweeps.values(), key=lambda s: -s["run_count"])[:10]
+        # Preserve insertion order (most recent first, from -created_at query)
+        result = list(sweeps.values())[:10]
         _sweep_cache["data"] = result
         _sweep_cache["ts"] = now
         return result
