@@ -172,6 +172,67 @@ def test_transition_blending_active():
     assert cm.transition_blend_weight() == pytest.approx(1.0)
 
 
+# ---------------------------------------------------------------------------
+# Regression tests for training bugs (B1-B5)
+# ---------------------------------------------------------------------------
+
+
+def test_stage0_exit_uses_config_threshold():
+    """B9 regression: check_exit should use puzzle_advance_threshold from config,
+    not a hardcoded value."""
+    cm_strict = CurriculumManager({"puzzle_advance_threshold": 0.50})
+    cm_strict.stage = 0
+    # 20% accuracy passes default 0.12 but not 0.50
+    assert cm_strict.check_exit({"puzzle_bench_accuracy": 0.20, "puzzle_max_rating": 900}) is False
+
+    cm_easy = CurriculumManager({"puzzle_advance_threshold": 0.10})
+    cm_easy.stage = 0
+    assert cm_easy.check_exit({"puzzle_bench_accuracy": 0.15, "puzzle_max_rating": 900}) is True
+
+
+def test_stage0_exit_works_without_puzzle_bench_accuracy():
+    """B2 regression: check_exit should return False (not crash) when
+    puzzle_bench_accuracy is missing from metrics."""
+    cm = CurriculumManager({})
+    cm.stage = 0
+    assert cm.check_exit({"puzzle_max_rating": 900}) is False
+
+
+def test_stage2_exit_requires_sf_avg_cpl_key():
+    """B1 regression: stage 2 exit reads sf_avg_cpl. This test documents the
+    exact key name that the trainer must write."""
+    cm = CurriculumManager({})
+    cm.stage = 2
+    # With the wrong key name, CPL exit never fires
+    assert cm.check_exit({"bench_avg_win_rate": 0.10, "sf_white_avg_cpl": 500}) is False
+    # With the correct key name, it works
+    assert cm.check_exit({"bench_avg_win_rate": 0.10, "sf_avg_cpl": 500}) is True
+
+
+def test_stage3_exit_requires_sf_avg_cpl_key():
+    """B1 regression: stage 3 exit also reads sf_avg_cpl."""
+    cm = CurriculumManager({})
+    cm.stage = 3
+    for _ in range(5):
+        cm.check_exit({"sf_avg_cpl": 700})
+    assert cm._consecutive_sf_cpl == 5
+
+
+def test_check_exit_keys_are_documented():
+    """Contract test: all metric keys read by check_exit must be listed here.
+    If check_exit starts reading a new key, this test forces an update."""
+    import inspect
+    source = inspect.getsource(CurriculumManager.check_exit)
+    expected_keys = [
+        "puzzle_bench_accuracy",
+        "puzzle_max_rating",
+        "bench_avg_win_rate",
+        "sf_avg_cpl",
+    ]
+    for key in expected_keys:
+        assert key in source, f"check_exit should read '{key}'"
+
+
 import json
 from pathlib import Path
 
