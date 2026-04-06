@@ -50,11 +50,11 @@ class NeatCPUTrainer:
         self.output_size = config.get("output_size", 4096)
         self.max_moves = config.get("max_moves_per_game", 200)
         self.temperature = config.get("move_temperature", 0.5)
-        self.tournament_opponents = config.get("tournament_opponents", 5)
+        self.tournament_opponents = config.get("tournament_opponents", 10)
 
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
-        self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
+        self.mercy_material_threshold = config.get("mercy_material_threshold", 10.0)
 
         # Fitness weights (shared defaults from fitness.py, config-overridable)
         self.fitness_weights = merge_fitness_weights(config)
@@ -919,14 +919,33 @@ class NeatCPUTrainer:
                     white_fitness = blend_fitness(prev_w_fit, white_fitness, blend_w)
                     black_fitness = blend_fitness(prev_b_fit, black_fitness, blend_w)
             else:
-                # Standard coevolution
+                # Standard coevolution with HoF injection to break cycling.
+                # Each individual plays tournament_opponents from the opposing
+                # population PLUS any HoF opponents (historical strong genomes).
                 pairings = self._generate_pairings()
+
+                # Build extended opponent pools: population + opposing HoF
+                w_hof_genomes = [g for _, g in self.white_hof]
+                b_hof_genomes = [g for _, g in self.black_hof]
+                white_extended = list(white_pop) + w_hof_genomes
+                black_extended = list(black_pop) + b_hof_genomes
+
+                # Add HoF pairings: each pop member plays each opposing HoF member
+                hof_pairings = []
+                for w_idx in range(self.pop_size):
+                    for b_hof_idx in range(len(b_hof_genomes)):
+                        hof_pairings.append((w_idx, self.pop_size + b_hof_idx))
+                for b_idx in range(self.pop_size):
+                    for w_hof_idx in range(len(w_hof_genomes)):
+                        hof_pairings.append((self.pop_size + w_hof_idx, b_idx))
+
+                all_pairings = pairings + hof_pairings
 
                 try:
                     results = chess_cpu.simulate_neat_games_batch(
-                        white_pop,
-                        black_pop,
-                        pairings,
+                        white_extended,
+                        black_extended,
+                        all_pairings,
                         output_size=self.output_size,
                         max_moves=self.max_moves,
                         temperature=temperature,
@@ -943,12 +962,14 @@ class NeatCPUTrainer:
                             "black_mobility": 0, "white_king_safety": 0.0,
                             "black_king_safety": 0.0,
                         }
-                        for w, b in pairings
+                        for w, b in all_pairings
                     ]
 
                 num_games = len(results)
 
-                # Compute coevolution fitness
+                # Compute fitness only for population members (idx < pop_size).
+                # HoF games contribute to population fitness but HoF members
+                # are not evolved — they just provide selection pressure.
                 white_fitness = compute_fitness(results, self.pop_size, 0, self.fitness_weights)
                 black_fitness = compute_fitness(results, self.pop_size, 1, self.fitness_weights)
 

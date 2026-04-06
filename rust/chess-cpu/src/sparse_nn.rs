@@ -41,6 +41,8 @@ pub struct SparseNetwork {
     pub edge_offsets: Vec<usize>, // edge_offsets[p]..edge_offsets[p+1]
     /// Node ID -> position mapping. Indexed by node ID.
     pub id_to_pos: Vec<usize>,
+    /// True for output node positions — use linear activation instead of tanh.
+    pub is_output: Vec<bool>,
 }
 
 impl SparseNetwork {
@@ -64,6 +66,7 @@ impl SparseNetwork {
 
         let mut id_to_pos = vec![usize::MAX; max_id];
         let mut biases = vec![0.0f32; node_count];
+        let mut is_output = vec![false; node_count];
         let mut input_ids = Vec::new();
         let mut output_ids = Vec::new();
 
@@ -72,7 +75,10 @@ impl SparseNetwork {
             biases[pos] = node.bias;
             match node.node_type {
                 0 => input_ids.push(node.id),
-                2 => output_ids.push(node.id),
+                2 => {
+                    output_ids.push(node.id);
+                    is_output[pos] = true;
+                }
                 _ => {}
             }
         }
@@ -168,10 +174,13 @@ impl SparseNetwork {
             edge_weights,
             edge_offsets,
             id_to_pos,
+            is_output,
         })
     }
 
-    /// Forward pass with tanh activation. Writes outputs into `outputs`.
+    /// Forward pass. Hidden nodes use tanh; output nodes use linear activation
+    /// (raw logits for move selection — tanh would compress the 4096-logit space
+    /// to [-1, 1] making move discrimination harder).
     pub fn forward_into(&self, inputs: &[f32], activations: &mut [f32], outputs: &mut [f32]) {
         // Zero activations
         for a in activations.iter_mut() {
@@ -213,7 +222,9 @@ impl SparseNetwork {
                 };
                 sum += a * w;
             }
-            activations[pos] = sum.tanh();
+            // Output nodes use linear activation (raw logits for move selection).
+            // Hidden nodes use tanh.
+            activations[pos] = if self.is_output[pos] { sum } else { sum.tanh() };
         }
 
         // Read output activations
