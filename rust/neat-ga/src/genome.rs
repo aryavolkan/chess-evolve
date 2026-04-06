@@ -155,9 +155,11 @@ impl NeatGenome {
         tracker: &mut InnovationTracker,
         rng: &mut impl Rng,
     ) {
-        if rng.gen::<f32>() < config.weight_mutate_rate {
-            self.mutate_weights(config, rng);
-        }
+        // Always apply weight mutation — the per-connection rate inside
+        // mutate_weights controls how many weights actually change.
+        // Previously this had a second gate using weight_mutate_rate,
+        // making the effective per-weight rate = rate^2 (0.64 at default 0.8).
+        self.mutate_weights(config, rng);
         if rng.gen::<f32>() < config.add_connection_rate {
             for _ in 0..config.add_connection_count {
                 self.mutate_add_connection(tracker, rng);
