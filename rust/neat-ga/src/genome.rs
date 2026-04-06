@@ -155,9 +155,11 @@ impl NeatGenome {
         tracker: &mut InnovationTracker,
         rng: &mut impl Rng,
     ) {
-        if rng.gen::<f32>() < config.weight_mutate_rate {
-            self.mutate_weights(config, rng);
-        }
+        // Always apply weight mutation — the per-connection rate inside
+        // mutate_weights controls how many weights actually change.
+        // Previously this had a second gate using weight_mutate_rate,
+        // making the effective per-weight rate = rate^2 (0.64 at default 0.8).
+        self.mutate_weights(config, rng);
         if rng.gen::<f32>() < config.add_connection_rate {
             for _ in 0..config.add_connection_count {
                 self.mutate_add_connection(tracker, rng);
@@ -655,4 +657,98 @@ fn would_create_cycle(from_id: u32, to_id: u32, connections: &[ConnectionGene]) 
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::NeatConfig;
+    use crate::innovation::InnovationTracker;
+    use rand::SeedableRng;
+
+    /// B4 regression: weight mutation is always applied (no outer gate).
+    /// With weight_mutate_rate=1.0, every connection should be perturbed.
+    #[test]
+    fn weight_mutation_always_applied() {
+        let mut config = NeatConfig::default();
+        config.weight_mutate_rate = 1.0;
+        config.weight_perturb_rate = 1.0;
+        config.weight_perturb_strength = 10.0; // large so changes are detectable
+        config.add_node_rate = 0.0;
+        config.add_connection_rate = 0.0;
+        config.disable_connection_rate = 0.0;
+        config.prune_rate = 0.0;
+
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+        let mut tracker = InnovationTracker::new(10);
+        let mut genome = NeatGenome::create_basic(3, 2, 2, &mut tracker, &mut rng);
+
+        let original_weights: Vec<f32> = genome.connections.iter().map(|c| c.weight).collect();
+
+        genome.mutate(&config, &mut tracker, &mut rng);
+
+        let new_weights: Vec<f32> = genome.connections.iter().map(|c| c.weight).collect();
+
+        // With rate=1.0 and large perturbation, all weights should change.
+        // Previously the outer gate at rate=1.0 would pass, but at rate=0.5
+        // the effective rate was 0.5*0.5=0.25 — now it should be exactly 0.5.
+        let changed = original_weights
+            .iter()
+            .zip(new_weights.iter())
+            .filter(|(a, b)| (*a - *b).abs() > 1e-10)
+            .count();
+        assert_eq!(
+            changed,
+            original_weights.len(),
+            "All weights should change with rate=1.0"
+        );
+    }
+
+    /// B4 regression: verify the per-gene rate is the actual mutation probability
+    /// (not rate^2 from a double-gate).
+    #[test]
+    fn weight_mutation_rate_not_squared() {
+        let mut config = NeatConfig::default();
+        config.weight_mutate_rate = 0.5;
+        config.weight_perturb_rate = 1.0;
+        config.weight_perturb_strength = 100.0;
+        config.add_node_rate = 0.0;
+        config.add_connection_rate = 0.0;
+        config.disable_connection_rate = 0.0;
+        config.prune_rate = 0.0;
+
+        let mut tracker = InnovationTracker::new(100);
+
+        // Run many trials to estimate effective mutation rate
+        let n_trials = 500;
+        let mut total_connections = 0usize;
+        let mut total_mutated = 0usize;
+
+        for seed in 0..n_trials {
+            let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+            let mut genome = NeatGenome::create_basic(10, 5, 3, &mut tracker, &mut rng);
+            let original: Vec<f32> = genome.connections.iter().map(|c| c.weight).collect();
+
+            genome.mutate(&config, &mut tracker, &mut rng);
+
+            let changed = original
+                .iter()
+                .zip(genome.connections.iter())
+                .filter(|(a, c)| (*a - c.weight).abs() > 1e-6)
+                .count();
+            total_connections += original.len();
+            total_mutated += changed;
+        }
+
+        let observed_rate = total_mutated as f64 / total_connections as f64;
+        // Should be ~0.5, not ~0.25 (which was the bug: 0.5 * 0.5 = 0.25)
+        assert!(
+            observed_rate > 0.35,
+            "Effective rate {observed_rate:.3} is too low — likely double-gated (rate^2)"
+        );
+        assert!(
+            observed_rate < 0.65,
+            "Effective rate {observed_rate:.3} is too high"
+        );
+    }
 }

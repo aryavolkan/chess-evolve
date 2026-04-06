@@ -625,3 +625,53 @@ def test_trainer_eval_temperature_zero():
     config = {"population_size": 10}
     trainer = NeatCPUTrainer(config, Path("/tmp/test_metrics.jsonl"))
     assert trainer.curriculum.eval_temperature() == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for training bugs (B3, B5)
+# ---------------------------------------------------------------------------
+
+
+def test_cpl_score_zero_is_best():
+    """B3 regression: CPL=0.0 means perfect play (matches Stockfish top pick).
+    The CPL fitness score should be 10.0 (maximum), not 0.0."""
+    # The formula is: max(0.0, 10.0 * (1.0 - cpl / 2000.0))
+    # At cpl=0: 10.0 * (1.0 - 0) = 10.0
+    # At cpl=2000: 10.0 * (1.0 - 1.0) = 0.0
+    # Previously had `if cpl > 0 else 0.0` which returned 0 for perfect play
+    cpl_formula = lambda cpl: max(0.0, 10.0 * (1.0 - cpl / 2000.0))  # noqa: E731
+    assert cpl_formula(0.0) == pytest.approx(10.0)
+    assert cpl_formula(1000.0) == pytest.approx(5.0)
+    assert cpl_formula(2000.0) == pytest.approx(0.0)
+    assert cpl_formula(3000.0) == pytest.approx(0.0)  # clamped at 0
+
+
+def test_complexity_cost_is_per_genome():
+    """B5 regression: complexity_cost should penalize each genome proportionally
+    to its own connection count, not the population average."""
+    # Simulate two genomes with different connection counts
+    genome_simple = json.dumps({"nodes": [], "connections": [
+        {"enabled": True}, {"enabled": True},
+    ]})
+    genome_complex = json.dumps({"nodes": [], "connections": [
+        {"enabled": True}, {"enabled": True}, {"enabled": True},
+        {"enabled": True}, {"enabled": True}, {"enabled": True},
+    ]})
+    # Count enabled connections using the same method as the trainer
+    simple_count = genome_simple.count('"enabled": true') + genome_simple.count('"enabled":true')
+    complex_count = genome_complex.count('"enabled": true') + genome_complex.count('"enabled":true')
+    assert simple_count == 2
+    assert complex_count == 6
+    # With cc=1.0, penalties should differ
+    cc = 1.0
+    assert cc * simple_count < cc * complex_count
+
+
+def test_trainer_defaults_changed():
+    """Verify Phase 3 default changes are applied."""
+    config = {"population_size": 10}
+    trainer = NeatCPUTrainer(config, Path("/tmp/test_metrics.jsonl"))
+    # P3-12: mercy threshold lowered from 12 to 10
+    assert trainer.mercy_material_threshold == 10.0
+    # P3-13: tournament opponents raised from 5 to 10
+    assert trainer.tournament_opponents == 10

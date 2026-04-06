@@ -50,11 +50,11 @@ class NeatCPUTrainer:
         self.output_size = config.get("output_size", 4096)
         self.max_moves = config.get("max_moves_per_game", 200)
         self.temperature = config.get("move_temperature", 0.5)
-        self.tournament_opponents = config.get("tournament_opponents", 5)
+        self.tournament_opponents = config.get("tournament_opponents", 10)
 
         # Mercy rule
         self.mercy_min_moves = config.get("mercy_min_moves", 30)
-        self.mercy_material_threshold = config.get("mercy_material_threshold", 12.0)
+        self.mercy_material_threshold = config.get("mercy_material_threshold", 10.0)
 
         # Fitness weights (shared defaults from fitness.py, config-overridable)
         self.fitness_weights = merge_fitness_weights(config)
@@ -642,7 +642,7 @@ class NeatCPUTrainer:
                 )
                 # CPL-based fitness: lower CPL = better play
                 # Map CPL to 0-10 range: CPL=0 → 10, CPL>=2000 → 0
-                cpl_score = max(0.0, 10.0 * (1.0 - cpl / 2000.0)) if cpl > 0 else 0.0
+                cpl_score = max(0.0, 10.0 * (1.0 - cpl / 2000.0))
                 # Outcome bonus
                 outcome = 5.0 if result == "win" else (2.0 if result == "draw" else 0.0)
                 sf_fit[idx] = cpl_score + outcome
@@ -855,9 +855,30 @@ class NeatCPUTrainer:
                     for r in b_puzzle_results
                 ]
 
-                # No game results in puzzle mode
-                results = []
-                num_games = 0
+                # Blend in a small game signal for richer gradient.
+                # Puzzle-only fitness is near-flat at initialization (all genomes
+                # score ~0.5 soft_score). A few intra-population games provide
+                # material/mobility/capture signals that NEAT topology mutations
+                # can exploit even when puzzle accuracy is zero.
+                game_pairings = generate_pairings(self.pop_size, min(3, self.tournament_opponents))
+                game_results = chess_cpu.simulate_neat_games_batch(
+                    white_pop, black_pop, game_pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
+                    temperature=temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+                game_w_fit = compute_fitness(game_results, self.pop_size, 0, self.fitness_weights)
+                game_b_fit = compute_fitness(game_results, self.pop_size, 1, self.fitness_weights)
+                # Blend: 80% puzzle, 20% game signal
+                game_blend = 0.2
+                for i in range(len(white_fitness)):
+                    white_fitness[i] = (1 - game_blend) * white_fitness[i] + game_blend * game_w_fit[i]
+                for i in range(len(black_fitness)):
+                    black_fitness[i] = (1 - game_blend) * black_fitness[i] + game_blend * game_b_fit[i]
+
+                results = game_results
+                num_games = len(game_results)
 
             elif self.curriculum.stage >= 1:
                 # Stage 1+: each individual plays all random opponents
@@ -898,14 +919,33 @@ class NeatCPUTrainer:
                     white_fitness = blend_fitness(prev_w_fit, white_fitness, blend_w)
                     black_fitness = blend_fitness(prev_b_fit, black_fitness, blend_w)
             else:
-                # Standard coevolution
+                # Standard coevolution with HoF injection to break cycling.
+                # Each individual plays tournament_opponents from the opposing
+                # population PLUS any HoF opponents (historical strong genomes).
                 pairings = self._generate_pairings()
+
+                # Build extended opponent pools: population + opposing HoF
+                w_hof_genomes = [g for _, g in self.white_hof]
+                b_hof_genomes = [g for _, g in self.black_hof]
+                white_extended = list(white_pop) + w_hof_genomes
+                black_extended = list(black_pop) + b_hof_genomes
+
+                # Add HoF pairings: each pop member plays each opposing HoF member
+                hof_pairings = []
+                for w_idx in range(self.pop_size):
+                    for b_hof_idx in range(len(b_hof_genomes)):
+                        hof_pairings.append((w_idx, self.pop_size + b_hof_idx))
+                for b_idx in range(self.pop_size):
+                    for w_hof_idx in range(len(w_hof_genomes)):
+                        hof_pairings.append((self.pop_size + w_hof_idx, b_idx))
+
+                all_pairings = pairings + hof_pairings
 
                 try:
                     results = chess_cpu.simulate_neat_games_batch(
-                        white_pop,
-                        black_pop,
-                        pairings,
+                        white_extended,
+                        black_extended,
+                        all_pairings,
                         output_size=self.output_size,
                         max_moves=self.max_moves,
                         temperature=temperature,
@@ -922,12 +962,14 @@ class NeatCPUTrainer:
                             "black_mobility": 0, "white_king_safety": 0.0,
                             "black_king_safety": 0.0,
                         }
-                        for w, b in pairings
+                        for w, b in all_pairings
                     ]
 
                 num_games = len(results)
 
-                # Compute coevolution fitness
+                # Compute fitness only for population members (idx < pop_size).
+                # HoF games contribute to population fitness but HoF members
+                # are not evolved — they just provide selection pressure.
                 white_fitness = compute_fitness(results, self.pop_size, 0, self.fitness_weights)
                 black_fitness = compute_fitness(results, self.pop_size, 1, self.fitness_weights)
 
@@ -955,13 +997,14 @@ class NeatCPUTrainer:
 
             cc = self.neat_config.get("complexity_cost", 0.0)
             if cc > 0:
-                # Use Rust-returned average connections instead of scanning JSON strings
-                w_avg_conn = w_stats.get("avg_connections", 0) if isinstance(w_stats, dict) else 0
-                b_avg_conn = b_stats.get("avg_connections", 0) if isinstance(b_stats, dict) else 0
-                for i in range(len(white_fitness)):
-                    white_fitness[i] -= cc * w_avg_conn
-                for i in range(len(black_fitness)):
-                    black_fitness[i] -= cc * b_avg_conn
+                # Per-genome complexity penalty: count enabled connections per individual.
+                # Uses string count on JSON which is O(genome_len) but only runs when cc > 0.
+                for i, gj in enumerate(white_pop):
+                    n_conns = gj.count('"enabled":true') + gj.count('"enabled": true')
+                    white_fitness[i] -= cc * n_conns
+                for i, gj in enumerate(black_pop):
+                    n_conns = gj.count('"enabled":true') + gj.count('"enabled": true')
+                    black_fitness[i] -= cc * n_conns
 
             # Tournament scores
             if self.curriculum.stage == 0:
@@ -1036,12 +1079,15 @@ class NeatCPUTrainer:
                 print(f"  Stockfish: w_wr={sf_w_wr:.2f} b_wr={sf_b_wr:.2f} avg_len={sf_avg_len:.0f} w_cpl={sf_w_cpl:.0f} b_cpl={sf_b_cpl:.0f}")
 
             # Puzzle benchmark (every sf_bench_interval gens, reuse the same interval)
-            pb_w_gen, pb_b_gen = 0.0, 0.0
             bench_interval = max(1, self.sf_bench_interval)
             if self.curriculum.stage == 0 and gen % bench_interval == 0:
                 pb_w_gen, pb_b_gen = self._evaluate_puzzle_benchmark(
                     white_pop, black_pop, white_fitness, black_fitness,
                 )
+                # Persist last benchmark values across non-benchmark generations
+                # so check_exit always has a value to read
+                self._last_pb_w = pb_w_gen
+                self._last_pb_b = pb_b_gen
                 print(f"  Puzzle bench: w_acc={pb_w_gen:.1%} b_acc={pb_b_gen:.1%}")
 
             # Cache fitness extremes to avoid redundant recomputation
@@ -1142,10 +1188,12 @@ class NeatCPUTrainer:
                     metrics["puzzle_black_soft_score_best"],
                 )
                 metrics["puzzle_max_rating"] = self.puzzle_max_rating
-                if pb_w_gen > 0 or pb_b_gen > 0:
-                    metrics["puzzle_bench_white_accuracy"] = pb_w_gen
-                    metrics["puzzle_bench_black_accuracy"] = pb_b_gen
-                    metrics["puzzle_bench_accuracy"] = (pb_w_gen + pb_b_gen) / 2
+                # Always write puzzle bench metrics (persisted across gens so check_exit works)
+                pb_w = getattr(self, "_last_pb_w", 0.0)
+                pb_b = getattr(self, "_last_pb_b", 0.0)
+                metrics["puzzle_bench_white_accuracy"] = pb_w
+                metrics["puzzle_bench_black_accuracy"] = pb_b
+                metrics["puzzle_bench_accuracy"] = (pb_w + pb_b) / 2
 
             # Check stage exit criteria
             if self.curriculum.check_exit(metrics):
@@ -1176,6 +1224,7 @@ class NeatCPUTrainer:
                     "sf_fitness_black_avg": sf_b_avg_cpl_fit,
                 })
                 avg_cpl = (sf_w_cpl + sf_b_cpl) / 2
+                metrics["sf_avg_cpl"] = avg_cpl
                 metrics["elo_estimate"] = CurriculumManager.compute_elo_estimate(avg_cpl)
 
             metrics_writer.write(metrics)

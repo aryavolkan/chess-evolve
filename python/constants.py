@@ -108,6 +108,7 @@ CHESS_LOG_KEYS = [
     "sf_avg_game_length",
     "sf_white_avg_cpl",
     "sf_black_avg_cpl",
+    "sf_avg_cpl",
     # Stockfish fitness signal
     "sf_fitness_white_avg",
     "sf_fitness_black_avg",
