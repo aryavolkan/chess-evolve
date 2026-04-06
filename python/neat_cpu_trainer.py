@@ -855,9 +855,30 @@ class NeatCPUTrainer:
                     for r in b_puzzle_results
                 ]
 
-                # No game results in puzzle mode
-                results = []
-                num_games = 0
+                # Blend in a small game signal for richer gradient.
+                # Puzzle-only fitness is near-flat at initialization (all genomes
+                # score ~0.5 soft_score). A few intra-population games provide
+                # material/mobility/capture signals that NEAT topology mutations
+                # can exploit even when puzzle accuracy is zero.
+                game_pairings = generate_pairings(self.pop_size, min(3, self.tournament_opponents))
+                game_results = chess_cpu.simulate_neat_games_batch(
+                    white_pop, black_pop, game_pairings,
+                    output_size=self.output_size, max_moves=self.max_moves,
+                    temperature=temperature,
+                    mercy_min_moves=self.mercy_min_moves,
+                    mercy_material_threshold=self.mercy_material_threshold,
+                )
+                game_w_fit = compute_fitness(game_results, self.pop_size, 0, self.fitness_weights)
+                game_b_fit = compute_fitness(game_results, self.pop_size, 1, self.fitness_weights)
+                # Blend: 80% puzzle, 20% game signal
+                game_blend = 0.2
+                for i in range(len(white_fitness)):
+                    white_fitness[i] = (1 - game_blend) * white_fitness[i] + game_blend * game_w_fit[i]
+                for i in range(len(black_fitness)):
+                    black_fitness[i] = (1 - game_blend) * black_fitness[i] + game_blend * game_b_fit[i]
+
+                results = game_results
+                num_games = len(game_results)
 
             elif self.curriculum.stage >= 1:
                 # Stage 1+: each individual plays all random opponents

@@ -155,7 +155,7 @@ fn default_stagnation_threshold() -> usize {
     15
 }
 fn default_stagnation_kill_threshold() -> usize {
-    25
+    50
 }
 fn default_min_species_protected() -> usize {
     2

@@ -66,6 +66,7 @@ class CurriculumManager:
         self._consecutive_bench_wins: int = 0
         self._consecutive_sf_cpl: int = 0
         self._ladder_tier: int = 0
+        self._puzzle_exit_acc: float = config.get("puzzle_advance_threshold", 0.12)
 
     def training_temperature(self, gen_in_stage: int | None = None) -> float:
         """Compute training temperature for current stage and generation."""
@@ -129,7 +130,7 @@ class CurriculumManager:
         if self.stage == 0:
             acc = metrics.get("puzzle_bench_accuracy", 0.0)
             rating = metrics.get("puzzle_max_rating", 0)
-            return acc >= 0.12 and rating >= 800
+            return acc >= self._puzzle_exit_acc and rating >= 800
 
         elif self.stage == 1:
             wr = metrics.get("bench_avg_win_rate", 0.0)

@@ -13,13 +13,13 @@
     "tournament_k": 2,
     "neat_add_node_rate": 0.15,
     "neat_add_connection_rate": 0.25,
-    "neat_initial_connections_per_output": 1,
+    "neat_initial_connections_per_output": 5,
     "neat_target_species_count": 5,
     "sf_fitness_weight": 0.0,
     "sf_fitness_interval": 1,
     "sf_fitness_top_n": 50,
     "sf_bench_interval": 5,
-    "puzzle_advance_threshold": 0.75,
+    "puzzle_advance_threshold": 0.15,
     "puzzle_accuracy_weight": 0.4,
     "transition_gens": 3
 }
