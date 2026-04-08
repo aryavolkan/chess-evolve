@@ -42,6 +42,12 @@ export default function WorkerCard({ worker, onKill, onViewLogs }: Props) {
       <div className="flex gap-4 text-xs">
         <span className={cpuColor}>CPU {worker.cpu_pct.toFixed(0)}%</span>
         <span className="text-zinc-400">MEM {worker.mem_pct.toFixed(1)}%</span>
+        {worker.generation != null && (
+          <span className="text-zinc-300">Gen {worker.generation}</span>
+        )}
+        {worker.run_count > 0 && (
+          <span className="text-zinc-500">Run #{worker.run_count}</span>
+        )}
       </div>
 
       {worker.last_log_line && (

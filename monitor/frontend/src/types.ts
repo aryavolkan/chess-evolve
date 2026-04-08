@@ -7,6 +7,8 @@ export interface Worker {
   uptime_sec: number
   last_log_line: string
   log_file: string | null
+  generation: number | null
+  run_count: number
 }
 
 export interface SystemInfo {

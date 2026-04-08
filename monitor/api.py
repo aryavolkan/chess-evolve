@@ -83,6 +83,7 @@ def _find_workers() -> list[dict]:
             mem = proc.info["memory_percent"] or 0.0
             uptime = time.time() - (proc.info["create_time"] or time.time())
             last_line = _read_last_line(info.log_file) if info.log_file else ""
+            gen, run_count = _extract_gen_and_run(info.log_file) if info.log_file else (None, 0)
 
             status = "running" if cpu > 5.0 else "idle"
 
@@ -95,6 +96,8 @@ def _find_workers() -> list[dict]:
                 "uptime_sec": int(uptime),
                 "last_log_line": last_line,
                 "log_file": info.log_file,
+                "generation": gen,
+                "run_count": run_count,
             })
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -123,21 +126,56 @@ def _guess_log_file(pid: int) -> str | None:
     return None
 
 
-def _read_last_line(path: str | None) -> str:
+def _read_last_lines(path: str | None, n: int = 5) -> list[str]:
     if not path or not os.path.exists(path):
-        return ""
+        return []
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
             size = f.tell()
             if size == 0:
-                return ""
-            read_size = min(size, 4096)
+                return []
+            read_size = min(size, 8192)
             f.seek(-read_size, 2)
             lines = f.read().decode("utf-8", errors="replace").splitlines()
-            return lines[-1] if lines else ""
+            return lines[-n:]
     except OSError:
-        return ""
+        return []
+
+
+def _read_last_line(path: str | None) -> str:
+    lines = _read_last_lines(path, 1)
+    return lines[0] if lines else ""
+
+
+def _extract_gen_and_run(path: str | None) -> tuple[int | None, int]:
+    """Extract current generation and run count from worker log."""
+    if not path or not os.path.exists(path):
+        return None, 0
+
+    # Get generation from tail of file
+    lines = _read_last_lines(path, 50)
+    gen = None
+    for line in reversed(lines):
+        if gen is None and "gen " in line and ":" in line:
+            try:
+                part = line.strip().split("gen ")[1].split(":")[0].strip()
+                gen = int(part)
+                break
+            except (IndexError, ValueError):
+                pass
+
+    # Count total runs by scanning full file for "Starting Run" markers.
+    # Uses binary read + count for efficiency on large logs.
+    run_count = 0
+    try:
+        with open(path, "rb") as f:
+            content = f.read()
+            run_count = content.count(b"Starting Run")
+    except OSError:
+        pass
+
+    return gen, run_count
 
 
 def _tail_file(path: str, lines: int = 100) -> str:

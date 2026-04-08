@@ -1,0 +1,92 @@
+# Optimized sweep v4 — learning from v2 vs v3 comparison
+#
+# v3 (g2qo5wsr) failed by over-fixing params — only 1% reached stage 3.
+# v2 (1tohqypj) succeeded with broader search — 18% reached stage 3, best=45.2%.
+#
+# Strategy: start from v2's ranges but shift distributions toward the
+# top-performing region. Keep 6 swept params for Bayes diversity.
+# Give 350 gens (v2's 250 was sometimes too short, v3's 400 was wasted on stuck runs).
+#
+# Key insights from v2 stage-3 analysis:
+#   - move_temperature: r=-0.43 — lower wins (top5 mean=0.144)
+#   - puzzle_advance_threshold: r=-0.54 overall — lower = advance sooner
+#   - crossover_rate: top5 mean=0.762, consistently 0.75-0.78
+#   - node_rate: top5 mean=0.213 (broad range 0.15-0.25 ok)
+#   - puzzle_accuracy_weight: top5 mean=0.427
+
+method: bayes
+metric:
+  name: bench_avg_win_rate
+  goal: maximize
+parameters:
+  # Fixed — strong consensus across all sweeps
+  population_size:
+    value: 150
+  hidden_size:
+    value: 64
+  games_per_individual:
+    value: 2
+  mutation_rate:
+    value: 0.25
+  mutation_strength:
+    value: 0.12
+  max_generations:
+    value: 350
+  tournament_k:
+    value: 2
+  tournament_opponents:
+    value: 5
+  use_neat:
+    value: true
+  curriculum_stage:
+    value: 0
+  checkmate_bonus:
+    value: 15
+  input_size:
+    value: 389
+  output_size:
+    value: 384
+  max_moves_per_game:
+    value: 100
+  eval_temperature:
+    value: 0.0
+  benchmark_size:
+    value: 50
+  draw_bonus:
+    value: 1.5
+  sf_fitness_weight:
+    value: 0.0
+  sf_fitness_top_n:
+    value: 50
+  sf_bench_interval:
+    value: 5
+  transition_gens:
+    value: 3
+  neat_initial_connections_per_output:
+    value: 1
+  immigration_rate:
+    value: 0.14
+
+  # Swept — 6 params, narrowed toward v2 top-performers but still broad enough for Bayes
+  crossover_rate:
+    distribution: uniform
+    min: 0.72
+    max: 0.80
+  move_temperature:
+    distribution: uniform
+    min: 0.10
+    max: 0.18
+  neat_add_node_rate:
+    distribution: uniform
+    min: 0.15
+    max: 0.25
+  neat_add_connection_rate:
+    distribution: uniform
+    min: 0.18
+    max: 0.28
+  neat_target_species_count:
+    values: [5, 8]
+  puzzle_advance_threshold:
+    distribution: uniform
+    min: 0.50
+    max: 0.60
