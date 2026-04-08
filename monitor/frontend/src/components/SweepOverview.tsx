@@ -9,7 +9,9 @@ export default function SweepOverview() {
     const poll = () => getSweeps().then(setSweeps).catch(() => {})
     poll()
     const id = setInterval(poll, 30000)
-    return () => clearInterval(id)
+    const onVisible = () => { if (document.visibilityState === 'visible') poll() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   if (sweeps.length === 0) return null

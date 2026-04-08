@@ -25,7 +25,9 @@ export default function SystemStats() {
     const poll = () => getSystem().then(setInfo).catch(() => {})
     poll()
     const id = setInterval(poll, 5000)
-    return () => clearInterval(id)
+    const onVisible = () => { if (document.visibilityState === 'visible') poll() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   if (!info) return null
