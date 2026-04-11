@@ -40,3 +40,4 @@ download.lock
 lichess_db_puzzle.csv
 run_state.json
 .vscode/
+graphify-out/

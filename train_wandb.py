@@ -414,10 +414,20 @@ def sweep_train_fn():
         print(f"\n🛑 Worker {_worker.worker_id}: interrupted")
         run.finish(exit_code=130)
     except Exception as e:
-        print(f"\n❌ Worker {_worker.worker_id}: error: {e}")
-        import traceback
-        traceback.print_exc()
-        run.finish(exit_code=1)
+        # W&B hyperband early termination sends SIGINT via interrupt_main(),
+        # which can surface as a bare Exception() from PyO3 FFI calls when
+        # the signal arrives during py.detach() (GIL released for Rayon).
+        # Detect this and treat it as a graceful early stop, not a crash.
+        is_bare_exception = type(e) is Exception and str(e) == ""
+        if is_bare_exception:
+            gen = getattr(run, "step", "?")
+            print(f"\n⏹ Worker {_worker.worker_id}: early-terminated at gen ~{gen}")
+            run.finish(exit_code=0)
+        else:
+            print(f"\n❌ Worker {_worker.worker_id}: error: {e}")
+            import traceback
+            traceback.print_exc()
+            run.finish(exit_code=1)
     finally:
         _worker.cleanup()
 

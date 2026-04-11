@@ -180,7 +180,7 @@ impl NeatGenome {
 
     /// Perturb or reset connection weights.
     pub fn mutate_weights(&mut self, config: &NeatConfig, rng: &mut impl Rng) {
-        let normal = Normal::new(0.0f32, config.weight_perturb_strength).unwrap();
+        let normal = Normal::new(0.0f32, config.weight_perturb_strength.max(1e-6)).unwrap();
         for conn in &mut self.connections {
             if rng.gen::<f32>() < config.weight_mutate_rate {
                 if rng.gen::<f32>() < config.weight_perturb_rate {
@@ -608,10 +608,11 @@ impl NeatGenome {
                     if new_depth > *entry {
                         *entry = new_depth;
                     }
-                    let deg = in_degree.get_mut(&nxt).unwrap();
-                    *deg -= 1;
-                    if *deg == 0 {
-                        queue.push(nxt);
+                    if let Some(deg) = in_degree.get_mut(&nxt) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            queue.push(nxt);
+                        }
                     }
                 }
             }
