@@ -275,45 +275,55 @@ def get_worker_logs(pid: int, lines: int = Query(default=100, le=2000)):
     return {"pid": pid, "log": _tail_file(info.log_file, lines)}
 
 
+_SWEEP_FETCH_SCRIPT = '''
+import json, os, sys
+os.environ["WANDB_HTTP_TIMEOUT"] = "10"
+os.environ["WANDB_SILENT"] = "true"
+import wandb
+api = wandb.Api(timeout=10)
+runs = list(api.runs("chess-evolve", per_page=50, order="-created_at"))
+sweeps = {}
+for r in runs:
+    sid = r.sweep.id if r.sweep else None
+    if not sid:
+        continue
+    if sid not in sweeps:
+        sweeps[sid] = {"id": sid, "state": "unknown", "run_count": 0, "running": 0, "best_metric": None,
+                       "url": f"https://wandb.ai/aryavolkan-personal/chess-evolve/sweeps/{sid}"}
+    sweeps[sid]["run_count"] += 1
+    if r.state == "running":
+        sweeps[sid]["running"] += 1
+    bwr = r.summary.get("bench_avg_win_rate")
+    if bwr is not None:
+        cur = sweeps[sid]["best_metric"]
+        if cur is None or bwr > cur:
+            sweeps[sid]["best_metric"] = round(bwr, 3)
+json.dump(list(sweeps.values())[:10], sys.stdout)
+'''
+
+
 @app.get("/api/sweeps")
 def list_sweeps():
     now = time.time()
     if now - _sweep_cache["ts"] < SWEEP_CACHE_TTL and _sweep_cache["data"]:
         return _sweep_cache["data"]
 
+    # Run W&B query in a subprocess with a hard kill timeout.
+    # The W&B SDK has an infinite retry loop on network errors that cannot
+    # be interrupted from a thread — only a process kill stops it.
+    import json as _json
     try:
-        import wandb
-        api = wandb.Api()
-        runs = list(api.runs("chess-evolve", per_page=50, order="-created_at"))
+        result = subprocess.run(
+            [str(VENV_PYTHON), "-c", _SWEEP_FETCH_SCRIPT],
+            capture_output=True, text=True, timeout=20,
+            cwd=str(PROJECT_ROOT),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            data = _json.loads(result.stdout)
+            _sweep_cache["data"] = data
+            _sweep_cache["ts"] = now
+            return data
+    except (subprocess.TimeoutExpired, Exception):
+        pass
 
-        # Group by sweep, tracking insertion order (runs are sorted by -created_at)
-        sweeps: dict[str, dict] = {}
-        for r in runs:
-            sid = r.sweep.id if r.sweep else None
-            if not sid:
-                continue
-            if sid not in sweeps:
-                sweeps[sid] = {
-                    "id": sid,
-                    "state": "unknown",
-                    "run_count": 0,
-                    "running": 0,
-                    "best_metric": None,
-                    "url": f"https://wandb.ai/aryavolkan-personal/chess-evolve/sweeps/{sid}",
-                }
-            sweeps[sid]["run_count"] += 1
-            if r.state == "running":
-                sweeps[sid]["running"] += 1
-            bwr = r.summary.get("bench_avg_win_rate")
-            if bwr is not None:
-                cur = sweeps[sid]["best_metric"]
-                if cur is None or bwr > cur:
-                    sweeps[sid]["best_metric"] = round(bwr, 3)
-
-        # Preserve insertion order (most recent first, from -created_at query)
-        result = list(sweeps.values())[:10]
-        _sweep_cache["data"] = result
-        _sweep_cache["ts"] = now
-        return result
-    except Exception:
-        return _sweep_cache.get("data", [])
+    return _sweep_cache.get("data", [])
