@@ -104,16 +104,18 @@ pub fn decode_move(
         .collect();
     let exp_sum: f32 = exp_vals.iter().sum();
 
-    // Weighted random sample
-    let r: f32 = rng.gen::<f32>() * exp_sum;
-    let mut acc = 0.0;
-    for (i, &e) in exp_vals.iter().enumerate() {
-        acc += e;
-        if r <= acc {
-            return legal_moves[i];
+    // Weighted random sample (guard NaN/zero exp_sum — fall back to first move)
+    if exp_sum.is_finite() && exp_sum > 0.0 {
+        let r: f32 = rng.gen::<f32>() * exp_sum;
+        let mut acc = 0.0;
+        for (i, &e) in exp_vals.iter().enumerate() {
+            acc += e;
+            if r <= acc {
+                return legal_moves[i];
+            }
         }
     }
-    *legal_moves.last().unwrap()
+    legal_moves[0]
 }
 
 /// Decode network output into a legal move using factored from+to scoring.
@@ -168,15 +170,17 @@ pub fn decode_move_factored(
         .collect();
     let exp_sum: f32 = exp_vals.iter().sum();
 
-    let r: f32 = rng.gen::<f32>() * exp_sum;
-    let mut acc = 0.0;
-    for (i, &e) in exp_vals.iter().enumerate() {
-        acc += e;
-        if r <= acc {
-            return legal_moves[i];
+    if exp_sum.is_finite() && exp_sum > 0.0 {
+        let r: f32 = rng.gen::<f32>() * exp_sum;
+        let mut acc = 0.0;
+        for (i, &e) in exp_vals.iter().enumerate() {
+            acc += e;
+            if r <= acc {
+                return legal_moves[i];
+            }
         }
     }
-    *legal_moves.last().unwrap()
+    legal_moves[0]
 }
 
 /// Decode network output into a legal move using piece-type × destination scoring.
@@ -236,15 +240,17 @@ pub fn decode_move_piece_dest(
         .collect();
     let exp_sum: f32 = exp_vals.iter().sum();
 
-    let r: f32 = rng.gen::<f32>() * exp_sum;
-    let mut acc = 0.0;
-    for (i, &e) in exp_vals.iter().enumerate() {
-        acc += e;
-        if r <= acc {
-            return legal_moves[i];
+    if exp_sum.is_finite() && exp_sum > 0.0 {
+        let r: f32 = rng.gen::<f32>() * exp_sum;
+        let mut acc = 0.0;
+        for (i, &e) in exp_vals.iter().enumerate() {
+            acc += e;
+            if r <= acc {
+                return legal_moves[i];
+            }
         }
     }
-    *legal_moves.last().unwrap()
+    legal_moves[0]
 }
 
 /// Build a DenseNetwork from a flat weight vector.
