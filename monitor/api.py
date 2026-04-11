@@ -20,7 +20,7 @@ TRAIN_SCRIPT = PROJECT_ROOT / "train_wandb.py"
 app = FastAPI(title="Chess-Evolve Worker Monitor")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

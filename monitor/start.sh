@@ -13,7 +13,7 @@ pkill -f "vite.*monitor/frontend" 2>/dev/null && echo "Stopped old frontend" || 
 sleep 1
 
 # Start API
-.venv/bin/python -m uvicorn monitor.api:app --port 8420 > /tmp/monitor-api.log 2>&1 &
+.venv/bin/python -m uvicorn monitor.api:app --host 0.0.0.0 --port 8420 > /tmp/monitor-api.log 2>&1 &
 API_PID=$!
 echo "API started: PID $API_PID (port 8420)"
 
@@ -29,8 +29,10 @@ FE_PID=$!
 cd "$DIR"
 echo "Frontend started: PID $FE_PID (port 5173)"
 
+TS_IP=$(tailscale ip -4 2>/dev/null || true)
 echo ""
 echo "Dashboard: http://localhost:5173"
+[ -n "$TS_IP" ] && echo "Tailscale: http://$TS_IP:5173"
 echo "API:       http://localhost:8420/api/workers"
 echo ""
 echo "Stop: ./monitor/stop.sh"
