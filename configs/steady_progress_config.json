@@ -2,7 +2,7 @@
     "population_size": 100,
     "max_generations": 100,
     "max_moves_per_game": 100,
-    "input_size": 389,
+    "input_size": 391,
     "output_size": 384,
     "use_neat": true,
     "curriculum_stage": 0,

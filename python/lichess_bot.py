@@ -29,7 +29,7 @@ except ImportError:
     HAS_CHESS_CPU = False
 
 DEFAULT_GENOME_PATH = "neat_best_genomes.json"
-INPUT_SIZE = 389
+INPUT_SIZE = 391
 DEFAULT_OUTPUT_SIZE = 4096
 
 
@@ -51,6 +51,7 @@ class SparseNetwork:
         max_id = max(n["id"] for n in sorted_nodes) + 1
         self.id_to_pos = [None] * max_id
         self.biases = [0.0] * self.node_count
+        self.is_output = [False] * self.node_count
         self.input_ids = []
         self.output_ids = []
 
@@ -61,6 +62,7 @@ class SparseNetwork:
                 self.input_ids.append(node["id"])
             elif node["node_type"] == 2:
                 self.output_ids.append(node["id"])
+                self.is_output[pos] = True
 
         # Build adjacency and incoming edges (enabled connections only)
         in_degree = [0] * self.node_count
@@ -106,7 +108,11 @@ class SparseNetwork:
         self.eval_order = [p for p in topo_order if p not in input_positions]
 
     def forward(self, inputs: list[float]) -> list[float]:
-        """Run forward pass, return output activations."""
+        """Run forward pass, return output activations.
+
+        Hidden nodes use tanh; output nodes use linear activation (raw logits)
+        to match the Rust SparseNetwork implementation.
+        """
         activations = [0.0] * self.node_count
 
         # Set input activations
@@ -120,7 +126,9 @@ class SparseNetwork:
             s = self.biases[pos]
             for src_pos, weight in self.incoming_edges[pos]:
                 s += activations[src_pos] * weight
-            activations[pos] = math.tanh(s)
+            # Output nodes use linear activation (raw logits for move
+            # selection); hidden nodes use tanh.
+            activations[pos] = s if self.is_output[pos] else math.tanh(s)
 
         # Collect outputs
         outputs = []
@@ -146,11 +154,13 @@ _PIECE_PLANE = {
 
 
 def encode_board_python(board: chess.Board) -> list[float]:
-    """Encode board to 389-float vector matching chess_cpu.encode_board_fen.
+    """Encode board to 391-float vector matching chess_cpu.encode_board.
 
     6 planes x 64 squares (signed: +1 white, -1 black, absolute colors),
     plus 1 side-to-move flag (0=white, 1=black),
-    plus 4 raw castling bits (WK, WQ, BK, BQ) = 389.
+    plus 4 raw castling bits (WK, WQ, BK, BQ),
+    plus 1 en passant file (0.125-1.0 for files a-h, 0.0 if none),
+    plus 1 halfmove clock / 100 = 391.
     """
     vec = [0.0] * INPUT_SIZE
 
@@ -172,6 +182,17 @@ def encode_board_python(board: chess.Board) -> list[float]:
     vec[base + 2] = 1.0 if board.has_queenside_castling_rights(chess.WHITE) else 0.0
     vec[base + 3] = 1.0 if board.has_kingside_castling_rights(chess.BLACK) else 0.0
     vec[base + 4] = 1.0 if board.has_queenside_castling_rights(chess.BLACK) else 0.0
+
+    # En passant file
+    ep_sq = board.ep_square
+    if ep_sq is not None:
+        ep_file = chess.square_file(ep_sq)
+        vec[base + 5] = (ep_file + 1) / 8.0
+    else:
+        vec[base + 5] = 0.0
+
+    # Halfmove clock (normalized)
+    vec[base + 6] = board.halfmove_clock / 100.0
 
     return vec
 

@@ -1,0 +1,85 @@
+# Optimized sweep v10 — structural changes to break the 0.40 BWR ceiling
+#
+# v9 (334 runs) confirmed hyperparams are NOT the bottleneck:
+#   - fitness weights, selection pressure, SF shaping all flat within tested ranges
+#   - BWR ceiling ~0.39-0.41 hit by both v8 and v9 despite sweeping different params
+#   - Optimal fixed values: temp=0.20, gpi=2, tk=3, cm_b=15, db=1.5, sf=0
+#
+# v10 targets architectural dimensions that change the optimization landscape:
+#   - population_size: 150 vs 250 (more diversity for NEAT speciation)
+#   - output_size: 128 (factored) vs 384 (piece-dest) — smaller output space
+#     means NEAT can wire topology more efficiently
+#   - max_moves_per_game: 100 vs 150 — longer games let material convert to wins
+#   - max_generations: 250 vs 400 — more evolution time
+#   - neat_initial_connections_per_output: 1 vs 3 — richer starting topology
+
+method: bayes
+metric:
+  name: bench_avg_win_rate
+  goal: maximize
+
+early_terminate:
+  type: hyperband
+  min_iter: 80
+  eta: 3
+
+parameters:
+  # Fixed — proven optimal from v9
+  move_temperature:
+    value: 0.20
+  sf_fitness_weight:
+    value: 0.0
+  tournament_k:
+    value: 3
+  games_per_individual:
+    value: 2
+  checkmate_bonus:
+    value: 15
+  draw_bonus:
+    value: 1.5
+  hidden_size:
+    value: 64
+  mutation_rate:
+    value: 0.25
+  mutation_strength:
+    value: 0.12
+  tournament_opponents:
+    value: 10
+  use_neat:
+    value: true
+  curriculum_stage:
+    value: 2
+  input_size:
+    value: 389
+  eval_temperature:
+    value: 0.0
+  benchmark_size:
+    value: 50
+  sf_fitness_top_n:
+    value: 50
+  sf_bench_interval:
+    value: 5
+  transition_gens:
+    value: 3
+  neat_target_species_count:
+    value: 5
+  immigration_rate:
+    value: 0.14
+  crossover_rate:
+    value: 0.76
+  neat_add_node_rate:
+    value: 0.17
+  neat_add_connection_rate:
+    value: 0.25
+
+  # Swept — structural dimensions
+  population_size:
+    values: [150, 250]
+  output_size:
+    values: [128, 384]
+  max_moves_per_game:
+    values: [100, 150]
+  max_generations:
+    values: [250, 400]
+  neat_initial_connections_per_output:
+    values: [1, 3]

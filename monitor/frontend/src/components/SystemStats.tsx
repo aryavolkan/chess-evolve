@@ -34,6 +34,7 @@ export default function SystemStats() {
 
   return (
     <div className="flex gap-6 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+      <div className="text-sm font-medium text-zinc-200 flex items-center">{info.hostname}</div>
       <Bar label="CPU" value={info.cpu_percent} max={100} unit="%" />
       <Bar label="Memory" value={info.mem_used_gb} max={info.mem_total_gb} unit=" GB" />
       <div className="text-sm text-zinc-500 flex items-center">{info.cpu_cores} cores</div>

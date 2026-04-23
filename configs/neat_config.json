@@ -2,7 +2,7 @@
     "population_size": 500,
     "max_generations": 2000,
     "max_moves_per_game": 100,
-    "input_size": 389,
+    "input_size": 391,
     "output_size": 4096,
     "use_neat": true,
     "tournament_opponents": 8,

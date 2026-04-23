@@ -33,7 +33,7 @@ fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
 #[pyo3(signature = (
     white_weights,
     black_weights,
-    input_size = 389,
+    input_size = 391,
     hidden_size = 64,
     output_size = 4096,
     max_moves = 100,
@@ -108,7 +108,7 @@ fn simulate_game(
     black_pop_bytes,
     genome_size,
     pairings,
-    input_size = 389,
+    input_size = 391,
     hidden_size = 64,
     output_size = 4096,
     max_moves = 100,

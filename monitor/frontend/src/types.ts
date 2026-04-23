@@ -12,6 +12,7 @@ export interface Worker {
 }
 
 export interface SystemInfo {
+  hostname: string
   cpu_cores: number
   cpu_percent: number
   mem_total_gb: number
