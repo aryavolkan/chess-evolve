@@ -3,14 +3,15 @@
 Used by both CPUTrainer (fixed-topology) and NeatCPUTrainer (NEAT).
 """
 
-# Default fitness weights — tuned to prioritize winning over material hoarding.
-# Win + checkmate bonus (20.0) dominates material signal (~10 for 10-pt lead).
+# Default fitness weights — tuned to prioritize winning decisively.
+# Win + checkmate bonus (25.0) strongly dominates material signal (~5 for 10-pt lead).
+# Loss penalty (-10) punishes losing harder than a draw rewards.
 FITNESS_DEFAULTS = {
-    "win_bonus": 10.0,
-    "draw_bonus": 3.0,
-    "loss_penalty": -5.0,
+    "win_bonus": 15.0,
+    "draw_bonus": 2.0,
+    "loss_penalty": -10.0,
     "capture_weight": 0.2,
-    "material_weight": 1.0,
+    "material_weight": 0.5,
     "mobility_weight": 0.3,
     "king_safety_weight": 0.5,
     "opp_king_safety_weight": 0.0,

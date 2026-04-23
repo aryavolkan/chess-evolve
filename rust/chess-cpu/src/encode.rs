@@ -1,10 +1,17 @@
 use crate::board::ChessBoard;
 use crate::nn::DenseNetwork;
 
-/// Encode board state into neural network input vector (389 floats).
+/// Encode board state into neural network input vector.
 ///
-/// Layout: 6 piece-type planes × 64 squares (signed: +1 white, -1 black),
-/// then side_to_move, then 4 castling rights.
+/// Layout (391 floats):
+///   [0..384]   6 piece-type planes × 64 squares (signed: +1 white, -1 black)
+///   [384]      side_to_move (0.0=white, 1.0=black)
+///   [385..389] 4 castling rights (WK, WQ, BK, BQ)
+///   [389]      en passant file (0.125–1.0 for files a–h, 0.0 if none)
+///   [390]      halfmove clock / 100.0 (normalized, 0.0–1.0)
+///
+/// Backwards-compatible: callers with a 389-element buffer still work —
+/// extra slots are simply not written.
 ///
 /// Uses bitboard iteration to touch only occupied squares (O(pieces) instead
 /// of O(384)) — typically 10-20 pieces vs 384 piece_at lookups.
@@ -52,6 +59,22 @@ pub fn encode_board(board: &ChessBoard, out: &mut [f32]) {
     } else {
         0.0
     };
+
+    // En passant file (slot 389) — only written if buffer is large enough
+    if out.len() > 389 {
+        out[389] = if board.en_passant_sq >= 0 {
+            // Encode file as 0.125 * (file + 1) so file a=0.125, h=1.0
+            let file = (board.en_passant_sq as usize) % 8;
+            (file as f32 + 1.0) / 8.0
+        } else {
+            0.0
+        };
+    }
+
+    // Halfmove clock (slot 390) — normalized to [0, 1]
+    if out.len() > 390 {
+        out[390] = (board.halfmove_clock as f32) / 100.0;
+    }
 }
 
 /// Decode network output into a legal move.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import time
 from collections import deque
@@ -59,6 +60,10 @@ def _find_workers() -> list[dict]:
             if "train_wandb.py" not in cmd_str:
                 continue
             if "--sweep" not in cmd_str:
+                continue
+            # Only count actual Python workers — skip bash/sh wrappers
+            # and ssh -f processes whose cmdline contains the train script.
+            if cmdline and not any("python" in c.lower() for c in cmdline[:2]):
                 continue
 
             pid = proc.info["pid"]
@@ -206,6 +211,7 @@ def _next_log_number() -> int:
 def get_system():
     mem = psutil.virtual_memory()
     return {
+        "hostname": platform.node(),
         "cpu_cores": psutil.cpu_count(),
         "cpu_percent": psutil.cpu_percent(interval=0.5),
         "mem_total_gb": round(mem.total / (1024**3), 1),

@@ -140,10 +140,10 @@ class TestComputeFitness:
         assert f_cap[0] > f_no[0]
 
     def test_draw_bonus_default(self, trainer):
-        assert trainer.fitness_weights["draw_bonus"] == 3.0
+        assert trainer.fitness_weights["draw_bonus"] == 2.0
 
     def test_loss_penalty_value(self, trainer):
-        assert trainer.fitness_weights["loss_penalty"] == -5.0
+        assert trainer.fitness_weights["loss_penalty"] == -10.0
 
 
 # ===========================================================================

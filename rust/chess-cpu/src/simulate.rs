@@ -31,21 +31,71 @@ pub struct GameResult {
     pub black_captures_value: f32,
 }
 
-/// Compute a simple position hash from bitboards for threefold repetition detection.
+/// Zobrist hash keys for threefold repetition detection.
 ///
-/// Uses XOR + rotate to combine all 12 bitboards, side_to_move, castling, and en_passant
-/// into a single u64.
-fn position_hash(board: &ChessBoard) -> u64 {
-    let mut h: u64 = 0;
-    for i in 0..12 {
-        h ^= board.bb[i].0;
-        h = h.rotate_left(5);
+/// 12 piece-types x 64 squares + 1 side-to-move + 16 castling combos + 9 en-passant files.
+/// Keys generated from a fixed-seed PRNG for reproducibility.
+mod zobrist {
+    const fn xorshift64(mut s: u64) -> u64 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s
     }
-    h ^= board.side_to_move as u64;
-    h = h.rotate_left(3);
-    h ^= board.castling_rights as u64;
-    h = h.rotate_left(3);
-    h ^= (board.en_passant_sq as u64) & 0xff;
+
+    const fn generate() -> ([u64; 768], u64, [u64; 16], [u64; 9]) {
+        let mut piece_sq = [0u64; 768];
+        let mut state: u64 = 0x3243_f6a8_885a_308d;
+        let mut i = 0;
+        while i < 768 {
+            state = xorshift64(state);
+            piece_sq[i] = state;
+            i += 1;
+        }
+        state = xorshift64(state);
+        let side = state;
+        let mut castling = [0u64; 16];
+        i = 0;
+        while i < 16 {
+            state = xorshift64(state);
+            castling[i] = state;
+            i += 1;
+        }
+        let mut ep = [0u64; 9];
+        i = 1;
+        while i < 9 {
+            state = xorshift64(state);
+            ep[i] = state;
+            i += 1;
+        }
+        (piece_sq, side, castling, ep)
+    }
+
+    pub const KEYS: ([u64; 768], u64, [u64; 16], [u64; 9]) = generate();
+}
+
+/// Compute a Zobrist position hash for threefold repetition detection.
+fn position_hash(board: &ChessBoard) -> u64 {
+    let (piece_sq, side_key, castling_keys, ep_keys) = &zobrist::KEYS;
+    let mut h: u64 = 0;
+    for piece_idx in 0..12usize {
+        let mut bb = board.bb[piece_idx].0;
+        while bb != 0 {
+            let sq = bb.trailing_zeros() as usize;
+            h ^= piece_sq[piece_idx * 64 + sq];
+            bb &= bb - 1;
+        }
+    }
+    if board.side_to_move != 0 {
+        h ^= side_key;
+    }
+    h ^= castling_keys[board.castling_rights as usize & 0xF];
+    let ep_idx = if board.en_passant_sq >= 0 {
+        (board.en_passant_sq as usize % 8) + 1
+    } else {
+        0
+    };
+    h ^= ep_keys[ep_idx];
     h
 }
 
@@ -330,7 +380,7 @@ pub fn simulate_neat_game(
     mercy_material_threshold: f32,
     rng: &mut impl rand::Rng,
 ) -> GameResult {
-    let input_size = 389;
+    let input_size = 391;
     let mut board = ChessBoard::startpos();
     let mut move_count = 0usize;
     let mut result: i32 = 2;
@@ -657,7 +707,7 @@ pub fn evaluate_puzzles_batch(
     best_moves: &[String],
     output_size: usize,
 ) -> Vec<PuzzleResult> {
-    let input_size = 389;
+    let input_size = 391;
     let total = fens.len() as u32;
 
     // Pre-parse all puzzle positions

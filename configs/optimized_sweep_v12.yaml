@@ -1,0 +1,94 @@
+# Optimized sweep v12 — exploit v11 record (BWR=0.444)
+#
+# v11 (200 runs): broke the 0.41 ceiling with 128-output factored encoding
+#   - New record: BWR=0.444 (pop=200, mxg=300, temp=0.151, node=0.11, conn=0.27, sp=5)
+#   - pop=200-300 > 150 (bigger pop helps with 128-output NEAT)
+#   - max_gen=300 >= 500 (diminishing returns after 300)
+#   - Low node_rate (~0.11) in top runs — conservative topology mutation
+#   - species=5 tied with 12, both beat 8
+#
+# v12 zooms into the optimal region:
+#   - population_size: [200, 250, 300] (tighter range around sweet spot)
+#   - max_generations: [300, 400] (300 was best, try 400 to see if more helps)
+#   - move_temperature: [0.14, 0.22] (top runs clustered 0.15-0.21)
+#   - neat_add_node_rate: [0.08, 0.16] (low rates dominated top 5)
+#   - neat_add_connection_rate: [0.20, 0.35] (top runs used 0.24-0.34)
+#   - max_moves_per_game: [100, 120] (try slightly longer games)
+#   - benchmark_size: [50, 100] (more benchmark games = less noisy BWR signal)
+
+method: bayes
+metric:
+  name: bench_avg_win_rate
+  goal: maximize
+
+early_terminate:
+  type: hyperband
+  min_iter: 80
+  eta: 3
+
+parameters:
+  # Fixed — proven optimal
+  output_size:
+    value: 128
+  hidden_size:
+    value: 64
+  games_per_individual:
+    value: 2
+  mutation_rate:
+    value: 0.25
+  mutation_strength:
+    value: 0.12
+  tournament_k:
+    value: 3
+  tournament_opponents:
+    value: 10
+  use_neat:
+    value: true
+  curriculum_stage:
+    value: 2
+  input_size:
+    value: 389
+  eval_temperature:
+    value: 0.0
+  checkmate_bonus:
+    value: 15
+  draw_bonus:
+    value: 1.5
+  sf_fitness_weight:
+    value: 0.0
+  sf_fitness_top_n:
+    value: 50
+  sf_bench_interval:
+    value: 5
+  transition_gens:
+    value: 3
+  immigration_rate:
+    value: 0.14
+  crossover_rate:
+    value: 0.76
+  neat_initial_connections_per_output:
+    value: 1
+  neat_target_species_count:
+    value: 5
+
+  # Swept — tightened around v11 optimal region
+  population_size:
+    values: [200, 250, 300]
+  max_generations:
+    values: [300, 400]
+  move_temperature:
+    distribution: uniform
+    min: 0.14
+    max: 0.22
+  neat_add_node_rate:
+    distribution: uniform
+    min: 0.08
+    max: 0.16
+  neat_add_connection_rate:
+    distribution: uniform
+    min: 0.20
+    max: 0.35
+  max_moves_per_game:
+    values: [100, 120]
+  benchmark_size:
+    values: [50, 100]
