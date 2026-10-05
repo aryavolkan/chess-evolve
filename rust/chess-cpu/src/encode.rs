@@ -228,7 +228,7 @@ pub fn decode_move_piece_dest(
             // piece_at returns signed: +1..+6 white, -1..-6 black
             let piece_abs = board.piece_at(from).unsigned_abs() as usize;
             // Map 1-6 to 0-5 index (0 shouldn't happen for legal moves)
-            let piece_idx = if piece_abs >= 1 && piece_abs <= 6 {
+            let piece_idx = if (1..=6).contains(&piece_abs) {
                 piece_abs - 1
             } else {
                 0

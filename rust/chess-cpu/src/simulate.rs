@@ -235,7 +235,7 @@ pub fn simulate_game_with_nets(
         move_count += 1;
 
         // Sample king danger every 10 moves
-        if move_count % 10 == 0 {
+        if move_count.is_multiple_of(10) {
             w_danger_acc += king_danger_score(&board, 1); // danger white poses to black's king
             b_danger_acc += king_danger_score(&board, 0); // danger black poses to white's king
             danger_samples += 1;
@@ -462,7 +462,7 @@ pub fn simulate_neat_game(
         move_count += 1;
 
         // Sample king danger every 10 moves
-        if move_count % 10 == 0 {
+        if move_count.is_multiple_of(10) {
             w_danger_acc += king_danger_score(&board, 1);
             b_danger_acc += king_danger_score(&board, 0);
             danger_samples += 1;

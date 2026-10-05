@@ -34,10 +34,15 @@ neat_best_genomes.json
 
 # Rust
 rust/**/target/
-rust/**/Cargo.lock
+# The PyO3 crates commit their Cargo.lock (reproducible wheels: Docker and CI
+# build with --locked); the gdext crate tracks a git dependency, so its lock is not kept.
+rust/chess-native/Cargo.lock
 
 download.lock
 lichess_db_puzzle.csv
 run_state.json
 .vscode/
 graphify-out/
+
+# maturin wheel output
+dist/

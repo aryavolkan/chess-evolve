@@ -16,6 +16,16 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust/chess-cpu
+            rust/evolve-ga
+            rust/neat-ga
+            rust/chess-native
 
       - name: Python lint (ruff)
         run: |
@@ -27,13 +37,18 @@ jobs:
           pip3 install --quiet --break-system-packages gdtoolkit
           ./scripts/lint_gdscript.sh
 
+      # All four crates: the three PyO3 training crates and the Godot extension.
       - name: Rust format check
-        run: cargo fmt --check
-        working-directory: rust/chess-native
+        run: |
+          for crate in chess-cpu evolve-ga neat-ga chess-native; do
+            cargo fmt --check --manifest-path rust/$crate/Cargo.toml
+          done
 
       - name: Rust lint (clippy)
-        run: cargo clippy -- -D warnings
-        working-directory: rust/chess-native
+        run: |
+          for crate in chess-cpu evolve-ga neat-ga chess-native; do
+            cargo clippy --manifest-path rust/$crate/Cargo.toml -- -D warnings
+          done
 
   python-tests:
     runs-on: ubuntu-latest
@@ -45,15 +60,50 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust/chess-cpu
+            rust/evolve-ga
+            rust/neat-ga
+            rust/chess-native
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
       - name: Build Rust GDExtension (required for artifact tests)
         run: cargo build --release
         working-directory: rust/chess-native
 
-      - name: Run pytest
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # The primary training backend. Built from the committed Cargo.lock files
+      # so CI exercises the same dependency set a Docker build does.
+      - name: Build and install the PyO3 training crates
         run: |
-          python3 -m venv .venv
-          .venv/bin/pip install --quiet pytest
-          .venv/bin/python -m pytest tests/python -q
+          for crate in chess-cpu evolve-ga neat-ga; do
+            maturin build --release --locked --manifest-path rust/$crate/Cargo.toml --out dist
+          done
+          pip install dist/*.whl
+          python -c "import chess_cpu, evolve_ga, neat_ga; print('rust crates ok')"
+
+      - name: Run pytest (Rust-backed tests included)
+        run: python -m pytest tests/python
+
+      - name: End-to-end smoke training (Rust CPU backend, W&B offline)
+        env:
+          WANDB_MODE: offline
+          WANDB_SILENT: "true"
+        run: python train_wandb.py --config configs/smoke_config.json
+
+      - name: Throughput benchmark (sanity run, not a gate on the numbers)
+        run: python scripts/bench_throughput.py --games 50 --rounds 1
 
   godot-tests:
     runs-on: ubuntu-latest

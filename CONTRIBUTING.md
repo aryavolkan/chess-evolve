@@ -3,7 +3,10 @@
 ## Quick Start
 
 ```bash
-# Build Rust crates
+# Python dependencies (numpy, wandb) and tooling (maturin, pytest, ruff)
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Build the Rust crates (inside a virtualenv; see README for the maturin build + pip install route)
 cd rust/chess-cpu && maturin develop --release && cd ../..
 cd rust/evolve-ga && maturin develop --release && cd ../..
 cd rust/neat-ga && maturin develop --release && cd ../..
@@ -63,15 +66,22 @@ You can also run each check independently:
 
 ```bash
 # Python
-ruff check scripts/ train_wandb.py sweep_config.py
+ruff check python/ scripts/ configs/ train_wandb.py
 python -m pytest tests/python -q
 
 # GDScript
 ./scripts/lint_gdscript.sh
 
-# Rust
-cargo fmt --check --manifest-path rust/chess-native/Cargo.toml
-cargo clippy --manifest-path rust/chess-native/Cargo.toml -- -D warnings
+# Rust (all four crates)
+for crate in chess-cpu evolve-ga neat-ga chess-native; do
+  cargo fmt --check --manifest-path rust/$crate/Cargo.toml
+  cargo clippy --manifest-path rust/$crate/Cargo.toml -- -D warnings
+done
+
+# End-to-end smoke run on the Rust backend (also what `docker run chess-evolve` does)
+WANDB_MODE=offline python train_wandb.py --config configs/smoke_config.json
 ```
 
-PRs must pass all checks before they can be merged.
+PRs must pass all checks before they can be merged. The PyO3 crates' `Cargo.lock`
+files are committed; if you change a crate's dependencies, commit the updated lock
+file too (CI and the Dockerfile build with `--locked`).
