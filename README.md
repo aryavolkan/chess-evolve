@@ -1,209 +1,267 @@
 # Chess Evolve
 
-Evolutionary neural networks learn to play chess through coevolution. Two populations of neural networks — one playing white, one playing black — evolve against each other. Networks that win more games survive and reproduce. Over generations, both populations develop increasingly sophisticated chess strategies.
+[![tests](https://github.com/aryavolkan/chess-evolve/actions/workflows/tests.yml/badge.svg)](https://github.com/aryavolkan/chess-evolve/actions/workflows/tests.yml)
+[![PR Quality](https://github.com/aryavolkan/chess-evolve/actions/workflows/pr-quality.yml/badge.svg)](https://github.com/aryavolkan/chess-evolve/actions/workflows/pr-quality.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![Rust](https://img.shields.io/badge/rust-stable-DEA584?logo=rust&logoColor=white)](rust/)
+
+Coevolutionary neuroevolution for chess. Two populations of neural networks, one
+playing White and one playing Black, evolve against each other with no gradients,
+no game database and no hand-written evaluation: the only training signal is the
+outcome of games between evolving opponents. A Rust simulation core plays the
+games in parallel; a Python harness runs the evolutionary loop, the curriculum
+and the experiment tracking.
+
+## Why this project
+
+- **A real arms race, measured honestly.** Coevolution hides progress (both sides
+  improve at once), so every run is also scored against a fixed random benchmark
+  population, an Elo-ranked Hall of Fame and, optionally, Stockfish. The results
+  that did *not* work are written down too ([below](#results-and-what-we-learned)).
+- **Throughput engineering.** The per-generation pipeline is
+  `pairings → parallel Rust game simulation → fitness → Rust GA operators → W&B`.
+  Populations are flat `float32` arrays handed to Rust as bytes; games run on all
+  cores with rayon while the GIL is released.
+- **Reproducible from a clean machine.** One `docker build`, pinned Python and
+  Cargo dependencies, a 3-generation smoke run and a throughput benchmark that
+  both run in CI.
+
+## At a glance
+
+| | |
+|---|---|
+| Network | 389 → 64 → 4096 feed-forward (tanh); **291,200 weights** per fixed-topology genome, or variable-topology NEAT genomes |
+| Input | 6 signed piece planes × 64 squares (+1 White, −1 Black), side to move, 4 castling rights; the Rust encoder also offers a 391-float layout with en-passant file and halfmove clock |
+| Output | one logit per (from, to) square pair, masked to legal moves |
+| Simulation core | `rust/chess-cpu` (PyO3): bitboard move generation, NN forward pass, material / mobility / king-safety / king-danger metrics, mercy rule, parallel over games with rayon |
+| Throughput | **~140 games/s, ~13,500 moves/s** on a 4-vCPU x86_64 container (random genomes, 100-move cap); 37 games/s single-threaded, so 3.7× on 4 threads. Reproduce with `scripts/bench_throughput.py` |
+| Evolution | tournament selection (k = 2), two-point crossover (70 %), Gaussian mutation (rate 0.25, σ 0.12), elitism (2), fitness sharing (σ 0.08), 10 % immigration; NEAT with speciation and add-node / add-connection mutation |
+| Curriculum | 5 stages: tactical puzzles → guided play → opponent ladder → Stockfish shaping → coevolution refinement (`python/curriculum.py`) |
+| Evaluation | fixed random benchmark population, a Hall of Fame of historical opponents, Stockfish centipawn-loss fitness signal, a Lichess bot that plays the evolved genomes online |
+| Tests and CI | 334 Python tests, 15 GDScript suites; ruff, gdlint, rustfmt and `clippy -D warnings` on every crate, pytest with the Rust crates built, an end-to-end smoke training run |
+
+## Quickstart
+
+### Docker (no toolchain needed)
+
+```bash
+docker build -t chess-evolve .
+docker run --rm chess-evolve                               # 3-generation smoke run, W&B offline
+docker run --rm chess-evolve scripts/bench_throughput.py   # games/s and moves/s on your machine
+docker run --rm -e WANDB_MODE=online -e WANDB_API_KEY=... \
+    chess-evolve train_wandb.py --config configs/steady_progress_config.json
+```
+
+### Native
+
+Requires Python 3.11+ and a stable Rust toolchain.
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Build the three PyO3 crates (chess_cpu, evolve_ga, neat_ga) and install them
+for crate in chess-cpu evolve-ga neat-ga; do
+  maturin build --release --locked --manifest-path rust/$crate/Cargo.toml --out dist
+done
+pip install dist/*.whl
+
+# Smoke run: pop 10, 3 generations, finishes in seconds
+WANDB_MODE=offline python train_wandb.py --config configs/smoke_config.json
+```
+
+Inside a virtualenv, `cd rust/chess-cpu && maturin develop --release` (and the same
+for the other two crates) builds and installs in one step.
+
+### Training
+
+```bash
+python train_wandb.py                                             # single run, auto-detects backend
+python train_wandb.py --config configs/steady_progress_config.json # 5-stage curriculum pipeline
+python train_wandb.py --config configs/neat_config.json           # NEAT, pop 500
+python train_wandb.py --sweep <sweep-id>                          # join a W&B sweep
+python train_wandb.py --chain 10                                  # chained runs, each seeded from the previous best
+```
+
+Backend selection: the Rust CPU backend is used whenever the `chess_cpu` and
+`evolve_ga` / `neat_ga` modules import; otherwise training falls back to the
+original Godot path (`godot --headless`). Stockfish-based stages need a `stockfish`
+binary on `PATH` or `STOCKFISH_PATH`.
 
 ## Architecture
 
-The system has three backends: **Rust CPU** (primary), **PyTorch GPU/CPU**, and **Godot** (original).
-
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Python Harness                        │
-│  train_wandb.py ──► auto-detect backend                 │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ cpu_trainer  │  │ neat_cpu_    │  │ lichess_bot   │  │
-│  │   .py        │  │ trainer.py   │  │   .py         │  │
-│  └──────┬───────┘  └──────┬───────┘  └───────────────┘  │
-│         │                 │                              │
-│  ┌──────▼─────────────────▼──────┐                      │
-│  │     Rust PyO3 Crates          │                      │
-│  │  chess-cpu  evolve-ga  neat-ga│                      │
-│  └───────────────────────────────┘                      │
-│                                                          │
-│  Populations (numpy float32) ──► Rust simulation         │
-│  ──► fitness ──► evolve ──► W&B logging                  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                       Python harness                             │
+│  train_wandb.py   backend detection, W&B logging, sweeps, chains │
+│  cpu_trainer.py / neat_cpu_trainer.py   generation loops         │
+│  fitness.py   curriculum.py   puzzles.py   lichess_bot.py        │
+│  overnight-agent/   sweep workers, monitor, global elite pool    │
+└───────────────┬──────────────────────────────────────────────────┘
+                │ numpy float32 populations as bytes / PyO3
+┌───────────────▼──────────────────────────────────────────────────┐
+│                      Rust PyO3 crates                            │
+│  chess-cpu    parallel game simulation, bitboards, NN forward    │
+│  evolve-ga    selection, crossover, mutation, speciation, sharing│
+│  neat-ga      NEAT genomes, innovation tracking, topology ops    │
+└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Godot 4 (optional)  training dashboard, board viewers, replays, │
+│  human-vs-AI play; chess-native GDExtension accelerates it       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### Neural Network
+One generation on the Rust backend:
 
-- **Input (389):** 6 piece-type planes x 64 squares (signed +/-1), side to move, castling rights
-- **Hidden:** 64 neurons, tanh activation
-- **Output (4096):** one logit per (from_square x 64 + to_square) pair
-- **Move selection:** score = output[from*64 + to], masked to legal moves, pick highest
-- **~33K trainable parameters**
+1. Python builds the pairings (each individual meets `tournament_opponents`
+   opponents from the other colour's population and the Hall of Fame).
+2. `chess_cpu.simulate_games_batch()` plays every pairing in parallel: encode the
+   board, forward pass, mask to legal moves, sample a move at the configured
+   temperature, repeat to the move cap or a result; returns per-game outcome and
+   fitness components.
+3. `python/fitness.py` turns the components into fitness and outcome rates.
+4. `evolve_ga` / `neat_ga` produce the next populations (elites, tournament
+   selection, crossover, mutation, immigration, fitness sharing).
+5. Benchmark games, Hall of Fame updates and metrics go to W&B; best genomes are
+   saved per colour.
 
-### Fitness Function
+### Fitness
 
-| Component | Weight | Description |
-|-----------|--------|-------------|
-| Win | 10.0 | Bonus for winning the game |
-| Checkmate | 10.0 | Extra bonus for checkmate |
-| Draw | 0.0 | No bonus (material advantage provides small signal) |
-| Loss | -5.0 | Penalty for losing |
-| Material | 1.0x | Net material advantage |
-| Mobility | 0.3x | Legal move count |
-| Own King Safety | 0.5x | Friendly pawns near king |
-| Opp King Safety | 1.5x | Reward for attacking opponent's king |
-| King Danger | 1.0x | King danger score (attack signals) |
-| Move Count | -0.002x | Penalty per move (encourages decisive play) |
+Defaults from `python/fitness.py`, overridable per config (`train_wandb.py`'s
+default config, for example, raises `draw_bonus` to 3.0):
 
-Primary optimization metric: `combined_best = min(white_best, black_best)` for balanced improvement.
+| Component | Weight | Notes |
+|---|---|---|
+| Win | 15.0 | plus 10.0 `checkmate_bonus` |
+| Draw | 2.0 | scaled by material advantage, so a draw a piece up beats a dead-level one |
+| Loss | −10.0 | |
+| Material | 0.5× | net material difference |
+| Mobility | 0.3× | legal-move count difference |
+| Own king safety | 0.5× | |
+| King danger | 1.0× | attack signals against the opponent's king |
+| Captures | 0.2× | value of pieces taken |
+| Move count | −0.002× | nudges towards decisive games |
 
-### Evolution
+The sweep metric is `combined_best = min(white_best, black_best)`, so a run only
+scores well when both colours improve.
 
-- Tournament selection (k=2)
-- Two-point crossover (70% rate)
-- Gaussian mutation (rate=0.15, sigma=0.2)
-- Elitism (top 2 preserved)
-- Independent evolution for white and black populations
-- Fitness sharing (sigma=0.08) for diversity
-- Immigration (10% random replacement per generation)
+### Benchmark population and Hall of Fame
 
-### Benchmark System
+A fixed, never-evolving random population (20 genomes by default, 50 in the
+curriculum configs) measures absolute progress as `bench_win_rate`. The Hall of
+Fame keeps the strongest historical genomes per colour (Elo-ranked on the Godot
+path) and feeds them back in as opponents so the populations cannot forget how to beat earlier
+strategies.
 
-A fixed random population (20 genomes) measures absolute progress, since coevolutionary metrics hide improvement when both sides improve simultaneously. Seeds are saved independently per color based on per-color benchmark win rate.
+## Results and what we learned
 
-## Project Structure
+Throughput, measured with `scripts/bench_throughput.py` (150 games per round,
+389 → 64 → 4096 genomes, 100-move cap, 4-vCPU x86_64 container):
+
+| Threads | games/s | moves/s |
+|---|---|---|
+| 1 | 37 | 3,570 |
+| 4 | 141 | 13,750 |
+
+Learning, from the sweep notes in `configs/optimized_sweep_v*.yaml` and `docs/`:
+
+- **Plain coevolution plateaus.** NEAT runs of 2,000 generations with populations
+  of 200–500 reached only ~7 % win rate against the random benchmark; most
+  mutations do not change game outcomes, so the fitness landscape is flat
+  (`docs/curriculum_learning_plan.md`). That finding is why the curriculum exists.
+- **The curriculum is the bottleneck, not the GA.** In the first 100-run Bayesian
+  sweep 77 % of runs never left the puzzle stages; the best run reached a 45 %
+  benchmark win rate. Later sweeps start directly at the opponent ladder.
+- **Output encoding matters more than mutation rates.** For NEAT, a 128-output
+  factored head averaged 0.244 benchmark win rate against 0.177 for 384 outputs
+  (31-run grid), and the 200-run follow-up set the record at 0.444 with a
+  population of 200 over 300 generations.
+- **Sweep-derived defaults** (`docs/IMPROVING_TRAINING.md`): `elite_count = 2`
+  beats 3 and 5; 128 hidden units underperform 32 and 64; crossover above 0.85
+  hurts; minimax during training is 20–50× slower per move for less
+  generation-level progress, so search is reserved for play, not training.
+- **Playing strength is still modest.** The steady-progress pipeline spec puts
+  the baseline at roughly 400–600 Elo and targets 1200+; the Lichess bot exists
+  to measure that against real opponents rather than our own benchmark.
+
+## Project layout
 
 ```
 chess-evolve/
-├── train_wandb.py                 # Main entry point (auto-detects backend)
+├── train_wandb.py          entry point: backend detection, W&B, sweeps, chained runs
 ├── python/
-│   ├── cpu_trainer.py             # Fixed-topology training loop (Rust backend)
-│   ├── neat_cpu_trainer.py        # NEAT variable-topology training loop
-│   ├── fitness.py                 # Shared fitness computation (used by both trainers)
-│   ├── lichess_bot.py             # Lichess bot (play evolved genomes online)
-│   └── godot_wandb.py             # Godot subprocess integration
+│   ├── cpu_trainer.py      fixed-topology generation loop (Rust backend)
+│   ├── neat_cpu_trainer.py NEAT generation loop, Stockfish signal, puzzle stages
+│   ├── fitness.py          fitness weights, outcome rates, tournament scores
+│   ├── curriculum.py       5-stage curriculum manager
+│   ├── puzzles.py          Lichess puzzle loading for stage 0
+│   ├── lichess_bot.py      plays Hall-of-Fame genomes on Lichess (ensemble vote)
+│   └── godot_wandb.py      Godot subprocess backend
 ├── rust/
-│   ├── chess-cpu/                 # PyO3: game simulation, NN forward pass, fitness
-│   ├── evolve-ga/                 # PyO3: GA operators (selection, crossover, mutation)
-│   ├── neat-ga/                   # PyO3: NEAT evolution (speciation, topology mutation)
-│   └── chess-native/              # gdext: Godot GDExtension acceleration
-├── ai/
-│   ├── neural_network.gd          # Feedforward network
-│   ├── evolution.gd               # Coevolutionary population manager + Hall of Fame + Elo
-│   ├── fitness.gd                 # Multi-factor fitness + endgame evaluation
-│   ├── training_manager.gd        # Orchestrates games and evolution
-│   ├── neat_evolution.gd          # NEAT topology evolution manager
-│   ├── neat_genome.gd             # NEAT genome representation
-│   └── neat_network.gd            # NEAT network forward pass
-├── chess/
-│   ├── constants.gd               # Piece types, values
-│   ├── board_state.gd             # Full chess logic (moves, check, castling, en passant)
-│   ├── encoder.gd                 # Board -> NN input encoding, output -> move decoding
-│   └── pgn.gd                     # PGN export (Standard Algebraic Notation)
-├── ui/
-│   ├── board_renderer.gd          # Visual chess board with animation
-│   ├── human_play.gd              # Human vs AI game mode
-│   ├── replay_viewer.gd           # Game replay with PGN export
-│   └── training_dashboard.gd      # Stats display and training controls
-├── configs/                       # JSON training configs and sweep definitions
-├── overnight-agent/
-│   ├── chess_sweep_worker.py      # W&B sweep worker
-│   ├── chess_monitor.py           # Worker monitor + auto-spawn
-│   └── global_elite.py            # Cross-run genome sharing
-├── scripts/                       # Lint, test, and utility scripts
-├── test/                          # GDScript tests
-├── tests/python/                  # Python pytest tests
-└── docs/                          # Detailed documentation
+│   ├── chess-cpu/          PyO3: game simulation, bitboards, NN forward pass
+│   ├── evolve-ga/          PyO3: GA operators, speciation, islands
+│   ├── neat-ga/            PyO3: NEAT genomes and evolution
+│   └── chess-native/       gdext: GDExtension for the Godot path
+├── configs/                training configs and W&B sweep definitions (with notes per iteration)
+├── overnight-agent/        sweep workers, worker monitor, cross-run global elite pool
+├── scripts/                lint/test runners, bench_throughput.py, puzzle preparation
+├── tests/python/           pytest suite        tests/integration/  longer loops
+├── ai/ chess/ ui/ scenes/  Godot: networks + evolution, chess rules + encoder, dashboard + board
+├── test/                   GDScript tests (headless runner)
+├── monitor/                local sweep-monitoring API + React dashboard
+├── Dockerfile              reproducible Rust-backend training image
+└── docs/                   architecture, training, tuning and game-system docs
 ```
 
-## Getting Started
+Dependency rules: `chess/` has no AI dependencies, `ai/` depends on `chess/`,
+`ui/` depends on both; the three PyO3 crates are independent of each other and
+of `chess-native`.
 
-### Prerequisites
-
-- **Python 3.10+** with numpy, wandb
-- **Rust toolchain** (stable) with maturin (`pip install maturin`)
-- **Godot 4.5+** (only needed for UI/Godot training path)
-
-### Build Rust Crates
+## Tests and CI
 
 ```bash
-# Build all PyO3 crates (required for Rust CPU backend)
-cd rust/chess-cpu && maturin develop --release && cd ../..
-cd rust/evolve-ga && maturin develop --release && cd ../..
-cd rust/neat-ga && maturin develop --release && cd ../..
-
-# Build Godot GDExtension (optional, for Godot training path)
-cargo build --release --manifest-path rust/chess-native/Cargo.toml
+python -m pytest tests/python -q                       # Python (Rust-backed tests run when the crates are installed)
+godot --headless --path . -s test/test_runner.gd       # GDScript
+./scripts/lint_and_test.sh                             # ruff + gdlint + pytest
+cargo clippy --manifest-path rust/chess-cpu/Cargo.toml -- -D warnings   # per crate
 ```
 
-### Run Training
+| Workflow | Jobs |
+|---|---|
+| `tests.yml` | ruff, gdlint, rustfmt and clippy (`-D warnings`) on all four crates; pytest with the PyO3 wheels built; 3-generation smoke training on the Rust backend; throughput benchmark sanity run; Godot headless tests |
+| `pr-quality.yml` | blocking Python lint + tests and GDScript lint on every PR |
+
+## Lichess bot
 
 ```bash
-# Single run (auto-detects backend: Rust > PyTorch GPU > PyTorch CPU > Godot)
-python train_wandb.py
-
-# With custom config
-python train_wandb.py --config my_config.json
-
-# Join a W&B sweep
-python train_wandb.py --sweep <sweep-id>
-
-# Chained runs (each seeds from previous best)
-python train_wandb.py --chain 10
+python python/lichess_bot.py --test                   # dry run against itself
+python python/lichess_bot.py --games 5                # accept challenges
+python python/lichess_bot.py --challenge <bot-name>   # challenge a specific bot
 ```
 
-### Run Tests
+Needs a Lichess bot account with `LICHESS_TOKEN` set. Moves are chosen by an
+ensemble vote over the top genomes in `neat_best_genomes.json`.
 
-```bash
-# Python tests
-python -m pytest tests/python -q
+## Godot dashboard
 
-# GDScript tests (headless)
-godot --headless --path . -s test/test_runner.gd
-
-# All lints + tests
-./scripts/lint_and_test.sh
-```
-
-### Lichess Bot
-
-Play evolved genomes on Lichess:
-
-```bash
-# Test the bot (dry run)
-python lichess_bot.py --test
-
-# Accept challenges
-python lichess_bot.py --games 5
-
-# Challenge a specific bot
-python lichess_bot.py --challenge <bot-username>
-```
-
-Requires a Lichess bot account and API token (set `LICHESS_TOKEN` env var). Uses the best NEAT genome from `neat_best_genomes.json`.
-
-### Using the Training Dashboard (Godot UI)
-
-1. Click **Start Training** to begin evolution
-2. Monitor live counters: generation, per-color best + average fitness, games played
-3. Use the speed selector (1x, 2x, 4x, 8x) for multiple generations per frame
-4. Every 5 generations the board viewers show **showcase games** from the best networks
-
-## Dependency Rules
-
-- `chess/` — self-contained chess logic, **no AI dependencies**
-- `ai/` — depends on `chess/` only
-- `ui/` — depends on both `ai/` and `chess/`
-- Rust PyO3 crates (`chess-cpu`, `evolve-ga`, `neat-ga`) are independent of each other and of `chess-native`
-
-## Chess Logic
-
-Full legal move generation including:
-- All piece types with correct movement
-- Castling (kingside and queenside, both colors)
-- En passant
-- Pawn promotion (auto-queen)
-- Check, checkmate, and stalemate detection
-- 50-move rule draw
+Open the project in Godot 4.2+ to watch training live: **Start Training**, per-colour
+best and average fitness, games played, a speed selector (1×–8× generations per
+frame) and showcase games between the best networks every 5 generations. The
+`chess-native` GDExtension (`cargo build --release --manifest-path
+rust/chess-native/Cargo.toml`) accelerates move generation and NN evaluation
+on this path.
 
 ## Documentation
 
-Detailed documentation lives in `docs/`:
-- [Architecture](docs/ARCHITECTURE.md) — system design and data flow
-- [Training](docs/TRAINING.md) — running training, sweep config, metrics
-- [Improving Training](docs/IMPROVING_TRAINING.md) — hyperparameter tuning, diagnosing issues
-- [AI System](docs/AI_SYSTEM.md) — network architecture, evolution, fitness, Hall of Fame
-- [Game System](docs/GAME_SYSTEM.md) — chess rules, board representation, encoder
+- [Architecture](docs/ARCHITECTURE.md) — components and data flow
+- [Training](docs/TRAINING.md) — configs, metrics, sweeps, CI
+- [Improving Training](docs/IMPROVING_TRAINING.md) — tuning guide and diagnosis
+- [AI System](docs/AI_SYSTEM.md) — network, evolution, fitness, Hall of Fame
+- [Game System](docs/GAME_SYSTEM.md) — rules, board representation, encoder
+- [Curriculum plan](docs/curriculum_learning_plan.md) and
+  [bitboard + NEAT plan](docs/bitboard-and-neat-plan.md) — design notes
+- [CHANGES.md](CHANGES.md) — changelog, [CONTRIBUTING.md](CONTRIBUTING.md) — conventions
+
+## License
+
+[MIT](LICENSE).

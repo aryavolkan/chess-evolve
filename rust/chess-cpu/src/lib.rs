@@ -1,3 +1,6 @@
+// The simulation entry points take one argument per trainer knob; bundling
+// them into a struct would only move the same list across the FFI boundary.
+#![allow(clippy::too_many_arguments)]
 #![allow(clippy::needless_range_loop)]
 
 use std::panic;
@@ -16,12 +19,14 @@ mod sparse_nn;
 /// Reinterpret a byte slice as f32 slice (native endian).
 fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
     assert!(
-        bytes.len() % 4 == 0,
+        bytes.len().is_multiple_of(4),
         "byte buffer length must be a multiple of 4"
     );
     bytes
-        .chunks_exact(4)
-        .map(|c| f32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_ne_bytes(*c))
         .collect()
 }
 

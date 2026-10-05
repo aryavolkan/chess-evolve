@@ -1,0 +1,6 @@
+# Everything needed to build the Rust crates and run lint + tests locally and in CI.
+# wandb is deliberately not required here: the test suite stubs it out.
+numpy>=1.26
+maturin>=1.0,<2.0
+pytest>=8
+ruff>=0.5

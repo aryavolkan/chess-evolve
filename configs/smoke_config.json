@@ -1,0 +1,11 @@
+{
+    "_comment": "Tiny fixed-topology run that finishes in well under a minute on the Rust CPU backend. Used by the Docker image's default command and as an end-to-end smoke test; it exercises the whole generation loop (pairings -> Rust simulation -> fitness -> evolve_ga -> metrics) but learns nothing meaningful.",
+    "population_size": 10,
+    "max_generations": 3,
+    "max_moves_per_game": 40,
+    "use_neat": false,
+    "tournament_opponents": 2,
+    "benchmark_size": 5,
+    "games_per_individual": 1,
+    "sf_fitness_weight": 0.0
+}

@@ -1,0 +1,5 @@
+# Runtime dependencies for the Python training harness (Rust CPU backend).
+# The Rust crates themselves are built with maturin (see requirements-dev.txt
+# and the Dockerfile); PyTorch/python-chess are optional alternate backends.
+numpy>=1.26
+wandb>=0.17

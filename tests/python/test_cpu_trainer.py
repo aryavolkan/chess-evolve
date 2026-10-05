@@ -363,6 +363,10 @@ class TestInitialization:
 
     def test_xavier_init_scale(self, trainer):
         """Verify population uses Xavier initialization scale."""
+        # The fixture's population is only 95 weights, so the sample std has a
+        # standard error of ~0.05 against the 0.1 tolerance below: unseeded, this
+        # test failed about one run in twenty. Pin the RNG to make it deterministic.
+        np.random.seed(20261005)
         pop = trainer._init_population()
         expected_scale = (2.0 / trainer.input_size) ** 0.5
         # Standard deviation should be approximately the Xavier scale

@@ -260,9 +260,9 @@ Every PR runs:
 
 | Job | What it checks |
 |-----|----------------|
-| `lint` | `ruff` (Python), `gdlint` (GDScript), `cargo fmt`, `cargo clippy -D warnings` |
-| `python-tests` | `pytest tests/python/` |
-| `godot-tests` | Headless GDUnit4 runner |
+| `lint` | `ruff` (Python), `gdlint` (GDScript), `cargo fmt` and `cargo clippy -D warnings` on all four Rust crates |
+| `python-tests` | builds the PyO3 wheels with `maturin --locked`, `pytest tests/python/` with the Rust backend present, a 3-generation smoke training run (`configs/smoke_config.json`, W&B offline) and a `scripts/bench_throughput.py` sanity run |
+| `godot-tests` | Headless GDScript test runner |
 
 Run locally:
 ```bash
@@ -270,8 +270,13 @@ Run locally:
 ./scripts/lint_and_test.sh
 
 # Or individually
-ruff check scripts/ train_wandb.py sweep_config.py
+ruff check python/ scripts/ configs/ train_wandb.py
 python -m pytest tests/python -q
-cargo fmt --check --manifest-path rust/chess-native/Cargo.toml
-cargo clippy --manifest-path rust/chess-native/Cargo.toml -- -D warnings
+for crate in chess-cpu evolve-ga neat-ga chess-native; do
+  cargo fmt --check --manifest-path rust/$crate/Cargo.toml
+  cargo clippy --manifest-path rust/$crate/Cargo.toml -- -D warnings
+done
+WANDB_MODE=offline python train_wandb.py --config configs/smoke_config.json
 ```
+
+The same pipeline runs from the Docker image: `docker build -t chess-evolve . && docker run --rm chess-evolve`.
