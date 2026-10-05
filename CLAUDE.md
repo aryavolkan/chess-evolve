@@ -104,7 +104,7 @@ Populations are numpy float32 arrays (`pop_size x genome_size`). Each generation
 
 ### Fitness function
 
-Primary objective is winning (win_bonus=10 + checkmate_bonus=10 = 20 total). draw_bonus=0, loss_penalty=-5. Secondary signals: material difference (1.0x), opponent king safety exposure (1.5x), own king safety (0.5x), king danger (1.0x), captures (0.5x), mobility (0.3x), move count penalty (-0.002x). Fitness weights are defined in `python/fitness.py` (shared by both trainers). The key optimization metric is `combined_best = min(white_best, black_best)` for balanced improvement.
+Primary objective is winning (win_bonus=15 + checkmate_bonus=10 = 25 total). draw_bonus=2.0 (scaled by material advantage), loss_penalty=-10. Secondary signals: material difference (0.5x), mobility (0.3x), own king safety (0.5x), opponent king safety (0.0x), king danger (1.0x), captures (0.2x), move count penalty (-0.002x). Fitness weights are defined in `python/fitness.py` (shared by both trainers); `train_wandb.py`'s DEFAULT_CONFIG raises draw_bonus to 3.0 and configs can override any weight. The key optimization metric is `combined_best = min(white_best, black_best)` for balanced improvement.
 
 ### Stockfish CPL fitness signal (NEAT only)
 
@@ -139,3 +139,14 @@ Two workflows (`.github/workflows/`):
 - `pr-quality.yml`: Python lint+tests, GDScript lint
 
 Run locally before PR: `./scripts/lint_and_test.sh`
+
+## Communication with the user
+
+Explain things in ASD-STE100 (Simplified Technical English):
+
+- Use short sentences (20 words or fewer). Put one topic in each sentence.
+- Use the active voice and the present tense.
+- Use simple words. Use one word for one meaning. Do not use slang or idioms.
+- Use "must" for a requirement and "can" for a possibility.
+- Use lists for steps and for items. Keep a paragraph to 6 sentences or fewer.
+- Technical names (for example: NEAT, Hall of Fame, genome) are permitted.
