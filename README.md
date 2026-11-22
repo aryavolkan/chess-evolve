@@ -133,7 +133,7 @@ One generation on the Rust backend:
 Defaults from `python/fitness.py`, overridable per config:
 
 | Component | Weight | Notes |
-|---|---|
+|---|---|---|
 | Win | 15.0 | plus 10.0 `checkmate_bonus` |
 | Draw | 2.0 | scaled by material advantage |
 | Loss | −10.0 | |
@@ -161,7 +161,7 @@ Throughput, measured with `scripts/bench_throughput.py` (150 games per round,
 389 → 64 → 4096 genomes, 100-move cap, 4-vCPU x86_64 container):
 
 | Threads | games/s | moves/s |
-|---|---|
+|---|---|---|
 | 1 | 37 | 3,570 |
 | 4 | 141 | 13,750 |
 
@@ -229,7 +229,7 @@ cargo clippy --manifest-path rust/chess-cpu/Cargo.toml -- -D warnings   # per cr
 ```
 
 | Workflow | Jobs |
-|---|---|
+|---|---|---|
 | `tests.yml` | ruff, gdlint, rustfmt and clippy (`-D warnings`) on all four crates; pytest with the PyO3 wheels built; 3-generation smoke training on the Rust backend; throughput benchmark sanity run; Godot headless tests |
 | `pr-quality.yml` | blocking Python lint + tests and GDScript lint on every PR |
 
