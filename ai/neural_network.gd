@@ -130,7 +130,7 @@ func get_weight_count() -> int:
 
 
 func clone():
-    ## Direct array copy: avoids the ~33K-float intermediate allocation from
+    ## Direct array copy: avoids the ~291K-float intermediate allocation from
     ## get_weights()/set_weights(), and skips the wasted randomize_weights() in new().
     var copy = get_script().new(input_size, hidden_size, output_size, false)
     copy.weights_ih = weights_ih.duplicate()

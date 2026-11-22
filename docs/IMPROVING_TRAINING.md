@@ -236,7 +236,7 @@ All components are clamped so `fitness >= 0`.
 
 ### Current Architecture: 389 → 64 → 4096
 
-The current standard NE network uses a single hidden layer (389 inputs, 64 hidden neurons with tanh, 4096 outputs with tanh). This is ~33K parameters.
+The current standard NE network uses a single hidden layer (389 inputs, 64 hidden neurons with tanh, 4096 outputs with tanh). This is ~291K parameters.
 
 **Why 4096 outputs?** Each output corresponds to one (from_square, to_square) pair. The previous 128-output factored scheme (64 from-logits + 64 to-logits, score = sum) was simpler but couldn't express move-specific preferences — e.g., it couldn't prefer Nf3 over Ng1 if both move from g1 and f3 respectively.
 

@@ -100,7 +100,7 @@ Populations are numpy float32 arrays (`pop_size x genome_size`). Each generation
 - Input: 389 floats (6 piece planes x 64 squares, signed +/-1, plus side-to-move and castling)
 - Hidden: 64 neurons, tanh (fixed-topology) or variable (NEAT)
 - Output: 4096 logits (64x64 from-to pairs), masked to legal moves
-- ~33K trainable parameters (fixed-topology)
+- ~291K trainable parameters (fixed-topology)
 
 ### Fitness function
 
