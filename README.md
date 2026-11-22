@@ -229,7 +229,7 @@ cargo clippy --manifest-path rust/chess-cpu/Cargo.toml -- -D warnings   # per cr
 ```
 
 | Workflow | Jobs |
-|---|---|---|
+|---|---|
 | `tests.yml` | ruff, gdlint, rustfmt and clippy (`-D warnings`) on all four crates; pytest with the PyO3 wheels built; 3-generation smoke training on the Rust backend; throughput benchmark sanity run; Godot headless tests |
 | `pr-quality.yml` | blocking Python lint + tests and GDScript lint on every PR |
 
